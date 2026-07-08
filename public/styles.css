@@ -1879,17 +1879,20 @@ body:not(.is-login) .sidebar {
 }
 
 body:not(.is-login) .brand {
-  height: 56px;
+  min-height: 176px;
+  height: auto;
   margin: 0;
-  padding: 0 16px;
+  padding: 16px;
   border-bottom: 1px solid #e2e8f0;
   gap: 10px;
   font-size: 16px;
 }
 
 body:not(.is-login) .brand img {
-  width: 32px;
-  height: 32px;
+  width: 160px;
+  height: auto;
+  max-height: 160px;
+  object-fit: contain;
 }
 
 body:not(.is-login) .brand-caption small,

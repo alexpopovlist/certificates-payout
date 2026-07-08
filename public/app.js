@@ -118,6 +118,25 @@ function formatDate(value) {
   return `${day}.${month}.${year}`;
 }
 
+function formatDateInputValue(date) {
+  const normalizedDate = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(normalizedDate.getTime())) return '';
+  const year = normalizedDate.getFullYear();
+  const month = String(normalizedDate.getMonth() + 1).padStart(2, '0');
+  const day = String(normalizedDate.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getCertificatesDefaultDateRange() {
+  const toDate = new Date();
+  const fromDate = new Date(toDate);
+  fromDate.setDate(fromDate.getDate() - 30);
+  return {
+    from: formatDateInputValue(fromDate),
+    to: formatDateInputValue(toDate)
+  };
+}
+
 function formatTime(value) {
   if (!value) return '—';
   return String(value).slice(0, 5);
@@ -1399,6 +1418,12 @@ async function renderCertificates() {
       <div id="certificatesPagination"></div>
     </div>
   `;
+
+  const defaultDateRange = getCertificatesDefaultDateRange();
+  const fromFilter = document.querySelector('#fromFilter');
+  const toFilter = document.querySelector('#toFilter');
+  if (fromFilter) fromFilter.value = defaultDateRange.from;
+  if (toFilter) toFilter.value = defaultDateRange.to;
 
   initStatusMultiselect();
   document.querySelector('#applyCertificateFilters').addEventListener('click', () => loadFilteredCertificates(1));
