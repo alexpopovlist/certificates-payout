@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: certificates-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: certificates_user
+      POSTGRES_PASSWORD: certificates_password
+      POSTGRES_DB: certificates_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - certificates_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U certificates_user -d certificates_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  certificates_postgres_data:

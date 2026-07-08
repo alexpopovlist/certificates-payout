@@ -1,0 +1,25 @@
+{
+  "name": "certificates-payout-app",
+  "version": "1.0.0",
+  "description": "Node.js + PostgreSQL application for redeemed certificates and payout requests.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "db:migrate": "node src/migrate.js"
+  },
+  "keywords": [
+    "nodejs",
+    "postgresql",
+    "certificates",
+    "payments"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {}
+}
