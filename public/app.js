@@ -892,7 +892,11 @@ function initStatusMultiselect() {
 let qrStream = null;
 let qrScanFrame = null;
 let qrDetector = null;
+let qrScannerMode = null;
 let qrDetectionBusy = false;
+let qrCanvas = null;
+let qrCanvasContext = null;
+let qrLastDecodeAt = 0;
 
 function setQrStatus(message, type = '') {
   const status = document.querySelector('#qrStatus');
@@ -908,6 +912,9 @@ function stopQrScanner(options = {}) {
   }
 
   qrDetectionBusy = false;
+  qrScannerMode = null;
+  qrDetector = null;
+  qrLastDecodeAt = 0;
 
   if (qrStream) {
     qrStream.getTracks().forEach((track) => track.stop());
@@ -1022,21 +1029,67 @@ function applyQrPayload(rawValue) {
   }
 }
 
+function detectQrWithCanvas(video) {
+  if (typeof window.jsQR !== 'function') return null;
+
+  const sourceWidth = video.videoWidth || video.clientWidth || 0;
+  const sourceHeight = video.videoHeight || video.clientHeight || 0;
+
+  if (!sourceWidth || !sourceHeight) return null;
+
+  if (!qrCanvas) {
+    qrCanvas = document.createElement('canvas');
+    qrCanvasContext = qrCanvas.getContext('2d', { willReadFrequently: true });
+  }
+
+  if (!qrCanvasContext) return null;
+
+  const maxSide = 900;
+  const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+
+  if (qrCanvas.width !== width || qrCanvas.height !== height) {
+    qrCanvas.width = width;
+    qrCanvas.height = height;
+  }
+
+  qrCanvasContext.drawImage(video, 0, 0, width, height);
+  const imageData = qrCanvasContext.getImageData(0, 0, width, height);
+  const code = window.jsQR(imageData.data, width, height, { inversionAttempts: 'attemptBoth' });
+
+  return code?.data || null;
+}
+
 async function detectQrLoop(video) {
-  if (!qrDetector || !qrStream || video.readyState < 2) {
+  if (!qrStream || video.readyState < 2) {
     qrScanFrame = window.requestAnimationFrame(() => detectQrLoop(video));
     return;
   }
 
   if (!qrDetectionBusy) {
     qrDetectionBusy = true;
+
     try {
-      const codes = await qrDetector.detect(video);
-      const qrCode = codes.find((code) => code.rawValue);
-      if (qrCode) {
-        setQrStatus('QR код найден. Заполняю данные...', 'success');
-        applyQrPayload(qrCode.rawValue);
-        return;
+      if (qrScannerMode === 'barcode' && qrDetector) {
+        const codes = await qrDetector.detect(video);
+        const qrCode = codes.find((code) => code.rawValue);
+        if (qrCode) {
+          setQrStatus('QR код найден. Заполняю данные...', 'success');
+          applyQrPayload(qrCode.rawValue);
+          return;
+        }
+      } else if (qrScannerMode === 'jsqr') {
+        const now = Date.now();
+        if (now - qrLastDecodeAt >= 180) {
+          qrLastDecodeAt = now;
+          const rawValue = detectQrWithCanvas(video);
+          if (rawValue) {
+            setQrStatus('QR код найден. Заполняю данные...', 'success');
+            applyQrPayload(rawValue);
+            return;
+          }
+        }
       }
     } catch (_error) {
       setQrStatus('Камера открыта, но распознать QR код не удалось. Попробуйте навести камеру ближе.', 'error');
@@ -1087,16 +1140,27 @@ async function openQrScanner() {
   video.srcObject = qrStream;
   await video.play().catch(() => null);
 
+  qrScannerMode = null;
+  qrDetector = null;
+
   if ('BarcodeDetector' in window) {
     try {
       qrDetector = new BarcodeDetector({ formats: ['qr_code'] });
-      setQrStatus('Наведите камеру на QR код сертификата.');
-      detectQrLoop(video);
+      qrScannerMode = 'barcode';
     } catch (_error) {
-      setQrStatus('Камера открыта. Автораспознавание QR недоступно в этом браузере — используйте ручной ввод ниже.', 'error');
+      qrDetector = null;
     }
+  }
+
+  if (!qrScannerMode && typeof window.jsQR === 'function') {
+    qrScannerMode = 'jsqr';
+  }
+
+  if (qrScannerMode) {
+    setQrStatus('Наведите камеру на QR код сертификата.');
+    detectQrLoop(video);
   } else {
-    setQrStatus('Камера открыта. Автораспознавание QR недоступно в этом браузере — используйте ручной ввод ниже.', 'error');
+    setQrStatus('Камера открыта, но этот браузер не поддерживает распознавание QR кода. Используйте ручной ввод ниже.', 'error');
   }
 }
 
