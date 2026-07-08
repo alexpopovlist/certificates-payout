@@ -1708,3 +1708,150 @@ body.is-login .content {
     padding: 0 8px;
   }
 }
+
+
+/* WakeMeSurf login controls refinement */
+.auth-screen-wakesurf,
+.auth-screen-wakesurf button,
+.auth-screen-wakesurf input {
+  font-family: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+.auth-tabs-wakesurf {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 0;
+  border-radius: 20px;
+  background: #eef4ff;
+}
+
+.auth-tabs-wakesurf .auth-tab {
+  min-height: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: #5c6885;
+  box-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: 0;
+  transition: color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.auth-tabs-wakesurf .auth-tab:hover {
+  transform: none;
+  color: #0b1324;
+}
+
+.auth-tabs-wakesurf .auth-tab.active {
+  background: #ffffff;
+  color: #0b1324;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.auth-tab-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 16px;
+}
+
+.auth-tab-icon svg,
+.auth-password-toggle svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.auth-input-stack {
+  gap: 16px;
+}
+
+.auth-password-field input {
+  padding-right: 48px;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #5c6885;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  transition: color 0.16s ease, background-color 0.16s ease;
+}
+
+.auth-password-toggle:hover,
+.auth-password-toggle:focus-visible {
+  background: #eef4ff;
+  color: #0b1324;
+}
+
+.auth-password-toggle.is-visible {
+  color: #0b1324;
+}
+
+.auth-form .auth-input-stack .auth-submit {
+  margin-top: 0;
+}
+
+@media (max-width: 560px) {
+  .auth-tabs-wakesurf {
+    gap: 4px;
+    padding: 4px;
+    border-radius: 18px;
+  }
+
+  .auth-tabs-wakesurf .auth-tab {
+    min-height: 42px;
+    height: 42px;
+    border-radius: 14px;
+    gap: 6px;
+    padding: 0 8px;
+    font-size: 13px;
+  }
+
+  .auth-tab-icon {
+    width: 15px;
+    height: 15px;
+    flex-basis: 15px;
+  }
+
+  .auth-tab-icon svg,
+  .auth-password-toggle svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .auth-password-field input {
+    padding-right: 48px;
+  }
+
+  .auth-password-toggle {
+    right: 2px;
+    padding: 0;
+  }
+}

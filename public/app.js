@@ -178,6 +178,49 @@ function getAuthMethodLabel(method) {
   return labels[method] || labels.password;
 }
 
+function authMethodIconSvg(method) {
+  const icons = {
+    sms: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v2.2a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 3.4 2 2 0 0 1 4.11 1.22h2.21a2 2 0 0 1 2 1.72c.12.91.32 1.8.6 2.65a2 2 0 0 1-.45 2.11L7.54 8.63a16 16 0 0 0 7.83 7.83l.93-.93a2 2 0 0 1 2.11-.45c.85.28 1.74.48 2.65.6A2 2 0 0 1 22 16.92Z"/></svg>',
+    email: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/><path d="m22 7-10 6L2 7"/></svg>',
+    password: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'
+  };
+  return icons[method] || icons.password;
+}
+
+function passwordVisibilityIconSvg(isVisible) {
+  return isVisible
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.94 17.94A10.85 10.85 0 0 1 12 20C7 20 2.73 16.89 1 12c.8-2.27 2.2-4.2 4-5.62"/><path d="M9.9 4.24A10.7 10.7 0 0 1 12 4c5 0 9.27 3.11 11 8a11.5 11.5 0 0 1-2.14 3.4"/><path d="M14.12 14.12A3 3 0 0 1 9.88 9.88"/><path d="M1 1l22 22"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+}
+
+function formatAuthPhoneMask(rawValue) {
+  const digitsAll = String(rawValue || '').replace(/[^\d]/g, '');
+  if (!digitsAll) return '';
+
+  let digits = digitsAll;
+  if (digits.startsWith('8')) digits = `7${digits.slice(1)}`;
+
+  if (digits.startsWith('7')) {
+    digits = digits.slice(0, 11);
+    if (digits.length <= 1) return '+7';
+
+    const a = digits.slice(1, 4);
+    const b = digits.slice(4, 7);
+    const c = digits.slice(7, 9);
+    const d = digits.slice(9, 11);
+
+    let output = '+7';
+    if (a) output += ` (${a}`;
+    if (a.length === 3) output += ')';
+    if (b) output += ` ${b}`;
+    if (c) output += `-${c}`;
+    if (d) output += `-${d}`;
+    return output;
+  }
+
+  return `+${digitsAll.slice(0, 15)}`;
+}
+
 function storeAuthFormValues(form = document.querySelector('#signInForm')) {
   if (!form) return;
   const formData = new FormData(form);
@@ -223,7 +266,7 @@ function getAuthIdentifierConfig(method) {
 
 function authTabsHtml() {
   return `
-    <div class="auth-tabs" role="tablist" aria-label="Тип авторизации">
+    <div class="auth-tabs auth-tabs-wakesurf" role="tablist" aria-label="Тип авторизации">
       ${['sms', 'email', 'password'].map((method) => `
         <button
           class="auth-tab ${authUiState.method === method ? 'active' : ''}"
@@ -232,7 +275,8 @@ function authTabsHtml() {
           aria-selected="${authUiState.method === method ? 'true' : 'false'}"
           data-auth-method="${method}"
         >
-          ${getAuthMethodLabel(method)}
+          <span class="auth-tab-icon">${authMethodIconSvg(method)}</span>
+          <span>${getAuthMethodLabel(method)}</span>
         </button>
       `).join('')}
     </div>
@@ -267,7 +311,7 @@ function passwordAuthFieldsHtml() {
             required
           />
           <button class="auth-password-toggle" type="button" aria-controls="authPasswordInput" aria-label="Показать пароль">
-            Показать
+            ${passwordVisibilityIconSvg(false)}
           </button>
         </span>
       </label>
@@ -364,6 +408,14 @@ function renderSignIn(message = '') {
 
   form?.querySelector('#requestAuthCode')?.addEventListener('click', handleAuthCodeRequest);
   form?.querySelector('.auth-password-toggle')?.addEventListener('click', handlePasswordVisibilityToggle);
+
+  const phoneInput = form?.querySelector('input[name="phone"]');
+  phoneInput?.addEventListener('input', (event) => {
+    const input = event.currentTarget;
+    input.value = formatAuthPhoneMask(input.value);
+    authUiState.phone = input.value;
+  });
+
   form?.addEventListener('submit', handleSignInSubmit);
 }
 
@@ -374,8 +426,9 @@ function handlePasswordVisibilityToggle(event) {
 
   const shouldShow = input.type === 'password';
   input.type = shouldShow ? 'text' : 'password';
-  button.textContent = shouldShow ? 'Скрыть' : 'Показать';
+  button.innerHTML = passwordVisibilityIconSvg(shouldShow);
   button.setAttribute('aria-label', shouldShow ? 'Скрыть пароль' : 'Показать пароль');
+  button.classList.toggle('is-visible', shouldShow);
 }
 
 function handleAuthCodeRequest(event) {
