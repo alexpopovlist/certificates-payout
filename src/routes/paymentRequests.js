@@ -235,7 +235,7 @@ router.post('/', async (request, response, next) => {
     sendPushInBackground({
       title: 'Создана заявка на оплату',
       body: `${item.certificateCount} сертификатов · ${formatMoney(item.totalAmountCents)}`,
-      url: `/#payments/${item.id}`
+      url: `/payments/${item.id}`
     });
 
     response.status(201).json({ item });
@@ -295,7 +295,7 @@ router.patch('/:id/pay', async (request, response, next) => {
       sendPushInBackground({
         title: 'Заявка оплачена',
         body: `${item.requestNumber} · ${formatMoney(item.totalAmountCents)}`,
-        url: `/#payments/${item.id}`
+        url: `/payments/${item.id}`
       });
     }
 

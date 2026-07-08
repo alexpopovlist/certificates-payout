@@ -1,4 +1,4 @@
-const DEFAULT_NOTIFICATION_URL = '/#redeem';
+const DEFAULT_NOTIFICATION_URL = '/redeem';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

@@ -17,36 +17,53 @@ const authUiState = {
 };
 
 const SIGN_IN_PATH = '/authentication/sign-in';
+const DEFAULT_APP_PATH = '/redeem';
+const APP_ROUTES = new Set(['redeem', 'certificates', 'payments']);
 
 function getCurrentAppUrl() {
-  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  return `${window.location.pathname}${window.location.search}`;
 }
 
 function safeNextPath(value) {
   const next = String(value || '').trim();
-  if (!next || !next.startsWith('/') || next.startsWith('//')) return '/#redeem';
-  if (next.startsWith(SIGN_IN_PATH)) return '/#redeem';
+  if (!next || !next.startsWith('/') || next.startsWith('//')) return DEFAULT_APP_PATH;
+  if (next.startsWith(SIGN_IN_PATH)) return DEFAULT_APP_PATH;
   return next;
+}
+
+function navigate(path, options = {}) {
+  const nextPath = safeNextPath(path);
+  if (options.replace) {
+    window.history.replaceState({}, '', nextPath);
+  } else {
+    window.history.pushState({}, '', nextPath);
+  }
+  route();
+}
+
+function normalizeLegacyHashRoute() {
+  if (!window.location.hash || window.location.pathname !== '/') return false;
+  const legacy = window.location.hash.replace(/^#/, '').replace(/^\/+/, '');
+  if (!legacy) return false;
+  const next = `/${legacy}`;
+  window.history.replaceState({}, '', next);
+  return true;
 }
 
 function ensureSignInPath() {
   if (window.location.pathname === SIGN_IN_PATH) return;
 
   const current = getCurrentAppUrl();
-  const next = current && current !== '/' ? current : '/#redeem';
+  const next = current && current !== '/' ? current : DEFAULT_APP_PATH;
   window.history.replaceState({}, '', `${SIGN_IN_PATH}?next=${encodeURIComponent(next)}`);
 }
 
 function leaveSignInPathAfterAuth() {
-  if (window.location.pathname !== SIGN_IN_PATH) {
-    if (!window.location.hash) window.location.hash = '#redeem';
-    return;
-  }
+  if (window.location.pathname !== SIGN_IN_PATH) return;
 
   const params = new URLSearchParams(window.location.search);
   const next = safeNextPath(params.get('next'));
   window.history.replaceState({}, '', next);
-  if (!window.location.hash) window.location.hash = '#redeem';
 }
 
 const createRequestState = {
@@ -120,7 +137,7 @@ function setHeader(title, options = {}) {
   backButton.classList.toggle('hidden', !showBack);
   backButton.onclick = showBack
     ? () => {
-        window.location.hash = options.backTo;
+        navigate(options.backTo);
       }
     : null;
 }
@@ -1080,7 +1097,7 @@ async function openQrScanner() {
 
 function certificateCard(certificate) {
   return `
-    <a class="card certificate-card" href="#certificates/${certificate.id}">
+    <a class="card certificate-card" href="/certificates/${certificate.id}">
       <div class="card-topline">
         <div class="card-title">${escapeHtml(certificate.certificateNumber)}</div>
         <div class="money">${formatPlainMoney(certificate.amountCents)}</div>
@@ -1097,7 +1114,7 @@ function certificateCard(certificate) {
 
 function paymentCard(paymentRequest) {
   return `
-    <a class="card payment-card" href="#payments/${paymentRequest.id}">
+    <a class="card payment-card" href="/payments/${paymentRequest.id}">
       <div class="card-topline">
         <div class="card-title">${formatDate(paymentRequest.createdAt)}</div>
         <div class="money">${formatMoney(paymentRequest.totalAmountCents)}</div>
@@ -1196,7 +1213,7 @@ async function renderRedeem() {
         method: 'POST',
         body: JSON.stringify(payload)
       });
-      window.location.hash = `#certificates/${result.item.id}`;
+      navigate(`/certificates/${result.item.id}`);
     } catch (error) {
       notice.className = 'notice error';
       notice.textContent = error.message;
@@ -1293,7 +1310,7 @@ async function loadFilteredCertificates() {
 }
 
 async function renderCertificateDetail(id) {
-  setHeader('Информация о сертификате', { backTo: '#certificates' });
+  setHeader('Информация о сертификате', { backTo: '/certificates' });
   setActiveNavigation('certificates');
   showLoading();
 
@@ -1339,7 +1356,7 @@ async function renderPayments() {
             <div class="summary-label">Общая сумма выплат за весь период:</div>
             <div class="summary-amount">${formatMoney(data.summary.totalPaidAmountCents)}</div>
           </div>
-          <a class="button" href="#payments/create">Создать заявку</a>
+          <a class="button" href="/payments/create">Создать заявку</a>
         </section>
         <div class="list">${itemsHtml}</div>
       </div>
@@ -1350,7 +1367,7 @@ async function renderPayments() {
 }
 
 async function renderPaymentDetail(id) {
-  setHeader('Информация по заявке', { backTo: '#payments' });
+  setHeader('Информация по заявке', { backTo: '/payments' });
   setActiveNavigation('payments');
   showLoading();
 
@@ -1402,7 +1419,7 @@ async function renderPaymentDetail(id) {
 }
 
 async function renderCreatePayment() {
-  setHeader('Создать заявку', { backTo: '#payments' });
+  setHeader('Создать заявку', { backTo: '/payments' });
   setActiveNavigation('payments');
 
   createRequestState.periodFrom = '';
@@ -1541,7 +1558,7 @@ async function createPaymentRequest() {
         periodTo: createRequestState.periodTo || null
       })
     });
-    window.location.hash = `#payments/${result.item.id}`;
+    navigate(`/payments/${result.item.id}`);
   } catch (error) {
     button.disabled = false;
     const container = document.querySelector('#createRequestTable');
@@ -1612,6 +1629,8 @@ function certificatesTable(certificates, options = {}) {
 }
 
 function route() {
+  normalizeLegacyHashRoute();
+
   if (!currentUser) {
     renderSignIn();
     return;
@@ -1622,11 +1641,18 @@ function route() {
   }
 
   stopQrScanner({ keepModalOpen: false });
-  const hash = window.location.hash || '#redeem';
-  const [root, id] = hash.replace(/^#/, '').split('/');
 
-  if (!window.location.hash) {
-    window.location.hash = '#redeem';
+  const currentPath = window.location.pathname === '/' ? DEFAULT_APP_PATH : window.location.pathname;
+  const parts = currentPath.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+  const [root, id] = parts;
+
+  if (!root) {
+    navigate(DEFAULT_APP_PATH, { replace: true });
+    return;
+  }
+
+  if (!APP_ROUTES.has(root)) {
+    navigate(DEFAULT_APP_PATH, { replace: true });
     return;
   }
 
@@ -1637,12 +1663,24 @@ function route() {
   if (root === 'payments' && id) return renderPaymentDetail(id);
   if (root === 'payments') return renderPayments();
 
-  window.location.hash = '#redeem';
+  navigate(DEFAULT_APP_PATH, { replace: true });
 }
 
 window.addEventListener('beforeunload', () => stopQrScanner());
-window.addEventListener('hashchange', route);
+window.addEventListener('popstate', route);
 logoutButton?.addEventListener('click', signOut);
+document.addEventListener('click', (event) => {
+  const link = event.target.closest?.('a[href]');
+  if (!link) return;
+  if (link.target || link.hasAttribute('download')) return;
+  const href = link.getAttribute('href');
+  if (!href || !href.startsWith('/')) return;
+  if (href.startsWith('/api/') || href.startsWith('//')) return;
+  const url = new URL(href, window.location.origin);
+  if (url.origin !== window.location.origin) return;
+  event.preventDefault();
+  navigate(`${url.pathname}${url.search}`);
+});
 window.addEventListener('DOMContentLoaded', async () => {
   const authenticated = await initializeAuth();
   if (authenticated) {

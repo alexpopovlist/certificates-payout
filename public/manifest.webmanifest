@@ -2,7 +2,7 @@
   "name": "WowLife Сертификаты",
   "short_name": "WowLife",
   "description": "Погашение сертификатов и заявки на оплату",
-  "start_url": "/#redeem",
+  "start_url": "/redeem",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f8fbff",

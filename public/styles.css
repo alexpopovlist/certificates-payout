@@ -1855,3 +1855,464 @@ body.is-login .content {
     padding: 0;
   }
 }
+
+/* Admin screens adapted from wakesurf-booking admin/daily-reports and admin/registered-users. */
+body:not(.is-login) {
+  background: #f6f7fb;
+}
+
+body:not(.is-login) .layout {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  background: #f6f7fb;
+}
+
+body:not(.is-login) .sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  background: #ffffff;
+  border-right: 1px solid #e2e8f0;
+  padding: 0;
+  backdrop-filter: none;
+}
+
+body:not(.is-login) .brand {
+  height: 56px;
+  margin: 0;
+  padding: 0 16px;
+  border-bottom: 1px solid #e2e8f0;
+  gap: 10px;
+  font-size: 16px;
+}
+
+body:not(.is-login) .brand img {
+  width: 32px;
+  height: 32px;
+}
+
+body:not(.is-login) .brand-caption small,
+body:not(.is-login) .brand small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+body:not(.is-login) .desktop-nav {
+  padding: 16px 12px;
+  gap: 4px;
+}
+
+body:not(.is-login) .desktop-nav a {
+  border-radius: 8px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 9px 12px;
+}
+
+body:not(.is-login) .desktop-nav a:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+body:not(.is-login) .desktop-nav a.active {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+body:not(.is-login) .workspace {
+  min-width: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+body:not(.is-login) .topbar {
+  height: 56px;
+  padding: 0 24px;
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: none;
+  backdrop-filter: blur(12px);
+}
+
+body:not(.is-login) .topbar h1 {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #0f172a;
+  letter-spacing: 0;
+}
+
+body:not(.is-login) .icon-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  color: #475569;
+  font-size: 21px;
+}
+
+body:not(.is-login) .icon-button:hover {
+  background: #f1f5f9;
+}
+
+body:not(.is-login) .content {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 24px;
+}
+
+body:not(.is-login) .stack {
+  gap: 24px;
+}
+
+body:not(.is-login) .card,
+body:not(.is-login) .loading-card,
+body:not(.is-login) .empty-state,
+body:not(.is-login) .error-state {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+body:not(.is-login) .card.pad,
+body:not(.is-login) .filters-card {
+  padding: 16px;
+}
+
+body:not(.is-login) .form-card h2,
+body:not(.is-login) .section-title,
+body:not(.is-login) .table-header h2 {
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+body:not(.is-login) .scan-card {
+  min-height: 64px;
+  padding: 16px;
+  border-radius: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+body:not(.is-login) .scan-card:hover {
+  background: #ffffff;
+  box-shadow: none;
+  transform: none;
+}
+
+body:not(.is-login) .scan-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+body:not(.is-login) .field {
+  min-height: 64px;
+  border-bottom-color: #e2e8f0;
+}
+
+body:not(.is-login) .field label,
+body:not(.is-login) .filter-field label,
+body:not(.is-login) .filter-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+body:not(.is-login) .field input,
+body:not(.is-login) .filter-field input,
+body:not(.is-login) .filter-field select,
+body:not(.is-login) .multiselect-control {
+  min-height: 40px;
+  height: 40px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 0 14px;
+  outline: none;
+}
+
+body:not(.is-login) .field input {
+  border: 0;
+  padding: 0;
+}
+
+body:not(.is-login) .filter-field input:focus,
+body:not(.is-login) .filter-field select:focus,
+body:not(.is-login) .multiselect-control:focus-visible {
+  border-color: #94a3b8;
+  box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.22);
+}
+
+body:not(.is-login) .filters,
+body:not(.is-login) .certificate-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+body:not(.is-login) .certificate-filters .filter-date-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+body:not(.is-login) .filter-field {
+  min-width: 180px;
+  gap: 6px;
+}
+
+body:not(.is-login) .filter-field-status {
+  min-width: 240px;
+}
+
+body:not(.is-login) .actions,
+body:not(.is-login) .filter-apply,
+body:not(.is-login) .filters > .button {
+  margin-top: 0;
+}
+
+body:not(.is-login) .button {
+  min-height: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #0f172a;
+  color: #ffffff;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: none;
+  border: 1px solid transparent;
+}
+
+body:not(.is-login) .button:hover {
+  background: #1e293b;
+}
+
+body:not(.is-login) .button.secondary {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #e2e8f0;
+}
+
+body:not(.is-login) .button.secondary:hover {
+  background: #f8fafc;
+}
+
+body:not(.is-login) .list {
+  display: grid;
+  gap: 16px;
+}
+
+body:not(.is-login) .certificate-card,
+body:not(.is-login) .payment-card {
+  padding: 20px;
+  border-radius: 16px;
+  border-color: #e2e8f0;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+body:not(.is-login) .certificate-card:hover,
+body:not(.is-login) .payment-card:hover {
+  background: #ffffff;
+  box-shadow: none;
+  transform: none;
+  border-color: #cbd5e1;
+}
+
+body:not(.is-login) .card-title,
+body:not(.is-login) .money {
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+body:not(.is-login) .money {
+  color: #16a34a;
+}
+
+body:not(.is-login) .card-subtitle,
+body:not(.is-login) .summary-label,
+body:not(.is-login) .status-row span {
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+body:not(.is-login) .dashed-line {
+  border-top-color: #e2e8f0;
+}
+
+body:not(.is-login) .summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 16px;
+}
+
+body:not(.is-login) .summary-amount {
+  color: #0f172a;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+body:not(.is-login) .table-card {
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+body:not(.is-login) .table-header {
+  padding: 16px;
+  border-bottom-color: #e2e8f0;
+}
+
+body:not(.is-login) .table-header p {
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+body:not(.is-login) table {
+  min-width: 760px;
+  font-size: 14px;
+}
+
+body:not(.is-login) th,
+body:not(.is-login) td {
+  padding: 12px 16px;
+  border-bottom-color: #f1f5f9;
+}
+
+body:not(.is-login) th {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+body:not(.is-login) td {
+  color: #0f172a;
+  font-weight: 500;
+}
+
+body:not(.is-login) .detail-card {
+  max-width: 920px;
+  overflow: hidden;
+}
+
+body:not(.is-login) .detail-body {
+  padding: 20px;
+}
+
+body:not(.is-login) .detail-row {
+  color: #64748b;
+  font-size: 14px;
+}
+
+body:not(.is-login) .detail-row strong {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+body:not(.is-login) .multiselect-menu {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.10);
+  padding: 6px;
+}
+
+body:not(.is-login) .multiselect-option {
+  border-radius: 12px;
+  padding: 9px 10px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+body:not(.is-login) .multiselect-option:hover {
+  background: #f8fafc;
+}
+
+@media (max-width: 920px) {
+  body:not(.is-login) .layout {
+    display: block;
+  }
+
+  body:not(.is-login) .topbar {
+    height: 64px;
+    padding: 0 18px;
+    background: #ffffff;
+  }
+
+  body:not(.is-login) .topbar h1 {
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  body:not(.is-login) .content {
+    padding: 20px 18px 34px;
+  }
+
+  body:not(.is-login) .bottom-nav {
+    border-top-color: #e2e8f0;
+    background: rgba(255, 255, 255, 0.96);
+  }
+
+  body:not(.is-login) .filters,
+  body:not(.is-login) .certificate-filters,
+  body:not(.is-login) .certificate-filters .filter-date-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  body:not(.is-login) .certificate-filters .filter-date-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  body:not(.is-login) .filter-field,
+  body:not(.is-login) .filter-field-status {
+    min-width: 0;
+  }
+
+  body:not(.is-login) .filter-apply,
+  body:not(.is-login) .filters > .button {
+    width: 100%;
+  }
+
+  body:not(.is-login) .certificate-card,
+  body:not(.is-login) .payment-card {
+    border-radius: 26px;
+    padding: 24px;
+  }
+
+  body:not(.is-login) .card-title,
+  body:not(.is-login) .money {
+    font-size: 24px;
+  }
+}

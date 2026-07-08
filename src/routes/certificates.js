@@ -165,7 +165,7 @@ router.post('/redeem', async (request, response, next) => {
     sendPushInBackground({
       title: 'Сертификат погашен',
       body: `${item.certificateNumber} · ${item.title}`,
-      url: `/#certificates/${item.id}`
+      url: `/certificates/${item.id}`
     });
 
     response.status(201).json({ item });
