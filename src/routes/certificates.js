@@ -1,10 +1,9 @@
 const express = require('express');
-const { withTransaction } = require('../db');
+const { query, withTransaction } = require('../db');
 const { broadcastPush } = require('../services/pushService');
 const { fetchPartnerCertificates, fetchPartnerCertificateById } = require('../services/partnerCertificateService');
 
 const router = express.Router();
-
 
 function sendPushInBackground(payload) {
   broadcastPush(payload).catch((error) => {
@@ -14,6 +13,22 @@ function sendPushInBackground(payload) {
   });
 }
 
+function isTruthyEnv(value) {
+  return ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
+}
+
+function shouldUseCertificatesService() {
+  if (process.env.CERTIFICATES_USE_SERVICE === undefined || process.env.CERTIFICATES_USE_SERVICE === '') {
+    return true;
+  }
+  return isTruthyEnv(process.env.CERTIFICATES_USE_SERVICE);
+}
+
+function parsePositiveInteger(value, fallback, maxValue = 100) {
+  const parsed = Number.parseInt(String(value || ''), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(parsed, maxValue);
+}
 
 function toCertificateDto(row) {
   return {
@@ -68,14 +83,101 @@ function buildRedeemedFilters(filters) {
   return { where: conditions.join(' AND '), values };
 }
 
+async function fetchDbRedeemedCertificates(filters) {
+  const { where, values } = buildRedeemedFilters(filters);
+  const page = parsePositiveInteger(filters.page, 1, 10000);
+  const limit = parsePositiveInteger(filters.limit, 20, 100);
+  const offset = (page - 1) * limit;
+
+  const countResult = await query(
+    `
+      SELECT COUNT(*)::int AS total_items
+      FROM certificates c
+      WHERE ${where}
+    `,
+    values
+  );
+
+  const totalItems = Number(countResult.rows[0]?.total_items || 0);
+  const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+  const limitValueIndex = values.length + 1;
+  const offsetValueIndex = values.length + 2;
+
+  const { rows } = await query(
+    `
+      SELECT
+        c.*,
+        pri.payment_request_id,
+        pr.status AS payment_request_status
+      FROM certificates c
+      LEFT JOIN payment_request_items pri ON pri.certificate_id = c.id
+      LEFT JOIN payment_requests pr ON pr.id = pri.payment_request_id
+      WHERE ${where}
+      ORDER BY c.redeemed_at DESC, c.created_at DESC
+      LIMIT $${limitValueIndex}
+      OFFSET $${offsetValueIndex}
+    `,
+    [...values, limit, offset]
+  );
+
+  return {
+    items: rows.map(toCertificateDto),
+    pagination: {
+      currentPage: page,
+      limit,
+      totalItems,
+      totalPages
+    },
+    source: 'database'
+  };
+}
+
+async function fetchDbCertificateById(id) {
+  const normalizedId = String(id || '').trim();
+  if (!normalizedId) {
+    const error = new Error('Certificate id is required');
+    error.statusCode = 400;
+    error.publicMessage = 'Не указан идентификатор сертификата.';
+    throw error;
+  }
+
+  const { rows } = await query(
+    `
+      SELECT
+        c.*,
+        pri.payment_request_id,
+        pr.status AS payment_request_status
+      FROM certificates c
+      LEFT JOIN payment_request_items pri ON pri.certificate_id = c.id
+      LEFT JOIN payment_requests pr ON pr.id = pri.payment_request_id
+      WHERE c.id::text = $1 OR c.certificate_number = $1
+      LIMIT 1
+    `,
+    [normalizedId]
+  );
+
+  if (rows.length === 0) {
+    const error = new Error('Certificate not found');
+    error.statusCode = 404;
+    error.publicMessage = 'Сертификат не найден.';
+    throw error;
+  }
+
+  return toCertificateDto(rows[0]);
+}
+
 router.get('/redeemed', async (request, response, next) => {
   try {
-    const data = await fetchPartnerCertificates({
-      session: request.auth,
-      query: request.query
-    });
+    if (shouldUseCertificatesService()) {
+      const data = await fetchPartnerCertificates({
+        session: request.auth,
+        query: request.query
+      });
+      return response.json(data);
+    }
 
-    response.json(data);
+    const data = await fetchDbRedeemedCertificates(request.query);
+    return response.json(data);
   } catch (error) {
     next(error);
   }
@@ -166,18 +268,14 @@ router.post('/redeem', async (request, response, next) => {
 
 router.get('/:id', async (request, response, next) => {
   try {
-    const item = await fetchPartnerCertificateById({
-      session: request.auth,
-      id: request.params.id
-    });
+    const item = shouldUseCertificatesService()
+      ? await fetchPartnerCertificateById({ session: request.auth, id: request.params.id })
+      : await fetchDbCertificateById(request.params.id);
 
     response.json({ item });
   } catch (error) {
     next(error);
   }
 });
-
-
-
 
 module.exports = router;

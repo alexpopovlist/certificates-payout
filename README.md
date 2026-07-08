@@ -132,11 +132,11 @@ curl https://YOUR_DOMAIN/api/push/subscriptions/summary \
 
 ### Сертификаты
 
-- `GET /api/certificates/redeemed?page=1&limit=20` — список сертификатов из WOWlife `certificate.getPartnerCertificates`.
-- `GET /api/certificates/:id` — детальная информация по сертификату из WOWlife.
+- `GET /api/certificates/redeemed?page=1&limit=20` — список сертификатов. Источник задаётся `CERTIFICATES_USE_SERVICE`: `true` — WOWlife, `false` — локальная PostgreSQL БД.
+- `GET /api/certificates/:id` — детальная информация по сертификату из выбранного источника.
 - `POST /api/certificates/redeem` — погасить сертификат вручную.
 
-Список на странице `/certificates` больше не читается из локальной БД. Backend вызывает:
+По умолчанию страница `/certificates` читает данные из WOWlife. Чтобы переключиться на локальную БД, задайте `CERTIFICATES_USE_SERVICE=false`. При `CERTIFICATES_USE_SERVICE=true` backend вызывает:
 
 ```text
 POST https://partner-wowlife.ru/restapi/certificate.getPartnerCertificates
@@ -157,9 +157,11 @@ POST https://partner-wowlife.ru/restapi/certificate.getPartnerCertificates
 
 `allIds` берётся из сессии авторизации WOWlife: сначала из `allIds`, затем fallback на `contactId`.
 
-Опциональные env-переменные:
+Env-переменные источника сертификатов:
 
 ```env
+# true — брать сертификаты из WOWlife, false — из локальной PostgreSQL БД
+CERTIFICATES_USE_SERVICE=true
 CERTIFICATES_SERVICE_URL=https://partner-wowlife.ru/restapi/certificate.getPartnerCertificates
 CERTIFICATES_GROUP_IDS=new,waiting,confirmed,visited,verification,paid,canceled,notcome,notrepaid
 CERTIFICATES_LOOKUP_MAX_PAGES=10
@@ -325,11 +327,11 @@ curl https://YOUR_DOMAIN/api/push/subscriptions/summary \
 
 ### Сертификаты
 
-- `GET /api/certificates/redeemed?page=1&limit=20` — список сертификатов из WOWlife `certificate.getPartnerCertificates`.
-- `GET /api/certificates/:id` — детальная информация по сертификату из WOWlife.
+- `GET /api/certificates/redeemed?page=1&limit=20` — список сертификатов. Источник задаётся `CERTIFICATES_USE_SERVICE`: `true` — WOWlife, `false` — локальная PostgreSQL БД.
+- `GET /api/certificates/:id` — детальная информация по сертификату из выбранного источника.
 - `POST /api/certificates/redeem` — погасить сертификат вручную.
 
-Список на странице `/certificates` больше не читается из локальной БД. Backend вызывает:
+По умолчанию страница `/certificates` читает данные из WOWlife. Чтобы переключиться на локальную БД, задайте `CERTIFICATES_USE_SERVICE=false`. При `CERTIFICATES_USE_SERVICE=true` backend вызывает:
 
 ```text
 POST https://partner-wowlife.ru/restapi/certificate.getPartnerCertificates
@@ -350,9 +352,11 @@ POST https://partner-wowlife.ru/restapi/certificate.getPartnerCertificates
 
 `allIds` берётся из сессии авторизации WOWlife: сначала из `allIds`, затем fallback на `contactId`.
 
-Опциональные env-переменные:
+Env-переменные источника сертификатов:
 
 ```env
+# true — брать сертификаты из WOWlife, false — из локальной PostgreSQL БД
+CERTIFICATES_USE_SERVICE=true
 CERTIFICATES_SERVICE_URL=https://partner-wowlife.ru/restapi/certificate.getPartnerCertificates
 CERTIFICATES_GROUP_IDS=new,waiting,confirmed,visited,verification,paid,canceled,notcome,notrepaid
 CERTIFICATES_LOOKUP_MAX_PAGES=10

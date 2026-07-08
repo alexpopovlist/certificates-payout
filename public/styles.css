@@ -2398,3 +2398,118 @@ body:not(.is-login) .pagination-page {
     flex: 1 1 auto;
   }
 }
+
+/* Certificates filters: align apply action and match wakesurf-booking select/button controls. */
+body:not(.is-login) .certificate-filters {
+  align-items: end;
+}
+
+body:not(.is-login) .certificate-apply-button {
+  justify-self: end;
+  margin-left: auto;
+  width: auto;
+  min-width: 0;
+  background: #0f172a;
+  color: #ffffff;
+}
+
+body:not(.is-login) .certificate-apply-button:hover {
+  background: #1e293b;
+}
+
+body:not(.is-login) .multiselect-control {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 0 12px;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+body:not(.is-login) .multiselect-control:hover {
+  background: #f8fafc;
+}
+
+body:not(.is-login) .multiselect-value {
+  font-weight: 500;
+}
+
+body:not(.is-login) .multiselect-arrow {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  font-size: 16px;
+  opacity: 0.8;
+}
+
+body:not(.is-login) .multiselect-menu {
+  top: calc(100% + 6px);
+  z-index: 60;
+  min-width: 100%;
+  overflow: hidden;
+  border-radius: 16px;
+  border-color: #e2e8f0;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.10);
+  padding: 4px;
+}
+
+body:not(.is-login) .multiselect-option {
+  position: relative;
+  min-height: 36px;
+  gap: 8px;
+  padding: 8px 10px 8px 32px;
+  border-radius: 12px;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+body:not(.is-login) .multiselect-option input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+body:not(.is-login) .multiselect-check {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0;
+}
+
+body:not(.is-login) .multiselect-option[aria-selected="true"] {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+body:not(.is-login) .multiselect-option[aria-selected="true"] .multiselect-check {
+  opacity: 1;
+}
+
+@media (min-width: 921px) {
+  body:not(.is-login) .certificate-filters .filter-apply.certificate-apply-button {
+    min-width: 0;
+    width: auto;
+  }
+}
+
+@media (max-width: 920px) {
+  body:not(.is-login) .certificate-apply-button {
+    width: 100%;
+  }
+}

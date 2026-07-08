@@ -1302,14 +1302,17 @@ async function renderCertificates() {
               <div class="multiselect-menu" role="listbox" aria-label="Статус сертификата" aria-multiselectable="true">
                 <label class="multiselect-option" role="option" aria-selected="false">
                   <input type="checkbox" value="REDEEMED" data-label="Погашено" />
+                  <span class="multiselect-check" aria-hidden="true">✓</span>
                   <span>Погашено</span>
                 </label>
                 <label class="multiselect-option" role="option" aria-selected="false">
                   <input type="checkbox" value="PAYMENT_PROCESSING" data-label="В процессе оплаты" />
+                  <span class="multiselect-check" aria-hidden="true">✓</span>
                   <span>В процессе оплаты</span>
                 </label>
                 <label class="multiselect-option" role="option" aria-selected="false">
                   <input type="checkbox" value="PAID" data-label="Оплачено" />
+                  <span class="multiselect-check" aria-hidden="true">✓</span>
                   <span>Оплачено</span>
                 </label>
               </div>
@@ -1325,7 +1328,7 @@ async function renderCertificates() {
               <input id="toFilter" type="date" />
             </div>
           </div>
-          <button id="applyCertificateFilters" class="button secondary filter-apply" type="button">Применить</button>
+          <button id="applyCertificateFilters" class="button filter-apply certificate-apply-button" type="button">Применить</button>
         </div>
       </div>
       <div id="certificatesList" class="list"><div class="loading-card">Загрузка...</div></div>
