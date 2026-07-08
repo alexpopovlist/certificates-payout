@@ -294,31 +294,18 @@ async function fetchPartnerCertificateById({ session, id }) {
     throw error;
   }
 
-  const firstTry = await fetchPartnerCertificates({
+  const result = await fetchPartnerCertificates({
     session,
     page: 1,
-    limit: 100,
+    limit: 20,
+    order: 'DESC',
     filters: {
-      id: normalizedId,
-      ID: normalizedId,
-      number: normalizedId,
-      NUMBER: normalizedId
+      certificate_id: { '=': normalizedId }
     }
   });
 
-  const found = firstTry.items.find((item) => isSameCertificate(item, normalizedId));
+  const found = result.items.find((item) => isSameCertificate(item, normalizedId)) || result.items[0];
   if (found) return found;
-
-  const maxPages = parsePositiveInteger(process.env.CERTIFICATES_LOOKUP_MAX_PAGES, 10, 100);
-  let page = 1;
-
-  while (page <= maxPages) {
-    const result = await fetchPartnerCertificates({ session, page, limit: 100 });
-    const item = result.items.find((entry) => isSameCertificate(entry, normalizedId));
-    if (item) return item;
-    if (page >= result.pagination.totalPages) break;
-    page += 1;
-  }
 
   const error = new Error('Certificate not found in WOWlife service');
   error.statusCode = 404;
