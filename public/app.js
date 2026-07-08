@@ -1169,7 +1169,7 @@ async function renderRedeem() {
               <video id="qrVideo" playsinline muted autoplay></video>
               <div class="qr-frame" aria-hidden="true"></div>
             </div>
-            <p class="qr-hint">Разрешите доступ к камере и наведите объектив на QR код сертификата. Камера работает на телефоне и на компьютере при открытии приложения по HTTPS или на localhost.</p>
+            <p class="qr-hint">Разрешите доступ к камере и наведите объектив на QR код сертификата.</p>
             <div id="qrStatus" class="qr-status">Камера ещё не запущена.</div>
           </div>
         </section>
