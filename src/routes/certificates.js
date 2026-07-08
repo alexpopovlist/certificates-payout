@@ -71,30 +71,8 @@ router.get('/redeemed', async (request, response, next) => {
   }
 });
 
-router.get('/:id', async (request, response, next) => {
-  try {
-    const { rows } = await query(
-      `
-        SELECT
-          c.*,
-          pri.payment_request_id,
-          pr.status AS payment_request_status
-        FROM certificates c
-        LEFT JOIN payment_request_items pri ON pri.certificate_id = c.id
-        LEFT JOIN payment_requests pr ON pr.id = pri.payment_request_id
-        WHERE c.id = $1
-      `,
-      [request.params.id]
-    );
-
-    if (rows.length === 0) {
-      return response.status(404).json({ error: 'Certificate not found' });
-    }
-
-    response.json({ item: toCertificateDto(rows[0]) });
-  } catch (error) {
-    next(error);
-  }
+router.get('/redeem', (_request, response) => {
+  response.status(405).json({ error: 'Use POST /api/certificates/redeem' });
 });
 
 router.post('/redeem', async (request, response, next) => {
@@ -167,5 +145,33 @@ router.post('/redeem', async (request, response, next) => {
     next(error);
   }
 });
+
+router.get('/:id([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})', async (request, response, next) => {
+  try {
+    const { rows } = await query(
+      `
+        SELECT
+          c.*,
+          pri.payment_request_id,
+          pr.status AS payment_request_status
+        FROM certificates c
+        LEFT JOIN payment_request_items pri ON pri.certificate_id = c.id
+        LEFT JOIN payment_requests pr ON pr.id = pri.payment_request_id
+        WHERE c.id = $1
+      `,
+      [request.params.id]
+    );
+
+    if (rows.length === 0) {
+      return response.status(404).json({ error: 'Certificate not found' });
+    }
+
+    response.json({ item: toCertificateDto(rows[0]) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
 
 module.exports = router;

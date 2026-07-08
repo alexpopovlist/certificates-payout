@@ -114,6 +114,218 @@ function statusHtml(statusMap, status) {
   return `<span class="status ${meta.className}">${escapeHtml(meta.label)}</span>`;
 }
 
+let qrStream = null;
+let qrScanFrame = null;
+let qrDetector = null;
+let qrDetectionBusy = false;
+
+function setQrStatus(message, type = '') {
+  const status = document.querySelector('#qrStatus');
+  if (!status) return;
+  status.className = `qr-status ${type}`.trim();
+  status.textContent = message;
+}
+
+function stopQrScanner(options = {}) {
+  if (qrScanFrame) {
+    window.cancelAnimationFrame(qrScanFrame);
+    qrScanFrame = null;
+  }
+
+  qrDetectionBusy = false;
+
+  if (qrStream) {
+    qrStream.getTracks().forEach((track) => track.stop());
+    qrStream = null;
+  }
+
+  const video = document.querySelector('#qrVideo');
+  if (video) {
+    video.pause();
+    video.srcObject = null;
+  }
+
+  const modal = document.querySelector('#qrModal');
+  if (modal && !options.keepModalOpen) {
+    modal.classList.add('hidden');
+    document.body.classList.remove('no-scroll');
+  }
+}
+
+function parseQrPayload(rawValue) {
+  const value = String(rawValue || '').trim();
+  if (!value) return {};
+
+  const normalize = (object) => ({
+    certificateNumber:
+      object.certificateNumber ||
+      object.certificate_number ||
+      object.number ||
+      object.cert ||
+      object.certificate ||
+      '',
+    secretCode:
+      object.secretCode ||
+      object.secret_code ||
+      object.code ||
+      object.secret ||
+      object.pin ||
+      ''
+  });
+
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === 'object') {
+      return normalize(parsed);
+    }
+  } catch (_error) {
+    // QR может быть не JSON — продолжаем разбор как URL или простой текст.
+  }
+
+  try {
+    const url = new URL(value);
+    const params = Object.fromEntries(url.searchParams.entries());
+    return normalize(params);
+  } catch (_error) {
+    // Не URL — продолжаем разбор как строку.
+  }
+
+  const byKeys = {};
+  value
+    .split(/[;\n,&]+/)
+    .map((part) => part.trim())
+    .forEach((part) => {
+      const [key, ...rest] = part.split(/[:=]/);
+      if (!key || rest.length === 0) return;
+      byKeys[key.trim()] = rest.join(':').trim();
+    });
+
+  const fromKeys = normalize(byKeys);
+  if (fromKeys.certificateNumber || fromKeys.secretCode) {
+    return fromKeys;
+  }
+
+  const parts = value.split(/[\s|:;,_]+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return {
+      certificateNumber: parts[0],
+      secretCode: parts[1]
+    };
+  }
+
+  return {
+    certificateNumber: value,
+    secretCode: ''
+  };
+}
+
+function applyQrPayload(rawValue) {
+  const payload = parseQrPayload(rawValue);
+  const numberInput = document.querySelector('#certificateNumber');
+  const codeInput = document.querySelector('#secretCode');
+
+  if (payload.certificateNumber && numberInput) {
+    numberInput.value = payload.certificateNumber;
+  }
+
+  if (payload.secretCode && codeInput) {
+    codeInput.value = payload.secretCode;
+  }
+
+  stopQrScanner();
+
+  const notice = document.querySelector('#redeemNotice');
+  if (notice) {
+    notice.className = 'notice';
+    notice.textContent = payload.secretCode
+      ? 'QR код считан. Проверьте данные и нажмите «Погасить сертификат».'
+      : 'QR код считан. Секретный код не найден — заполните его вручную.';
+  }
+
+  if (codeInput && !payload.secretCode) {
+    codeInput.focus();
+  }
+}
+
+async function detectQrLoop(video) {
+  if (!qrDetector || !qrStream || video.readyState < 2) {
+    qrScanFrame = window.requestAnimationFrame(() => detectQrLoop(video));
+    return;
+  }
+
+  if (!qrDetectionBusy) {
+    qrDetectionBusy = true;
+    try {
+      const codes = await qrDetector.detect(video);
+      const qrCode = codes.find((code) => code.rawValue);
+      if (qrCode) {
+        setQrStatus('QR код найден. Заполняю данные...', 'success');
+        applyQrPayload(qrCode.rawValue);
+        return;
+      }
+    } catch (_error) {
+      setQrStatus('Камера открыта, но распознать QR код не удалось. Попробуйте навести камеру ближе.', 'error');
+    } finally {
+      qrDetectionBusy = false;
+    }
+  }
+
+  qrScanFrame = window.requestAnimationFrame(() => detectQrLoop(video));
+}
+
+async function openQrScanner() {
+  const modal = document.querySelector('#qrModal');
+  const video = document.querySelector('#qrVideo');
+
+  if (!modal || !video) return;
+
+  modal.classList.remove('hidden');
+  document.body.classList.add('no-scroll');
+  setQrStatus('Запрашиваю доступ к камере...');
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setQrStatus('Браузер не поддерживает доступ к камере. Откройте приложение в современном браузере по HTTPS или localhost.', 'error');
+    return;
+  }
+
+  try {
+    qrStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    });
+  } catch (_primaryError) {
+    try {
+      qrStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+    } catch (error) {
+      const message = error?.name === 'NotAllowedError'
+        ? 'Доступ к камере запрещён. Разрешите камеру в настройках браузера и попробуйте ещё раз.'
+        : 'Не удалось открыть камеру. Проверьте, что устройство подключено и страница открыта по HTTPS.';
+      setQrStatus(message, 'error');
+      return;
+    }
+  }
+
+  video.srcObject = qrStream;
+  await video.play().catch(() => null);
+
+  if ('BarcodeDetector' in window) {
+    try {
+      qrDetector = new BarcodeDetector({ formats: ['qr_code'] });
+      setQrStatus('Наведите камеру на QR код сертификата.');
+      detectQrLoop(video);
+    } catch (_error) {
+      setQrStatus('Камера открыта. Автораспознавание QR недоступно в этом браузере — используйте ручной ввод ниже.', 'error');
+    }
+  } else {
+    setQrStatus('Камера открыта. Автораспознавание QR недоступно в этом браузере — используйте ручной ввод ниже.', 'error');
+  }
+}
+
+
 function certificateCard(certificate) {
   return `
     <a class="card certificate-card" href="#certificates/${certificate.id}">
@@ -162,13 +374,31 @@ async function renderRedeem() {
 
   app.innerHTML = `
     <div class="stack">
-      <a class="card scan-card" href="#redeem" aria-label="Сканировать QR код">
+      <button id="openQrScanner" class="card scan-card" type="button" aria-label="Сканировать QR код">
         <span class="scan-left">
           <span class="scan-icon">▦</span>
           <span>Сканировать по QR коду</span>
         </span>
         <span>→</span>
-      </a>
+      </button>
+
+      <div id="qrModal" class="qr-modal hidden" role="dialog" aria-modal="true" aria-labelledby="qrTitle">
+        <button class="qr-backdrop" type="button" data-close-qr aria-label="Закрыть сканер"></button>
+        <section class="qr-panel">
+          <header class="qr-header">
+            <h2 id="qrTitle">Сканирование QR кода</h2>
+            <button class="icon-button qr-close" type="button" data-close-qr aria-label="Закрыть">×</button>
+          </header>
+          <div class="qr-body">
+            <div class="qr-video-wrap">
+              <video id="qrVideo" playsinline muted autoplay></video>
+              <div class="qr-frame" aria-hidden="true"></div>
+            </div>
+            <p class="qr-hint">Разрешите доступ к камере и наведите объектив на QR код сертификата. Камера работает на телефоне и на компьютере при открытии приложения по HTTPS или на localhost.</p>
+            <div id="qrStatus" class="qr-status">Камера ещё не запущена.</div>
+          </div>
+        </section>
+      </div>
 
       <section class="card pad form-card">
         <h2>Погасить вручную</h2>
@@ -202,6 +432,12 @@ async function renderRedeem() {
 
   const form = document.querySelector('#redeemForm');
   const notice = document.querySelector('#redeemNotice');
+  const scannerButton = document.querySelector('#openQrScanner');
+
+  scannerButton?.addEventListener('click', openQrScanner);
+  document.querySelectorAll('[data-close-qr]').forEach((button) => {
+    button.addEventListener('click', () => stopQrScanner());
+  });
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -614,6 +850,7 @@ function certificatesTable(certificates, options = {}) {
 }
 
 function route() {
+  stopQrScanner({ keepModalOpen: false });
   const hash = window.location.hash || '#redeem';
   const [root, id] = hash.replace(/^#/, '').split('/');
 
@@ -632,5 +869,6 @@ function route() {
   window.location.hash = '#redeem';
 }
 
+window.addEventListener('beforeunload', () => stopQrScanner());
 window.addEventListener('hashchange', route);
 window.addEventListener('DOMContentLoaded', route);

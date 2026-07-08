@@ -83,3 +83,15 @@ certificates-payout-app/
 - `POST /api/payment-requests` — создать заявку.
 - `PATCH /api/payment-requests/:id/pay` — отметить заявку оплаченной.
 
+
+
+## Обновления интерфейса
+
+- Интерфейс переведён на стиль проекта WakeSurf: шрифт Manrope, светлая админ-тема, обновлённый фон, карточки, навигация и логотип.
+- Кнопка «Сканировать по QR коду» открывает модальное окно с камерой через `navigator.mediaDevices.getUserMedia`.
+- Автораспознавание QR работает через браузерный `BarcodeDetector`, если он поддерживается устройством/браузером.
+- Поддерживаемые форматы QR:
+  - JSON: `{"certificateNumber":"S00000001","secretCode":"123456"}`
+  - URL query: `...?certificateNumber=S00000001&secretCode=123456`
+  - простая строка: `S00000001 123456`
+- Доступ к камере в production работает только по HTTPS. На локальной машине работает через `localhost`.
