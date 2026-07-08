@@ -151,7 +151,7 @@ function renderSignIn(message = '') {
         <form id="signInForm" class="auth-form">
           <label>
             <span>Логин</span>
-            <input name="login" autocomplete="username" placeholder="Телефон, email или логин" required />
+            <input name="login" type="text" inputmode="email" autocomplete="username" placeholder="Логин или email партнёрского кабинета" required />
           </label>
           <label>
             <span>Пароль</span>
