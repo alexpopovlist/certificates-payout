@@ -107,7 +107,7 @@ curl -X POST https://YOUR_DOMAIN/api/push/broadcast \
   -d '{
     "title": "WowLife",
     "body": "Новая заявка или обновление по сертификатам",
-    "url": "/#certificates"
+    "url": "/certificates"
   }'
 ```
 
@@ -132,9 +132,38 @@ curl https://YOUR_DOMAIN/api/push/subscriptions/summary \
 
 ### Сертификаты
 
-- `GET /api/certificates/redeemed` — список погашенных сертификатов.
-- `GET /api/certificates/:id` — детальная информация по сертификату.
+- `GET /api/certificates/redeemed?page=1&limit=20` — список сертификатов из WOWlife `certificate.getPartnerCertificates`.
+- `GET /api/certificates/:id` — детальная информация по сертификату из WOWlife.
 - `POST /api/certificates/redeem` — погасить сертификат вручную.
+
+Список на странице `/certificates` больше не читается из локальной БД. Backend вызывает:
+
+```text
+POST https://partner-wowlife.ru/restapi/certificate.getPartnerCertificates
+```
+
+Базовый payload формируется так:
+
+```json
+{
+  "page": 1,
+  "limit": 20,
+  "order": "DESC",
+  "groupIds": ["new", "waiting", "confirmed", "visited", "verification", "paid", "canceled", "notcome", "notrepaid"],
+  "allIds": ["485"],
+  "filters": {}
+}
+```
+
+`allIds` берётся из сессии авторизации WOWlife: сначала из `allIds`, затем fallback на `contactId`.
+
+Опциональные env-переменные:
+
+```env
+CERTIFICATES_SERVICE_URL=https://partner-wowlife.ru/restapi/certificate.getPartnerCertificates
+CERTIFICATES_GROUP_IDS=new,waiting,confirmed,visited,verification,paid,canceled,notcome,notrepaid
+CERTIFICATES_LOOKUP_MAX_PAGES=10
+```
 
 ### Заявки на оплату
 
@@ -271,7 +300,7 @@ curl -X POST https://YOUR_DOMAIN/api/push/broadcast \
   -d '{
     "title": "WowLife",
     "body": "Новая заявка или обновление по сертификатам",
-    "url": "/#certificates"
+    "url": "/certificates"
   }'
 ```
 
@@ -296,9 +325,38 @@ curl https://YOUR_DOMAIN/api/push/subscriptions/summary \
 
 ### Сертификаты
 
-- `GET /api/certificates/redeemed` — список погашенных сертификатов.
-- `GET /api/certificates/:id` — детальная информация по сертификату.
+- `GET /api/certificates/redeemed?page=1&limit=20` — список сертификатов из WOWlife `certificate.getPartnerCertificates`.
+- `GET /api/certificates/:id` — детальная информация по сертификату из WOWlife.
 - `POST /api/certificates/redeem` — погасить сертификат вручную.
+
+Список на странице `/certificates` больше не читается из локальной БД. Backend вызывает:
+
+```text
+POST https://partner-wowlife.ru/restapi/certificate.getPartnerCertificates
+```
+
+Базовый payload формируется так:
+
+```json
+{
+  "page": 1,
+  "limit": 20,
+  "order": "DESC",
+  "groupIds": ["new", "waiting", "confirmed", "visited", "verification", "paid", "canceled", "notcome", "notrepaid"],
+  "allIds": ["485"],
+  "filters": {}
+}
+```
+
+`allIds` берётся из сессии авторизации WOWlife: сначала из `allIds`, затем fallback на `contactId`.
+
+Опциональные env-переменные:
+
+```env
+CERTIFICATES_SERVICE_URL=https://partner-wowlife.ru/restapi/certificate.getPartnerCertificates
+CERTIFICATES_GROUP_IDS=new,waiting,confirmed,visited,verification,paid,canceled,notcome,notrepaid
+CERTIFICATES_LOOKUP_MAX_PAGES=10
+```
 
 ### Заявки на оплату
 

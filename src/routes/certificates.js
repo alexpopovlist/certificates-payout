@@ -1,6 +1,7 @@
 const express = require('express');
-const { query, withTransaction } = require('../db');
+const { withTransaction } = require('../db');
 const { broadcastPush } = require('../services/pushService');
+const { fetchPartnerCertificates, fetchPartnerCertificateById } = require('../services/partnerCertificateService');
 
 const router = express.Router();
 
@@ -69,23 +70,12 @@ function buildRedeemedFilters(filters) {
 
 router.get('/redeemed', async (request, response, next) => {
   try {
-    const { where, values } = buildRedeemedFilters(request.query);
-    const { rows } = await query(
-      `
-        SELECT
-          c.*,
-          pri.payment_request_id,
-          pr.status AS payment_request_status
-        FROM certificates c
-        LEFT JOIN payment_request_items pri ON pri.certificate_id = c.id
-        LEFT JOIN payment_requests pr ON pr.id = pri.payment_request_id
-        WHERE ${where}
-        ORDER BY c.redeemed_at DESC, c.created_at DESC
-      `,
-      values
-    );
+    const data = await fetchPartnerCertificates({
+      session: request.auth,
+      query: request.query
+    });
 
-    response.json({ items: rows.map(toCertificateDto) });
+    response.json(data);
   } catch (error) {
     next(error);
   }
@@ -174,31 +164,19 @@ router.post('/redeem', async (request, response, next) => {
   }
 });
 
-router.get('/:id([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})', async (request, response, next) => {
+router.get('/:id', async (request, response, next) => {
   try {
-    const { rows } = await query(
-      `
-        SELECT
-          c.*,
-          pri.payment_request_id,
-          pr.status AS payment_request_status
-        FROM certificates c
-        LEFT JOIN payment_request_items pri ON pri.certificate_id = c.id
-        LEFT JOIN payment_requests pr ON pr.id = pri.payment_request_id
-        WHERE c.id = $1
-      `,
-      [request.params.id]
-    );
+    const item = await fetchPartnerCertificateById({
+      session: request.auth,
+      id: request.params.id
+    });
 
-    if (rows.length === 0) {
-      return response.status(404).json({ error: 'Certificate not found' });
-    }
-
-    response.json({ item: toCertificateDto(rows[0]) });
+    response.json({ item });
   } catch (error) {
     next(error);
   }
 });
+
 
 
 

@@ -73,6 +73,11 @@ const createRequestState = {
   periodTo: ''
 };
 
+const certificatesListState = {
+  page: 1,
+  limit: 20
+};
+
 const certificateStatus = {
   NEW: { label: 'Новый', className: '' },
   REDEEMED: { label: 'Погашен', className: 'redeemed' },
@@ -820,9 +825,10 @@ document.addEventListener('click', async (event) => {
 });
 
 
-function statusHtml(statusMap, status) {
+function statusHtml(statusMap, status, labelOverride = null) {
   const meta = statusMap[status] || { label: status || '—', className: '' };
-  return `<span class="status ${meta.className}">${escapeHtml(meta.label)}</span>`;
+  const label = labelOverride || meta.label;
+  return `<span class="status ${meta.className}">${escapeHtml(label)}</span>`;
 }
 
 function initStatusMultiselect() {
@@ -1106,7 +1112,7 @@ function certificateCard(certificate) {
       <div class="card-subtitle">${escapeHtml(certificate.title)}</div>
       <div class="status-row">
         <span>${formatDate(certificate.serviceDate)} · ${formatTime(certificate.serviceTime)}</span>
-        ${statusHtml(certificateStatus, certificate.status)}
+        ${statusHtml(certificateStatus, certificate.status, certificate.statusLabel)}
       </div>
     </a>
   `;
@@ -1223,89 +1229,139 @@ async function renderRedeem() {
   });
 }
 
+
+function certificatesPaginationHtml(pagination) {
+  if (!pagination || Number(pagination.totalPages || 1) <= 1) return '';
+
+  const currentPage = Number(pagination.currentPage || 1);
+  const totalPages = Number(pagination.totalPages || 1);
+  const totalItems = Number(pagination.totalItems || 0);
+  const start = Math.max(1, currentPage - 2);
+  const end = Math.min(totalPages, currentPage + 2);
+  const pages = [];
+
+  for (let page = start; page <= end; page += 1) {
+    pages.push(`
+      <button class="pagination-page ${page === currentPage ? 'active' : ''}" type="button" data-page="${page}" aria-label="Страница ${page}">${page}</button>
+    `);
+  }
+
+  return `
+    <nav class="pagination" aria-label="Навигация по страницам сертификатов">
+      <div class="pagination-summary">${totalItems ? `${totalItems} ${declension(totalItems, ['сертификат', 'сертификата', 'сертификатов'])}` : `Страница ${currentPage} из ${totalPages}`}</div>
+      <div class="pagination-controls">
+        <button class="pagination-page" type="button" data-page="${Math.max(1, currentPage - 1)}" ${currentPage <= 1 ? 'disabled' : ''}>Назад</button>
+        ${start > 1 ? '<span class="pagination-gap">…</span>' : ''}
+        ${pages.join('')}
+        ${end < totalPages ? '<span class="pagination-gap">…</span>' : ''}
+        <button class="pagination-page" type="button" data-page="${Math.min(totalPages, currentPage + 1)}" ${currentPage >= totalPages ? 'disabled' : ''}>Вперёд</button>
+      </div>
+    </nav>
+  `;
+}
+
+function renderCertificatesResult(data, emptyText = 'Погашенных сертификатов пока нет.') {
+  const list = document.querySelector('#certificatesList');
+  const pagination = document.querySelector('#certificatesPagination');
+  if (!list) return;
+
+  list.innerHTML = data.items?.length
+    ? data.items.map(certificateCard).join('')
+    : `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
+
+  if (pagination) {
+    pagination.innerHTML = certificatesPaginationHtml(data.pagination);
+    pagination.querySelectorAll('[data-page]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const page = Number(button.dataset.page || 1);
+        if (Number.isFinite(page) && page > 0) {
+          loadFilteredCertificates(page);
+        }
+      });
+    });
+  }
+}
+
 async function renderCertificates() {
   setHeader('Погашенные сертификаты');
   setActiveNavigation('certificates');
   showLoading();
+  certificatesListState.page = 1;
 
-  try {
-    const data = await api('/api/certificates/redeemed');
-    const itemsHtml = data.items.length
-      ? data.items.map(certificateCard).join('')
-      : '<div class="empty-state">Погашенных сертификатов пока нет.</div>';
-
-    app.innerHTML = `
-      <div class="stack">
-        <div class="card pad filters-card">
-          <div class="filters certificate-filters">
-            <div class="filter-field filter-field-status">
-              <span class="filter-label">Статус</span>
-              <div class="multiselect" id="statusFilter" data-multiselect>
-                <button class="multiselect-control" type="button" aria-haspopup="listbox" aria-expanded="false">
-                  <span class="multiselect-value">Все</span>
-                  <span class="multiselect-arrow" aria-hidden="true">⌄</span>
-                </button>
-                <div class="multiselect-menu" role="listbox" aria-label="Статус сертификата" aria-multiselectable="true">
-                  <label class="multiselect-option" role="option" aria-selected="false">
-                    <input type="checkbox" value="REDEEMED" data-label="Погашено" />
-                    <span>Погашено</span>
-                  </label>
-                  <label class="multiselect-option" role="option" aria-selected="false">
-                    <input type="checkbox" value="PAYMENT_PROCESSING" data-label="В процессе оплаты" />
-                    <span>В процессе оплаты</span>
-                  </label>
-                  <label class="multiselect-option" role="option" aria-selected="false">
-                    <input type="checkbox" value="PAID" data-label="Оплачено" />
-                    <span>Оплачено</span>
-                  </label>
-                </div>
+  app.innerHTML = `
+    <div class="stack">
+      <div class="card pad filters-card">
+        <div class="filters certificate-filters">
+          <div class="filter-field filter-field-status">
+            <span class="filter-label">Статус</span>
+            <div class="multiselect" id="statusFilter" data-multiselect>
+              <button class="multiselect-control" type="button" aria-haspopup="listbox" aria-expanded="false">
+                <span class="multiselect-value">Все</span>
+                <span class="multiselect-arrow" aria-hidden="true">⌄</span>
+              </button>
+              <div class="multiselect-menu" role="listbox" aria-label="Статус сертификата" aria-multiselectable="true">
+                <label class="multiselect-option" role="option" aria-selected="false">
+                  <input type="checkbox" value="REDEEMED" data-label="Погашено" />
+                  <span>Погашено</span>
+                </label>
+                <label class="multiselect-option" role="option" aria-selected="false">
+                  <input type="checkbox" value="PAYMENT_PROCESSING" data-label="В процессе оплаты" />
+                  <span>В процессе оплаты</span>
+                </label>
+                <label class="multiselect-option" role="option" aria-selected="false">
+                  <input type="checkbox" value="PAID" data-label="Оплачено" />
+                  <span>Оплачено</span>
+                </label>
               </div>
             </div>
-            <div class="filter-date-row">
-              <div class="filter-field">
-                <label for="fromFilter">С даты</label>
-                <input id="fromFilter" type="date" />
-              </div>
-              <div class="filter-field">
-                <label for="toFilter">По дату</label>
-                <input id="toFilter" type="date" />
-              </div>
-            </div>
-            <button id="applyCertificateFilters" class="button secondary filter-apply" type="button">Применить</button>
           </div>
+          <div class="filter-date-row">
+            <div class="filter-field">
+              <label for="fromFilter">С даты</label>
+              <input id="fromFilter" type="date" />
+            </div>
+            <div class="filter-field">
+              <label for="toFilter">По дату</label>
+              <input id="toFilter" type="date" />
+            </div>
+          </div>
+          <button id="applyCertificateFilters" class="button secondary filter-apply" type="button">Применить</button>
         </div>
-        <div id="certificatesList" class="list">${itemsHtml}</div>
       </div>
-    `;
+      <div id="certificatesList" class="list"><div class="loading-card">Загрузка...</div></div>
+      <div id="certificatesPagination"></div>
+    </div>
+  `;
 
-    initStatusMultiselect();
-    document.querySelector('#applyCertificateFilters').addEventListener('click', loadFilteredCertificates);
-  } catch (error) {
-    showError(error);
-  }
+  initStatusMultiselect();
+  document.querySelector('#applyCertificateFilters').addEventListener('click', () => loadFilteredCertificates(1));
+  await loadFilteredCertificates(1, 'Погашенных сертификатов пока нет.');
 }
 
-async function loadFilteredCertificates() {
+async function loadFilteredCertificates(page = 1, emptyText = 'По выбранным фильтрам сертификатов нет.') {
   const params = new URLSearchParams();
   const statuses = Array.from(document.querySelectorAll('#statusFilter input[type="checkbox"]:checked'))
     .map((input) => input.value);
-  const from = document.querySelector('#fromFilter').value;
-  const to = document.querySelector('#toFilter').value;
+  const from = document.querySelector('#fromFilter')?.value || '';
+  const to = document.querySelector('#toFilter')?.value || '';
 
+  certificatesListState.page = page;
   statuses.forEach((status) => params.append('status', status));
   if (from) params.set('from', from);
   if (to) params.set('to', to);
+  params.set('page', String(page));
+  params.set('limit', String(certificatesListState.limit));
 
   const list = document.querySelector('#certificatesList');
-  list.innerHTML = '<div class="loading-card">Загрузка...</div>';
+  const pagination = document.querySelector('#certificatesPagination');
+  if (list) list.innerHTML = '<div class="loading-card">Загрузка...</div>';
+  if (pagination) pagination.innerHTML = '';
 
   try {
     const data = await api(`/api/certificates/redeemed?${params.toString()}`);
-    list.innerHTML = data.items.length
-      ? data.items.map(certificateCard).join('')
-      : '<div class="empty-state">По выбранным фильтрам сертификатов нет.</div>';
+    renderCertificatesResult(data, emptyText);
   } catch (error) {
-    list.innerHTML = `<div class="error-state">${escapeHtml(error.message)}</div>`;
+    if (list) list.innerHTML = `<div class="error-state">${escapeHtml(error.message)}</div>`;
   }
 }
 
@@ -1328,7 +1384,7 @@ async function renderCertificateDetail(id) {
             <div class="detail-row"><span>Ф.И.О.</span><strong>${escapeHtml(item.customerFullName || '—')}</strong></div>
             <div class="detail-row"><span>Телефон:</span><strong>${escapeHtml(item.customerPhone || '—')}</strong></div>
             <div class="detail-row total"><span>Сумма:</span><strong>${formatMoney(item.amountCents)}</strong></div>
-            <div class="detail-row"><span>Статус:</span><strong>${statusHtml(certificateStatus, item.status)}</strong></div>
+            <div class="detail-row"><span>Статус:</span><strong>${statusHtml(certificateStatus, item.status, item.statusLabel)}</strong></div>
           </div>
         </div>
       </section>
@@ -1581,7 +1637,7 @@ function certificatesTable(certificates, options = {}) {
         <td>${formatDate(certificate.serviceDate)} ${formatTime(certificate.serviceTime)}</td>
         <td>${escapeHtml(certificate.customerFullName || '—')}</td>
         <td><strong>${formatMoney(certificate.amountCents)}</strong></td>
-        <td>${statusHtml(certificateStatus, certificate.status)}</td>
+        <td>${statusHtml(certificateStatus, certificate.status, certificate.statusLabel)}</td>
       </tr>
     `;
   }).join('');
@@ -1600,7 +1656,7 @@ function certificatesTable(certificates, options = {}) {
           <p>${formatDate(certificate.serviceDate)} · ${escapeHtml(certificate.customerFullName || '—')}</p>
           <div class="status-row">
             <span class="money">${formatMoney(certificate.amountCents)}</span>
-            ${statusHtml(certificateStatus, certificate.status)}
+            ${statusHtml(certificateStatus, certificate.status, certificate.statusLabel)}
           </div>
         </div>
       </div>

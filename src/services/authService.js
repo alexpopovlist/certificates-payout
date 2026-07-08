@@ -327,6 +327,37 @@ function extractContactId(payload) {
   return null;
 }
 
+function extractAllIds(payload, fallbackId) {
+  const configuredPath = process.env.AUTH_ALL_IDS_PATH;
+  const configuredValue = configuredPath ? getValueByPath(payload, configuredPath) : undefined;
+
+  const normalize = (value) => {
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item)).filter(Boolean);
+    }
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      return String(value)
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    return [];
+  };
+
+  let ids = normalize(configuredValue);
+  if (ids.length > 0) return Array.from(new Set(ids));
+
+  const fieldNames = ['allIds', 'all_ids', 'ALL_IDS', 'partnerIds', 'partner_ids', 'ids', 'IDS'];
+  for (const candidate of getNestedCandidates(payload)) {
+    for (const fieldName of fieldNames) {
+      ids = normalize(getObjectFieldCaseInsensitive(candidate, fieldName));
+      if (ids.length > 0) return Array.from(new Set(ids));
+    }
+  }
+
+  return fallbackId ? [String(fallbackId)] : [];
+}
+
 function sanitizeAuthPayload(value, depth = 0, seen = new Set()) {
   if (!value || typeof value !== 'object' || depth > 5 || seen.has(value)) {
     return value;
@@ -498,7 +529,7 @@ async function signInWithSmsCode({ contact, code }) {
   if (process.env.AUTH_MOCK === 'true') {
     return {
       user: { id: 'mock-user', name: normalizedContact, email: null, phone: normalizedContact, role: 'mock' },
-      upstream: { token: null, refreshToken: null, cookies: [], authUrl: 'mock', authenticationUrl: 'mock', contactId: 'mock-user' }
+      upstream: { token: null, refreshToken: null, cookies: [], authUrl: 'mock', authenticationUrl: 'mock', contactId: 'mock-user', allIds: ['mock-user'] }
     };
   }
 
@@ -524,6 +555,7 @@ async function signInWithSmsCode({ contact, code }) {
 
   const contactId = extractContactId(authenticationResult.payload);
   const token = extractToken(authenticationResult.payload);
+  const allIds = extractAllIds(authenticationResult.payload, contactId);
 
   if (!contactId || !token) {
     console.warn('WOWlife auth.authentication payload missing contactId/token', sanitizeAuthPayload(authenticationResult.payload));
@@ -559,7 +591,8 @@ async function signInWithSmsCode({ contact, code }) {
       cookies: [...authenticationResult.cookies, ...authorizationResult.cookies],
       authUrl: authorizationUrl,
       authenticationUrl,
-      contactId
+      contactId,
+      allIds
     }
   };
 }
@@ -575,7 +608,7 @@ async function signInWithPartner({ login, password }) {
   if (process.env.AUTH_MOCK === 'true') {
     return {
       user: { id: 'mock-user', name: login, email: login, phone: null, role: 'mock' },
-      upstream: { token: null, refreshToken: null, cookies: [], authUrl: 'mock' }
+      upstream: { token: null, refreshToken: null, cookies: [], authUrl: 'mock', contactId: 'mock-user', allIds: ['mock-user'] }
     };
   }
 
@@ -598,6 +631,7 @@ async function signInWithPartner({ login, password }) {
 
   const contactId = extractContactId(passwordResult.payload);
   const token = extractToken(passwordResult.payload);
+  const allIds = extractAllIds(passwordResult.payload, contactId);
 
   if (!contactId || !token) {
     console.warn('WOWlife auth.goPassword payload missing contactId/token', sanitizeAuthPayload(passwordResult.payload));
@@ -629,7 +663,8 @@ async function signInWithPartner({ login, password }) {
       cookies: [...passwordResult.cookies, ...authorizationResult.cookies],
       authUrl: authorizationUrl,
       passwordAuthUrl: passwordUrl,
-      contactId
+      contactId,
+      allIds
     }
   };
 }
@@ -642,8 +677,11 @@ function buildSession({ user, upstream }) {
       token: upstream?.token || null,
       refreshToken: upstream?.refreshToken || null,
       authUrl: upstream?.authUrl || null,
+      authenticationUrl: upstream?.authenticationUrl || null,
       passwordAuthUrl: upstream?.passwordAuthUrl || null,
-      contactId: upstream?.contactId || null
+      contactId: upstream?.contactId || null,
+      allIds: Array.isArray(upstream?.allIds) ? upstream.allIds.map((id) => String(id)).filter(Boolean) : [],
+      cookies: Array.isArray(upstream?.cookies) ? upstream.cookies : []
     },
     issuedAt: Date.now(),
     expiresAt: Date.now() + ttlSeconds * 1000
