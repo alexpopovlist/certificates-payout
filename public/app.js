@@ -147,7 +147,6 @@ function renderSignIn(message = '') {
           </div>
         </div>
         <h1>Вход в кабинет партнёра</h1>
-        <p>Используйте логин и пароль от партнёрского кабинета WOWlife.</p>
         <form id="signInForm" class="auth-form">
           <label>
             <span>Логин</span>
