@@ -4,6 +4,8 @@ const {
   setSessionCookie,
   clearSessionCookie,
   signInWithPartner,
+  requestSmsCode,
+  signInWithSmsCode,
   buildSession
 } = require('../services/authService');
 
@@ -22,16 +24,39 @@ router.get('/me', (request, response) => {
   response.json({ user: session.user });
 });
 
+router.post('/request-code', async (request, response, next) => {
+  try {
+    const { authMethod, method, phone, contact } = request.body || {};
+    const selectedMethod = String(authMethod || method || 'sms').toLowerCase();
+
+    if (selectedMethod !== 'sms') {
+      return response.status(501).json({ error: 'Получение кода для этого типа авторизации пока не подключено' });
+    }
+
+    const result = await requestSmsCode({
+      contact: String(contact || phone || '').trim()
+    });
+
+    response.status(201).json({ ok: true, contact: result.contact });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/sign-in', async (request, response, next) => {
   try {
-    const { login, email, phone, username, password } = request.body || {};
-    const normalizedLogin = String(login || email || phone || username || '').trim();
-    const normalizedPassword = String(password || '').trim();
+    const { authMethod, method, login, email, phone, contact, username, password, code } = request.body || {};
+    const selectedMethod = String(authMethod || method || 'password').toLowerCase();
 
-    const result = await signInWithPartner({
-      login: normalizedLogin,
-      password: normalizedPassword
-    });
+    const result = selectedMethod === 'sms'
+      ? await signInWithSmsCode({
+          contact: String(contact || phone || '').trim(),
+          code: String(code || '').trim()
+        })
+      : await signInWithPartner({
+          login: String(login || email || phone || username || '').trim(),
+          password: String(password || '').trim()
+        });
 
     const session = buildSession(result);
     setSessionCookie(response, session);

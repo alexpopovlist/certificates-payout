@@ -221,6 +221,17 @@ function formatAuthPhoneMask(rawValue) {
   return `+${digitsAll.slice(0, 15)}`;
 }
 
+function normalizeAuthPhoneContact(rawValue) {
+  const digitsAll = String(rawValue || '').replace(/[^\d]/g, '');
+  if (!digitsAll) return '';
+
+  let digits = digitsAll;
+  if (digits.startsWith('8')) digits = `7${digits.slice(1)}`;
+  if (!digits.startsWith('7') && digits.length === 10) digits = `7${digits}`;
+
+  return `+${digits.slice(0, 15)}`;
+}
+
 function storeAuthFormValues(form = document.querySelector('#signInForm')) {
   if (!form) return;
   const formData = new FormData(form);
@@ -431,9 +442,10 @@ function handlePasswordVisibilityToggle(event) {
   button.classList.toggle('is-visible', shouldShow);
 }
 
-function handleAuthCodeRequest(event) {
+async function handleAuthCodeRequest(event) {
   event.preventDefault();
-  const form = event.currentTarget.closest('form');
+  const button = event.currentTarget;
+  const form = button.closest('form');
   const notice = form?.querySelector('#authNotice');
 
   storeAuthFormValues(form);
@@ -451,9 +463,53 @@ function handleAuthCodeRequest(event) {
     return;
   }
 
-  authUiState.codeRequested = true;
-  authUiState.code = '';
-  renderSignIn();
+  if (authUiState.method !== 'sms') {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = 'Запросы для входа по Email будут подключены после описания модели API.';
+    }
+    return;
+  }
+
+  const contact = normalizeAuthPhoneContact(value);
+  if (!contact) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = 'Введите корректный телефон, чтобы получить код.';
+    }
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = 'Отправляем...';
+  if (notice) {
+    notice.className = 'hidden';
+    notice.textContent = '';
+  }
+
+  try {
+    await api('/api/auth/request-code', {
+      method: 'POST',
+      body: JSON.stringify({
+        authMethod: 'sms',
+        phone: value,
+        contact
+      })
+    });
+
+    authUiState.phone = formatAuthPhoneMask(contact);
+    authUiState.codeRequested = true;
+    authUiState.code = '';
+    renderSignIn();
+  } catch (error) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = error.message;
+    }
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Получить код';
+  }
 }
 
 async function handleSignInSubmit(event) {
@@ -464,9 +520,15 @@ async function handleSignInSubmit(event) {
 
   storeAuthFormValues(form);
 
-  if (authUiState.method !== 'password') {
+  if (authUiState.method === 'email') {
     notice.className = 'notice error';
-    notice.textContent = 'Запросы для входа по SMS и Email будут подключены после описания модели API.';
+    notice.textContent = 'Запросы для входа по Email будут подключены после описания модели API.';
+    return;
+  }
+
+  if (authUiState.method === 'sms' && !authUiState.code) {
+    notice.className = 'notice error';
+    notice.textContent = 'Введите код из SMS.';
     return;
   }
 
@@ -477,9 +539,16 @@ async function handleSignInSubmit(event) {
 
   try {
     const formData = new FormData(form);
+    const payload = Object.fromEntries(formData.entries());
+    payload.authMethod = authUiState.method;
+
+    if (authUiState.method === 'sms') {
+      payload.contact = normalizeAuthPhoneContact(payload.phone || authUiState.phone);
+    }
+
     const result = await api('/api/auth/sign-in', {
       method: 'POST',
-      body: JSON.stringify(Object.fromEntries(formData.entries()))
+      body: JSON.stringify(payload)
     });
 
     currentUser = result.user;

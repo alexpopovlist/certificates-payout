@@ -3,6 +3,8 @@ const crypto = require('crypto');
 const COOKIE_NAME = 'wakesurf_session';
 const DEFAULT_AUTH_BASE_URL = 'https://partner-wowlife.ru';
 const DEFAULT_PASSWORD_PATH = '/restapi/auth.goPassword';
+const DEFAULT_CODE_PATH = '/restapi/auth.getCode';
+const DEFAULT_AUTHENTICATION_PATH = '/restapi/auth.authentication';
 const DEFAULT_AUTHORIZATION_PATH = '/restapi/auth.authorization';
 
 function getSessionSecret() {
@@ -115,6 +117,22 @@ function getPasswordUrl() {
   );
 }
 
+function getCodeUrl() {
+  return resolveAuthUrl(
+    process.env.AUTH_CODE_URL,
+    process.env.AUTH_CODE_PATH,
+    DEFAULT_CODE_PATH
+  );
+}
+
+function getAuthenticationUrl() {
+  return resolveAuthUrl(
+    process.env.AUTH_AUTHENTICATION_URL,
+    process.env.AUTH_AUTHENTICATION_PATH,
+    DEFAULT_AUTHENTICATION_PATH
+  );
+}
+
 function getAuthorizationUrl() {
   return resolveAuthUrl(
     process.env.AUTH_AUTHORIZATION_URL,
@@ -133,6 +151,10 @@ function getAuthCabinet() {
 
 function getAuthMethod() {
   return process.env.AUTH_METHOD || 'password';
+}
+
+function getPhoneAuthMethod() {
+  return process.env.AUTH_PHONE_METHOD || 'phone';
 }
 
 function collectNestedCandidates(value, depth = 0, seen = new Set()) {
@@ -345,6 +367,25 @@ function buildPasswordBody({ login, password }) {
   };
 }
 
+function buildCodeBody({ contact, method = getPhoneAuthMethod() }) {
+  return {
+    domain: getAuthDomain(),
+    cabinet: getAuthCabinet(),
+    contact,
+    method
+  };
+}
+
+function buildAuthenticationBody({ contact, code, method = getPhoneAuthMethod() }) {
+  return {
+    domain: getAuthDomain(),
+    cabinet: getAuthCabinet(),
+    contact,
+    code,
+    method
+  };
+}
+
 function buildAuthorizationBody({ contactId, token }) {
   return {
     domain: getAuthDomain(),
@@ -398,6 +439,129 @@ function throwAuthRejected(result, fallbackMessage = 'Неверный логи�
   error.statusCode = result.status === 401 || result.status === 403 ? 401 : 502;
   error.publicMessage = getPayloadMessage(result.payload) || fallbackMessage;
   throw error;
+}
+
+function normalizePhoneContact(value) {
+  const digitsAll = String(value || '').replace(/[^\d]/g, '');
+  if (!digitsAll) return '';
+
+  let digits = digitsAll;
+  if (digits.startsWith('8')) digits = `7${digits.slice(1)}`;
+  if (!digits.startsWith('7') && digits.length === 10) digits = `7${digits}`;
+
+  return `+${digits.slice(0, 15)}`;
+}
+
+async function requestSmsCode({ contact }) {
+  const normalizedContact = normalizePhoneContact(contact);
+  if (!normalizedContact) {
+    const error = new Error('Phone is required');
+    error.statusCode = 400;
+    error.publicMessage = 'Телефон обязателен';
+    throw error;
+  }
+
+  if (process.env.AUTH_MOCK === 'true') {
+    return { ok: true, contact: normalizedContact, upstream: { codeUrl: 'mock' } };
+  }
+
+  const codeUrl = getCodeUrl();
+  let codeResult;
+
+  try {
+    codeResult = await requestJsonPost(codeUrl, buildCodeBody({ contact: normalizedContact }));
+  } catch (error) {
+    const serviceError = new Error(`WOWlife auth.getCode request failed: ${error.message}`);
+    serviceError.statusCode = 502;
+    serviceError.publicMessage = 'Не удалось отправить код через сервис авторизации WOWlife auth.getCode.';
+    throw serviceError;
+  }
+
+  if (!codeResult.ok) {
+    throwAuthRejected(codeResult, 'Не удалось отправить код авторизации');
+  }
+
+  return { ok: true, contact: normalizedContact, upstream: { codeUrl, cookies: codeResult.cookies } };
+}
+
+async function signInWithSmsCode({ contact, code }) {
+  const normalizedContact = normalizePhoneContact(contact);
+  const normalizedCode = String(code || '').trim();
+
+  if (!normalizedContact || !normalizedCode) {
+    const error = new Error('Phone and code are required');
+    error.statusCode = 400;
+    error.publicMessage = 'Телефон и код обязательны';
+    throw error;
+  }
+
+  if (process.env.AUTH_MOCK === 'true') {
+    return {
+      user: { id: 'mock-user', name: normalizedContact, email: null, phone: normalizedContact, role: 'mock' },
+      upstream: { token: null, refreshToken: null, cookies: [], authUrl: 'mock', authenticationUrl: 'mock', contactId: 'mock-user' }
+    };
+  }
+
+  const authenticationUrl = getAuthenticationUrl();
+  const authorizationUrl = getAuthorizationUrl();
+  let authenticationResult;
+
+  try {
+    authenticationResult = await requestJsonPost(
+      authenticationUrl,
+      buildAuthenticationBody({ contact: normalizedContact, code: normalizedCode })
+    );
+  } catch (error) {
+    const serviceError = new Error(`WOWlife auth.authentication request failed: ${error.message}`);
+    serviceError.statusCode = 502;
+    serviceError.publicMessage = 'Не удалось проверить код через сервис авторизации WOWlife auth.authentication.';
+    throw serviceError;
+  }
+
+  if (!authenticationResult.ok) {
+    throwAuthRejected(authenticationResult, 'Неверный код авторизации');
+  }
+
+  const contactId = extractContactId(authenticationResult.payload);
+  const token = extractToken(authenticationResult.payload);
+
+  if (!contactId || !token) {
+    console.warn('WOWlife auth.authentication payload missing contactId/token', sanitizeAuthPayload(authenticationResult.payload));
+    const error = new Error('WOWlife auth.authentication did not return contactId/token');
+    error.statusCode = 502;
+    error.publicMessage = 'Сервис авторизации WOWlife не вернул contactId/token после проверки кода.';
+    throw error;
+  }
+
+  let authorizationResult;
+  try {
+    authorizationResult = await requestJsonPost(
+      authorizationUrl,
+      buildAuthorizationBody({ contactId, token }),
+      { cookies: authenticationResult.cookies }
+    );
+  } catch (error) {
+    const serviceError = new Error(`WOWlife authorization request failed: ${error.message}`);
+    serviceError.statusCode = 502;
+    serviceError.publicMessage = 'Не удалось завершить авторизацию WOWlife auth.authorization.';
+    throw serviceError;
+  }
+
+  if (!authorizationResult.ok) {
+    throwAuthRejected(authorizationResult, 'Не удалось завершить авторизацию WOWlife');
+  }
+
+  return {
+    user: pickUser(authorizationResult.payload, normalizedContact, { contactId }),
+    upstream: {
+      token: extractToken(authorizationResult.payload) || token,
+      refreshToken: extractRefreshToken(authorizationResult.payload),
+      cookies: [...authenticationResult.cookies, ...authorizationResult.cookies],
+      authUrl: authorizationUrl,
+      authenticationUrl,
+      contactId
+    }
+  };
 }
 
 async function signInWithPartner({ login, password }) {
@@ -492,5 +656,7 @@ module.exports = {
   setSessionCookie,
   clearSessionCookie,
   signInWithPartner,
+  requestSmsCode,
+  signInWithSmsCode,
   buildSession
 };

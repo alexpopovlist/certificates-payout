@@ -196,6 +196,12 @@ POST https://partner-wowlife.ru/restapi/auth.authorization
 
 После успешного второго шага backend создаёт локальную `HttpOnly` session-cookie. Пароль пользователя в сессию не сохраняется.
 
+Для SMS-авторизации backend использует цепочку:
+
+1. `POST /restapi/auth.getCode` с `contact` и `method: "phone"`;
+2. `POST /restapi/auth.authentication` с `contact`, `code` и `method: "phone"`;
+3. `POST /restapi/auth.authorization` с `contactId` и `token`.
+
 Если первый ответ WOWlife содержит `contactId` и `token` не на верхнем уровне, backend теперь ищет эти поля рекурсивно и без учёта регистра (`contactId`, `contact_id`, `CONTACT_ID`, `id`, `ID`, `token`, `TOKEN`). Для редкой нестандартной структуры можно явно указать пути через `AUTH_PASSWORD_CONTACT_ID_PATH` и `AUTH_PASSWORD_TOKEN_PATH`.
 
 Переменные окружения:
@@ -203,10 +209,13 @@ POST https://partner-wowlife.ru/restapi/auth.authorization
 ```env
 AUTH_BASE_URL=https://partner-wowlife.ru
 AUTH_PASSWORD_URL=https://partner-wowlife.ru/restapi/auth.goPassword
+AUTH_CODE_URL=https://partner-wowlife.ru/restapi/auth.getCode
+AUTH_AUTHENTICATION_URL=https://partner-wowlife.ru/restapi/auth.authentication
 AUTH_AUTHORIZATION_URL=https://partner-wowlife.ru/restapi/auth.authorization
 AUTH_DOMAIN=wowlife-crm.ru
 AUTH_CABINET=partner
 AUTH_METHOD=password
+AUTH_PHONE_METHOD=phone
 # Optional: only if WOWlife returns contactId/token in a non-standard nested shape.
 # Examples: data.contact.id, result.contact.ID, data.token
 AUTH_PASSWORD_CONTACT_ID_PATH=
