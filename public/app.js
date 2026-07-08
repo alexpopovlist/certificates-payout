@@ -1419,12 +1419,6 @@ async function renderCertificates() {
     </div>
   `;
 
-  const defaultDateRange = getCertificatesDefaultDateRange();
-  const fromFilter = document.querySelector('#fromFilter');
-  const toFilter = document.querySelector('#toFilter');
-  if (fromFilter) fromFilter.value = defaultDateRange.from;
-  if (toFilter) toFilter.value = defaultDateRange.to;
-
   initStatusMultiselect();
   document.querySelector('#applyCertificateFilters').addEventListener('click', () => loadFilteredCertificates(1));
   await loadFilteredCertificates(1, 'Погашенных сертификатов пока нет.');

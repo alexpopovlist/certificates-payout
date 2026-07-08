@@ -1882,7 +1882,7 @@ body:not(.is-login) .brand {
   min-height: 176px;
   height: auto;
   margin: 0;
-  padding: 16px;
+  padding: 2mm;
   border-bottom: 1px solid #e2e8f0;
   gap: 10px;
   font-size: 16px;
