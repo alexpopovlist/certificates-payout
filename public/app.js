@@ -469,26 +469,37 @@ async function renderCertificates() {
 
     app.innerHTML = `
       <div class="stack">
-        <div class="card pad">
-          <div class="filters">
-            <div class="filter-field">
-              <label for="statusFilter">Статус</label>
-              <select id="statusFilter">
-                <option value="">Все</option>
-                <option value="REDEEMED">Погашено</option>
-                <option value="PAYMENT_PROCESSING">В процессе оплаты</option>
-                <option value="PAID">Оплачено</option>
-              </select>
+        <div class="card pad filters-card">
+          <div class="filters certificate-filters">
+            <div class="filter-field filter-field-status">
+              <span class="filter-label">Статус</span>
+              <div class="status-multi" id="statusFilter" role="group" aria-label="Статус сертификата">
+                <label class="status-choice">
+                  <input type="checkbox" value="REDEEMED" />
+                  <span>Погашено</span>
+                </label>
+                <label class="status-choice">
+                  <input type="checkbox" value="PAYMENT_PROCESSING" />
+                  <span>В процессе оплаты</span>
+                </label>
+                <label class="status-choice">
+                  <input type="checkbox" value="PAID" />
+                  <span>Оплачено</span>
+                </label>
+              </div>
+              <div class="status-multi-hint">Ничего не выбрано — показываются все статусы.</div>
             </div>
-            <div class="filter-field">
-              <label for="fromFilter">С даты</label>
-              <input id="fromFilter" type="date" />
+            <div class="filter-date-row">
+              <div class="filter-field">
+                <label for="fromFilter">С даты</label>
+                <input id="fromFilter" type="date" />
+              </div>
+              <div class="filter-field">
+                <label for="toFilter">По дату</label>
+                <input id="toFilter" type="date" />
+              </div>
             </div>
-            <div class="filter-field">
-              <label for="toFilter">По дату</label>
-              <input id="toFilter" type="date" />
-            </div>
-            <button id="applyCertificateFilters" class="button secondary" type="button">Применить</button>
+            <button id="applyCertificateFilters" class="button secondary filter-apply" type="button">Применить</button>
           </div>
         </div>
         <div id="certificatesList" class="list">${itemsHtml}</div>
@@ -503,11 +514,12 @@ async function renderCertificates() {
 
 async function loadFilteredCertificates() {
   const params = new URLSearchParams();
-  const status = document.querySelector('#statusFilter').value;
+  const statuses = Array.from(document.querySelectorAll('#statusFilter input[type="checkbox"]:checked'))
+    .map((input) => input.value);
   const from = document.querySelector('#fromFilter').value;
   const to = document.querySelector('#toFilter').value;
 
-  if (status) params.set('status', status);
+  statuses.forEach((status) => params.append('status', status));
   if (from) params.set('from', from);
   if (to) params.set('to', to);
 

@@ -30,8 +30,17 @@ function buildRedeemedFilters(filters) {
   const values = [];
 
   if (filters.status) {
-    values.push(filters.status);
-    conditions.push(`c.status = $${values.length}`);
+    const statuses = Array.isArray(filters.status)
+      ? filters.status
+      : String(filters.status).split(',');
+    const normalizedStatuses = statuses
+      .map((status) => String(status).trim())
+      .filter((status) => ['REDEEMED', 'PAYMENT_PROCESSING', 'PAID'].includes(status));
+
+    if (normalizedStatuses.length > 0) {
+      values.push(normalizedStatuses);
+      conditions.push(`c.status = ANY($${values.length}::certificate_status[])`);
+    }
   }
 
   if (filters.from) {
