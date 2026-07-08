@@ -1,7 +1,22 @@
 const express = require('express');
 const { query, withTransaction } = require('../db');
+const { broadcastPush } = require('../services/pushService');
 
 const router = express.Router();
+
+function formatMoney(amountCents) {
+  const amount = Math.round(Number(amountCents || 0) / 100);
+  return new Intl.NumberFormat('ru-RU').format(amount) + ' ₽';
+}
+
+function sendPushInBackground(payload) {
+  broadcastPush(payload).catch((error) => {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('Push notification skipped:', error.publicMessage || error.message);
+    }
+  });
+}
+
 
 function toPaymentRequestDto(row) {
   return {
@@ -215,7 +230,15 @@ router.post('/', async (request, response, next) => {
       return inserted.rows[0];
     });
 
-    response.status(201).json({ item: toPaymentRequestDto(paymentRequest) });
+    const item = toPaymentRequestDto(paymentRequest);
+
+    sendPushInBackground({
+      title: 'Создана заявка на оплату',
+      body: `${item.certificateCount} сертификатов · ${formatMoney(item.totalAmountCents)}`,
+      url: `/#payments/${item.id}`
+    });
+
+    response.status(201).json({ item });
   } catch (error) {
     next(error);
   }
@@ -223,7 +246,7 @@ router.post('/', async (request, response, next) => {
 
 router.patch('/:id/pay', async (request, response, next) => {
   try {
-    const paymentRequest = await withTransaction(async (client) => {
+    const result = await withTransaction(async (client) => {
       const found = await client.query(
         'SELECT * FROM payment_requests WHERE id = $1 FOR UPDATE',
         [request.params.id]
@@ -237,7 +260,7 @@ router.patch('/:id/pay', async (request, response, next) => {
       }
 
       if (found.rows[0].status === 'PAID') {
-        return found.rows[0];
+        return { paymentRequest: found.rows[0], wasUpdated: false };
       }
 
       const updated = await client.query(
@@ -263,10 +286,20 @@ router.patch('/:id/pay', async (request, response, next) => {
         [request.params.id]
       );
 
-      return updated.rows[0];
+      return { paymentRequest: updated.rows[0], wasUpdated: true };
     });
 
-    response.json({ item: toPaymentRequestDto(paymentRequest) });
+    const item = toPaymentRequestDto(result.paymentRequest);
+
+    if (result.wasUpdated) {
+      sendPushInBackground({
+        title: 'Заявка оплачена',
+        body: `${item.requestNumber} · ${formatMoney(item.totalAmountCents)}`,
+        url: `/#payments/${item.id}`
+      });
+    }
+
+    response.json({ item });
   } catch (error) {
     next(error);
   }

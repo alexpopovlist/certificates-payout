@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>WakeSurf · Сертификаты и выплаты</title>
     <meta name="theme-color" content="#f8fbff" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="WakeSurf" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body class="theme-newstar">
@@ -29,6 +34,7 @@
           <button class="icon-button logout-button" type="button" aria-label="Выход">⎋</button>
         </header>
 
+        <div id="pushPrompt" class="push-prompt hidden"></div>
         <main id="app" class="content" tabindex="-1"></main>
 
         <nav class="bottom-nav" aria-label="Мобильная навигация">

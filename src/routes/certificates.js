@@ -1,7 +1,18 @@
 const express = require('express');
 const { query, withTransaction } = require('../db');
+const { broadcastPush } = require('../services/pushService');
 
 const router = express.Router();
+
+
+function sendPushInBackground(payload) {
+  broadcastPush(payload).catch((error) => {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('Push notification skipped:', error.publicMessage || error.message);
+    }
+  });
+}
+
 
 function toCertificateDto(row) {
   return {
@@ -149,7 +160,15 @@ router.post('/redeem', async (request, response, next) => {
       return updated.rows[0];
     });
 
-    response.status(201).json({ item: toCertificateDto(certificate) });
+    const item = toCertificateDto(certificate);
+
+    sendPushInBackground({
+      title: 'Сертификат погашен',
+      body: `${item.certificateNumber} · ${item.title}`,
+      url: `/#certificates/${item.id}`
+    });
+
+    response.status(201).json({ item });
   } catch (error) {
     next(error);
   }

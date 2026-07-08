@@ -1,6 +1,7 @@
 const app = document.querySelector('#app');
 const pageTitle = document.querySelector('#pageTitle');
 const backButton = document.querySelector('#backButton');
+const pushPrompt = document.querySelector('#pushPrompt');
 
 const createRequestState = {
   items: [],
@@ -111,9 +112,279 @@ async function api(path, options = {}) {
   return payload;
 }
 
+
+let pushRegistration = null;
+let pushPublicKeyPayload = null;
+
+function isStandaloneApp() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function isMobileViewport() {
+  return window.matchMedia('(max-width: 920px)').matches;
+}
+
+function isLocalhost() {
+  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+}
+
+function isPushSupported() {
+  return (
+    'serviceWorker' in navigator &&
+    'PushManager' in window &&
+    'Notification' in window &&
+    (window.isSecureContext || isLocalhost())
+  );
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replaceAll('-', '+').replaceAll('_', '/');
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((character) => character.charCodeAt(0)));
+}
+
+async function getPushPublicKeyPayload() {
+  if (pushPublicKeyPayload) {
+    return pushPublicKeyPayload;
+  }
+
+  pushPublicKeyPayload = await api('/api/push/public-key');
+  return pushPublicKeyPayload;
+}
+
+async function getServiceWorkerRegistration() {
+  if (pushRegistration) {
+    return pushRegistration;
+  }
+
+  pushRegistration = await navigator.serviceWorker.register('/sw.js');
+  return pushRegistration;
+}
+
+async function sendPushSubscription(subscription) {
+  const payload = {
+    subscription: subscription.toJSON(),
+    installed: isStandaloneApp(),
+    permission: Notification.permission,
+    platform: navigator.platform || '',
+    userAgent: navigator.userAgent
+  };
+
+  await api('/api/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+async function ensurePushSubscription(options = {}) {
+  if (!isPushSupported()) return false;
+
+  if (!isStandaloneApp()) {
+    renderPushPrompt('PUSH включаются после запуска приложения из ярлыка.', 'error');
+    return false;
+  }
+
+  const publicKeyPayload = await getPushPublicKeyPayload();
+  if (!publicKeyPayload.configured || !publicKeyPayload.publicKey) {
+    renderPushPrompt('PUSH отключены на сервере. Добавьте VAPID-ключи в env.', 'error');
+    return false;
+  }
+
+  if (Notification.permission === 'default' && options.requestPermission) {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      renderPushPrompt('Разрешение на PUSH не выдано. Уведомления приходить не будут.', 'error');
+      return false;
+    }
+  }
+
+  if (Notification.permission !== 'granted') {
+    return false;
+  }
+
+  const registration = await getServiceWorkerRegistration();
+  const existingSubscription = await registration.pushManager.getSubscription();
+
+  const subscription = existingSubscription || await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicKeyPayload.publicKey)
+  });
+
+  await sendPushSubscription(subscription);
+  renderPushPrompt('PUSH уведомления включены для этого ярлыка.', 'success');
+
+  return true;
+}
+
+function renderPushPrompt(message, type = '') {
+  if (!pushPrompt) return;
+
+  if (!isPushSupported()) {
+    pushPrompt.className = 'push-prompt hidden';
+    pushPrompt.innerHTML = '';
+    return;
+  }
+
+  const installed = isStandaloneApp();
+  const permission = Notification.permission;
+
+  if (!message) {
+    if (!installed) {
+      if (!isMobileViewport()) {
+        pushPrompt.className = 'push-prompt hidden';
+        pushPrompt.innerHTML = '';
+        return;
+      }
+
+      pushPrompt.className = 'push-prompt';
+      pushPrompt.innerHTML = `
+        <div>
+          <strong>Добавьте приложение на экран телефона</strong>
+          <span>После запуска из ярлыка можно включить PUSH-уведомления.</span>
+        </div>
+      `;
+      return;
+    }
+
+    if (permission === 'granted') {
+      pushPrompt.className = 'push-prompt success';
+      pushPrompt.innerHTML = `
+        <div>
+          <strong>PUSH уведомления активны</strong>
+          <span>Этот ярлык будет получать уведомления.</span>
+        </div>
+      `;
+      return;
+    }
+
+    if (permission === 'denied') {
+      pushPrompt.className = 'push-prompt error';
+      pushPrompt.innerHTML = `
+        <div>
+          <strong>PUSH уведомления запрещены</strong>
+          <span>Разрешите уведомления в настройках браузера или телефона.</span>
+        </div>
+      `;
+      return;
+    }
+
+    pushPrompt.className = 'push-prompt';
+    pushPrompt.innerHTML = `
+      <div>
+        <strong>Включить PUSH уведомления</strong>
+        <span>Уведомления будут приходить на телефон, если приложение открыто из ярлыка.</span>
+      </div>
+      <button id="enablePushButton" class="button compact" type="button">Включить</button>
+    `;
+    return;
+  }
+
+  pushPrompt.className = `push-prompt ${type}`.trim();
+  pushPrompt.innerHTML = `
+    <div>
+      <strong>${escapeHtml(message)}</strong>
+      <span>${type === 'success' ? 'Подписка сохранена на сервере.' : 'Проверьте настройки PUSH.'}</span>
+    </div>
+    ${type === 'error' && installed && Notification.permission !== 'denied'
+      ? '<button id="enablePushButton" class="button compact" type="button">Повторить</button>'
+      : ''
+    }
+  `;
+}
+
+async function initializePushClient() {
+  if (!isPushSupported()) return;
+
+  try {
+    await getServiceWorkerRegistration();
+
+    if (isStandaloneApp() && Notification.permission === 'granted') {
+      await ensurePushSubscription({ requestPermission: false });
+    } else {
+      renderPushPrompt();
+    }
+  } catch (_error) {
+    renderPushPrompt('Не удалось подготовить PUSH уведомления.', 'error');
+  }
+}
+
+document.addEventListener('click', async (event) => {
+  const button = event.target.closest('#enablePushButton');
+  if (!button) return;
+
+  button.disabled = true;
+  button.textContent = 'Включаю...';
+
+  try {
+    await ensurePushSubscription({ requestPermission: true });
+  } catch (_error) {
+    renderPushPrompt('Не удалось включить PUSH уведомления.', 'error');
+  }
+});
+
+
 function statusHtml(statusMap, status) {
   const meta = statusMap[status] || { label: status || '—', className: '' };
   return `<span class="status ${meta.className}">${escapeHtml(meta.label)}</span>`;
+}
+
+function initStatusMultiselect() {
+  const root = document.querySelector('#statusFilter[data-multiselect]');
+  if (!root) return;
+
+  const control = root.querySelector('.multiselect-control');
+  const value = root.querySelector('.multiselect-value');
+  const options = Array.from(root.querySelectorAll('.multiselect-option'));
+  const inputs = Array.from(root.querySelectorAll('input[type="checkbox"]'));
+
+  const close = () => {
+    root.classList.remove('open');
+    control?.setAttribute('aria-expanded', 'false');
+  };
+
+  const updateValue = () => {
+    const checked = inputs.filter((input) => input.checked);
+    const labels = checked.map((input) => input.dataset.label || input.value);
+
+    if (value) {
+      if (labels.length === 0) {
+        value.textContent = 'Все';
+      } else if (labels.length === 1) {
+        value.textContent = labels[0];
+      } else {
+        value.textContent = `${labels.length} статуса`;
+      }
+    }
+
+    options.forEach((option) => {
+      const input = option.querySelector('input');
+      option.setAttribute('aria-selected', input?.checked ? 'true' : 'false');
+    });
+  };
+
+  control?.addEventListener('click', () => {
+    const isOpen = root.classList.toggle('open');
+    control.setAttribute('aria-expanded', String(isOpen));
+  });
+
+  inputs.forEach((input) => {
+    input.addEventListener('change', updateValue);
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!root.contains(event.target)) {
+      close();
+    }
+  }, { once: false });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      close();
+    }
+  });
+
+  updateValue();
 }
 
 let qrStream = null;
@@ -473,21 +744,26 @@ async function renderCertificates() {
           <div class="filters certificate-filters">
             <div class="filter-field filter-field-status">
               <span class="filter-label">Статус</span>
-              <div class="status-multi" id="statusFilter" role="group" aria-label="Статус сертификата">
-                <label class="status-choice">
-                  <input type="checkbox" value="REDEEMED" />
-                  <span>Погашено</span>
-                </label>
-                <label class="status-choice">
-                  <input type="checkbox" value="PAYMENT_PROCESSING" />
-                  <span>В процессе оплаты</span>
-                </label>
-                <label class="status-choice">
-                  <input type="checkbox" value="PAID" />
-                  <span>Оплачено</span>
-                </label>
+              <div class="multiselect" id="statusFilter" data-multiselect>
+                <button class="multiselect-control" type="button" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="multiselect-value">Все</span>
+                  <span class="multiselect-arrow" aria-hidden="true">⌄</span>
+                </button>
+                <div class="multiselect-menu" role="listbox" aria-label="Статус сертификата" aria-multiselectable="true">
+                  <label class="multiselect-option" role="option" aria-selected="false">
+                    <input type="checkbox" value="REDEEMED" data-label="Погашено" />
+                    <span>Погашено</span>
+                  </label>
+                  <label class="multiselect-option" role="option" aria-selected="false">
+                    <input type="checkbox" value="PAYMENT_PROCESSING" data-label="В процессе оплаты" />
+                    <span>В процессе оплаты</span>
+                  </label>
+                  <label class="multiselect-option" role="option" aria-selected="false">
+                    <input type="checkbox" value="PAID" data-label="Оплачено" />
+                    <span>Оплачено</span>
+                  </label>
+                </div>
               </div>
-              <div class="status-multi-hint">Ничего не выбрано — показываются все статусы.</div>
             </div>
             <div class="filter-date-row">
               <div class="filter-field">
@@ -506,6 +782,7 @@ async function renderCertificates() {
       </div>
     `;
 
+    initStatusMultiselect();
     document.querySelector('#applyCertificateFilters').addEventListener('click', loadFilteredCertificates);
   } catch (error) {
     showError(error);
@@ -877,4 +1154,7 @@ function route() {
 
 window.addEventListener('beforeunload', () => stopQrScanner());
 window.addEventListener('hashchange', route);
-window.addEventListener('DOMContentLoaded', route);
+window.addEventListener('DOMContentLoaded', () => {
+  route();
+  initializePushClient();
+});

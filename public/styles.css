@@ -192,6 +192,69 @@ body.no-scroll {
   padding: 26px 28px 58px;
 }
 
+
+.push-prompt {
+  width: min(100%, var(--container));
+  margin: 18px auto 0;
+  padding: 0 28px;
+}
+
+.push-prompt > div,
+.push-prompt {
+  color: var(--text);
+}
+
+.push-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.push-prompt:not(.hidden) {
+  background: transparent;
+}
+
+.push-prompt > div {
+  flex: 1;
+  display: grid;
+  gap: 3px;
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow: var(--shadow-soft);
+}
+
+.push-prompt strong {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.push-prompt span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.push-prompt.success > div {
+  border-color: rgba(22, 163, 74, 0.35);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.push-prompt.error > div {
+  border-color: rgba(220, 38, 38, 0.28);
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.button.compact {
+  min-height: 48px;
+  padding: 0 22px;
+  box-shadow: none;
+}
+
+
 .loading-card,
 .empty-state,
 .error-state {
@@ -780,6 +843,19 @@ input[type="checkbox"] {
     padding: 22px 22px 34px;
   }
 
+
+  .push-prompt {
+    padding: 0 22px;
+    margin-top: 14px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .push-prompt .button {
+    width: 100%;
+  }
+
+
   .bottom-nav {
     position: fixed;
     left: 0;
@@ -1192,5 +1268,141 @@ input[type="checkbox"] {
     width: auto;
     min-width: 240px;
     margin-left: 0;
+  }
+}
+
+/* Status multiselect control for the certificates filters. */
+.multiselect {
+  position: relative;
+  min-width: 0;
+}
+
+.multiselect-control {
+  width: 100%;
+  height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 0 14px;
+  color: var(--text);
+  outline: 0;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: none;
+}
+
+.multiselect-control:focus-visible,
+.filter-field input:focus-visible,
+.filter-field select:focus-visible {
+  border-color: #b9d4ff;
+  box-shadow: 0 0 0 3px rgba(34, 174, 232, 0.14);
+}
+
+.multiselect-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.multiselect-arrow {
+  flex: 0 0 auto;
+  color: #5f6980;
+  font-size: 18px;
+  line-height: 1;
+  transition: transform 0.16s ease;
+}
+
+.multiselect.open .multiselect-arrow {
+  transform: rotate(180deg);
+}
+
+.multiselect-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 35;
+  display: none;
+  gap: 4px;
+  padding: 8px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 18px 44px rgba(11, 19, 36, 0.14);
+}
+
+.multiselect.open .multiselect-menu {
+  display: grid;
+}
+
+.multiselect-option {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border-radius: 12px;
+  color: #22304f;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  user-select: none;
+}
+
+.multiselect-option:hover {
+  background: #f2f7ff;
+}
+
+.multiselect-option input {
+  width: 18px;
+  height: 18px;
+  accent-color: #22aee8;
+}
+
+.multiselect-option[aria-selected="true"] {
+  background: rgba(34, 174, 232, 0.10);
+  color: #119bd4;
+}
+
+@media (min-width: 921px) {
+  .filters > .button,
+  .certificate-filters .filter-apply {
+    height: 46px;
+    min-height: 46px;
+    border-radius: 14px;
+    padding: 0 24px;
+    box-shadow: none;
+  }
+
+  .certificate-filters .filter-apply {
+    min-width: 240px;
+  }
+}
+
+@media (max-width: 680px) {
+  .multiselect-control {
+    min-height: 74px;
+    height: auto;
+    border-radius: 30px;
+    border-color: #dbe7ff;
+    padding: 0 18px;
+    font-size: 16px;
+    box-shadow: inset 0 0 0 1px rgba(219, 231, 255, 0.55);
+  }
+
+  .multiselect-menu {
+    top: calc(100% + 10px);
+    border-radius: 24px;
+    padding: 10px;
+  }
+
+  .multiselect-option {
+    min-height: 52px;
+    border-radius: 18px;
+    font-size: 15px;
   }
 }

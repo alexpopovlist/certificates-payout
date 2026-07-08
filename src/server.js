@@ -4,6 +4,7 @@ const path = require('path');
 const express = require('express');
 const certificateRoutes = require('./routes/certificates');
 const paymentRequestRoutes = require('./routes/paymentRequests');
+const pushNotificationRoutes = require('./routes/pushNotifications');
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -17,6 +18,7 @@ app.get('/api/health', (_request, response) => {
 
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/payment-requests', paymentRequestRoutes);
+app.use('/api/push', pushNotificationRoutes);
 
 app.use('/api', (_request, response) => {
   response.status(404).json({ error: 'API endpoint not found' });
@@ -33,6 +35,6 @@ app.use((error, _request, response, _next) => {
   });
 });
 
-app.listen(port, () => {
-  console.log(`Certificates app is running on http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Certificates app is running on port ${port}`);
 });

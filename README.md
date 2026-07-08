@@ -67,6 +67,67 @@ certificates-payout-app/
   package.json
 ```
 
+
+## PUSH-уведомления для ярлыка на телефоне
+
+Добавлен PWA-сервис для PUSH-уведомлений:
+
+- приложение получает `manifest.webmanifest`, `sw.js` и иконки для установки как ярлык на телефон;
+- если пользователь открыл приложение из ярлыка и выдал разрешение на уведомления, браузер создаёт PUSH-подписку;
+- подписка сохраняется в PostgreSQL в таблицу `push_subscriptions`;
+- отправка уведомлений выполняется всем активным подпискам, где приложение было запущено из ярлыка (`installed = true`);
+- автоматические PUSH отправляются при погашении сертификата, создании заявки на оплату и переводе заявки в статус «Оплачено»;
+- также доступен ручной broadcast endpoint для отправки произвольного уведомления.
+
+### Env-переменные для PUSH
+
+Сначала сгенерируйте VAPID-ключи:
+
+```bash
+npm run push:keys
+```
+
+Добавьте значения в `.env` или Railway Variables:
+
+```env
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_SUBJECT=mailto:admin@example.com
+PUSH_ADMIN_TOKEN=change-me
+```
+
+`PUSH_ADMIN_TOKEN` опционален, но для production лучше задать его. Если токен задан, отправка PUSH требует заголовок `X-Push-Admin-Token` или `Authorization: Bearer`.
+
+### Отправка PUSH всем установленным ярлыкам
+
+```bash
+curl -X POST https://YOUR_DOMAIN/api/push/broadcast \
+  -H "Content-Type: application/json" \
+  -H "X-Push-Admin-Token: change-me" \
+  -d '{
+    "title": "WakeSurf",
+    "body": "Новая заявка или обновление по сертификатам",
+    "url": "/#certificates"
+  }'
+```
+
+По умолчанию отправка идёт только клиентам, которые открыли приложение из ярлыка. Для отправки всем активным PUSH-подпискам можно передать:
+
+```json
+{
+  "installedOnly": false
+}
+```
+
+### Проверка количества подписок
+
+```bash
+curl https://YOUR_DOMAIN/api/push/subscriptions/summary \
+  -H "X-Push-Admin-Token: change-me"
+```
+
+Важно: PUSH и установка ярлыка в production работают через HTTPS. На Railway публичный домен уже работает по HTTPS.
+
 ## API
 
 ### Сертификаты

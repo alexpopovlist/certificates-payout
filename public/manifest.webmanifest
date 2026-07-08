@@ -1,0 +1,25 @@
+{
+  "name": "WakeSurf Сертификаты",
+  "short_name": "WakeSurf",
+  "description": "Погашение сертификатов и заявки на оплату",
+  "start_url": "/#redeem",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fbff",
+  "theme_color": "#22aee8",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/assets/pwa-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/pwa-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
