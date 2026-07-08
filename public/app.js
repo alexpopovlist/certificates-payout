@@ -142,11 +142,10 @@ function renderSignIn(message = '') {
         <div class="auth-brand">
           <img src="/assets/wakemesurf-logo.svg" alt="" />
           <div>
-            <strong>WakeSurf</strong>
-            <span>Авторизация через WOWlife</span>
+            <strong>Вход в кабинет партнёра</strong>
+            <span>Авторизация</span>
           </div>
         </div>
-        <h1>Вход в кабинет партнёра</h1>
         <form id="signInForm" class="auth-form">
           <label>
             <span>Логин</span>
