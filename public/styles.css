@@ -258,6 +258,14 @@ body.no-scroll {
   border-radius: 14px;
   color: var(--muted);
   font-size: 25px;
+  overflow: hidden;
+}
+
+.scan-icon img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
 }
 
 .form-card h2,
@@ -799,18 +807,28 @@ input[type="checkbox"] {
   }
 
   .bottom-nav a.active {
-    color: #0b1324;
+    color: #22aee8;
   }
 
   .nav-icon {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     display: grid;
     place-items: center;
-    border: 2px solid currentColor;
-    border-radius: 10px;
-    font-size: 18px;
     line-height: 1;
+  }
+
+  .nav-icon-image img {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    display: block;
+    opacity: 0.58;
+  }
+
+  .bottom-nav a.active .nav-icon-image img {
+    opacity: 1;
+    filter: brightness(0) saturate(100%) invert(63%) sepia(84%) saturate(2419%) hue-rotate(167deg) brightness(100%) contrast(93%);
   }
 
   .grid-2 {

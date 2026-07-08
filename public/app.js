@@ -21,6 +21,8 @@ const paymentStatus = {
   PAID: { label: 'Оплачено', className: 'paid' }
 };
 
+const certificateDetailHeroImage = '/assets/certificate-view-hero.svg';
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -376,7 +378,7 @@ async function renderRedeem() {
     <div class="stack">
       <button id="openQrScanner" class="card scan-card" type="button" aria-label="Сканировать QR код">
         <span class="scan-left">
-          <span class="scan-icon">▦</span>
+          <span class="scan-icon"><img src="/assets/qr-scan.png" alt="" /></span>
           <span>Сканировать по QR коду</span>
         </span>
         <span>→</span>
@@ -411,14 +413,6 @@ async function renderRedeem() {
             <div class="field">
               <label for="secretCode">Секретный код:</label>
               <input id="secretCode" name="secretCode" placeholder="000000" autocomplete="off" required />
-            </div>
-            <div class="field">
-              <label for="customerFullName">Ф.И.О.:</label>
-              <input id="customerFullName" name="customerFullName" placeholder="Ф.И.О. клиента" />
-            </div>
-            <div class="field">
-              <label for="customerPhone">Телефон:</label>
-              <input id="customerPhone" name="customerPhone" placeholder="Телефон" />
             </div>
           </div>
           <div class="actions">
@@ -539,7 +533,7 @@ async function renderCertificateDetail(id) {
     const { item } = await api(`/api/certificates/${id}`);
     app.innerHTML = `
       <section class="card detail-card">
-        <img class="hero-image" src="${escapeHtml(item.imageUrl || '/assets/quad.svg')}" alt="${escapeHtml(item.title)}" />
+        <img class="hero-image" src="${certificateDetailHeroImage}" alt="${escapeHtml(item.title)}" />
         <div class="detail-body">
           <h2 class="detail-title">${escapeHtml(item.title)}</h2>
           <div class="detail-table">
