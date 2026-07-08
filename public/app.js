@@ -6,6 +6,16 @@ const logoutButton = document.querySelector('.logout-button');
 
 let currentUser = null;
 
+const authUiState = {
+  method: 'password',
+  codeRequested: false,
+  login: '',
+  password: '',
+  phone: '',
+  email: '',
+  code: ''
+};
+
 const SIGN_IN_PATH = '/authentication/sign-in';
 
 function getCurrentAppUrl() {
@@ -159,115 +169,153 @@ function setAuthMode(isAuthenticated) {
   document.body.classList.toggle('is-authenticated', isAuthenticated);
 }
 
-const authTypeLabels = {
-  sms: 'SMS',
-  email: 'EMAIL',
-  password: 'ПАРОЛЬ'
-};
-
-const authUiState = {
-  type: 'password',
-  codeRequested: false,
-  values: {
-    login: '',
-    password: '',
-    phone: '',
-    email: '',
-    code: ''
-  }
-};
-
-function formatPhoneMask(raw) {
-  const digitsAll = String(raw || '').replace(/[^\d]/g, '');
-  if (!digitsAll) return String(raw || '').trim() === '+' ? '+' : '';
-
-  let digits = digitsAll;
-  if (digits.startsWith('8')) digits = `7${digits.slice(1)}`;
-
-  if (digits.startsWith('7')) {
-    digits = digits.slice(0, 11);
-    if (digits.length <= 1) return '+7';
-
-    const a = digits.slice(1, 4);
-    const b = digits.slice(4, 7);
-    const c = digits.slice(7, 9);
-    const d = digits.slice(9, 11);
-
-    let out = '+7';
-    if (a) out += ` (${a}`;
-    if (a.length === 3) out += ')';
-    if (b) out += ` ${b}`;
-    if (c) out += `-${c}`;
-    if (d) out += `-${d}`;
-    return out;
-  }
-
-  return `+${digitsAll.slice(0, 15)}`;
+function getAuthMethodLabel(method) {
+  const labels = {
+    sms: 'SMS',
+    email: 'Email',
+    password: 'Пароль'
+  };
+  return labels[method] || labels.password;
 }
 
-function normalizePhoneToE164(raw) {
-  const digits = String(raw || '').replace(/[^\d]/g, '');
-  if (!digits) return '';
-  const normalizedDigits = digits.startsWith('8') && digits.length >= 11 ? `7${digits.slice(1)}` : digits;
-  return `+${normalizedDigits}`;
-}
-
-function updateAuthValuesFromForm(form) {
+function storeAuthFormValues(form = document.querySelector('#signInForm')) {
   if (!form) return;
   const formData = new FormData(form);
-  ['login', 'password', 'phone', 'email', 'code'].forEach((name) => {
-    if (formData.has(name)) authUiState.values[name] = String(formData.get(name) || '');
+  ['login', 'password', 'phone', 'email', 'code'].forEach((fieldName) => {
+    if (formData.has(fieldName)) {
+      authUiState[fieldName] = String(formData.get(fieldName) || '').trim();
+    }
   });
 }
 
-function authTabHtml(type, activeType) {
-  return `
-    <button class="auth-type-tab ${type === activeType ? 'active' : ''}" type="button" data-auth-type="${type}" aria-pressed="${type === activeType ? 'true' : 'false'}">
-      ${authTypeLabels[type]}
-    </button>
-  `;
-}
-
-function authPasswordFieldHtml() {
-  return `
-    <label class="auth-field">
-      <span>Пароль</span>
-      <div class="auth-password-control">
-        <input id="authPasswordInput" name="password" type="password" autocomplete="current-password" placeholder="Пароль" value="${escapeHtml(authUiState.values.password)}" required />
-        <button id="toggleAuthPassword" class="auth-password-toggle" type="button" aria-label="Показать пароль">Показать</button>
-      </div>
-    </label>
-  `;
-}
-
-function authIdentifierFieldHtml(type) {
-  if (type === 'sms') {
-    return `
-      <label class="auth-field auth-field-floating">
-        <span>Телефон</span>
-        <input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7 (___) ___-__-__" value="${escapeHtml(authUiState.values.phone)}" required />
-      </label>
-    `;
+function getAuthIdentifierConfig(method) {
+  if (method === 'sms') {
+    return {
+      name: 'phone',
+      label: 'Телефон',
+      type: 'tel',
+      inputmode: 'tel',
+      autocomplete: 'tel',
+      placeholder: '+7 (___) ___-__-__'
+    };
   }
 
-  if (type === 'email') {
-    return `
-      <label class="auth-field auth-field-floating">
-        <span>Email</span>
-        <input name="email" type="email" inputmode="email" autocomplete="email" placeholder="Email" value="${escapeHtml(authUiState.values.email)}" required />
-      </label>
-    `;
+  if (method === 'email') {
+    return {
+      name: 'email',
+      label: 'Email',
+      type: 'email',
+      inputmode: 'email',
+      autocomplete: 'email',
+      placeholder: 'Email'
+    };
   }
 
+  return {
+    name: 'login',
+    label: 'Логин',
+    type: 'text',
+    inputmode: 'email',
+    autocomplete: 'username',
+    placeholder: 'Логин партнёрского кабинета'
+  };
+}
+
+function authTabsHtml() {
   return `
-    <label class="auth-field">
-      <span>Логин</span>
-      <input name="login" type="text" inputmode="email" autocomplete="username" placeholder="Логин партнёрского кабинета" value="${escapeHtml(authUiState.values.login)}" required />
-    </label>
+    <div class="auth-tabs" role="tablist" aria-label="Тип авторизации">
+      ${['sms', 'email', 'password'].map((method) => `
+        <button
+          class="auth-tab ${authUiState.method === method ? 'active' : ''}"
+          type="button"
+          role="tab"
+          aria-selected="${authUiState.method === method ? 'true' : 'false'}"
+          data-auth-method="${method}"
+        >
+          ${getAuthMethodLabel(method)}
+        </button>
+      `).join('')}
+    </div>
   `;
 }
 
-function renderSignIn(message = '', options = {}) {
+function passwordAuthFieldsHtml() {
+  return `
+    <div class="auth-input-stack">
+      <label>
+        <span>Логин</span>
+        <input
+          name="login"
+          type="text"
+          inputmode="email"
+          autocomplete="username"
+          placeholder="Логин партнёрского кабинета"
+          value="${escapeHtml(authUiState.login)}"
+          required
+        />
+      </label>
+      <label>
+        <span>Пароль</span>
+        <span class="auth-password-field">
+          <input
+            id="authPasswordInput"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            placeholder="••••••"
+            value="${escapeHtml(authUiState.password)}"
+            required
+          />
+          <button class="auth-password-toggle" type="button" aria-controls="authPasswordInput" aria-label="Показать пароль">
+            Показать
+          </button>
+        </span>
+      </label>
+      <button class="button auth-submit" type="submit">Войти</button>
+    </div>
+  `;
+}
+
+function codeAuthFieldsHtml() {
+  const config = getAuthIdentifierConfig(authUiState.method);
+  const value = authUiState[config.name] || '';
+
+  return `
+    <div class="auth-input-stack">
+      <label>
+        <span>${escapeHtml(config.label)}</span>
+        <input
+          name="${escapeHtml(config.name)}"
+          type="${escapeHtml(config.type)}"
+          inputmode="${escapeHtml(config.inputmode)}"
+          autocomplete="${escapeHtml(config.autocomplete)}"
+          placeholder="${escapeHtml(config.placeholder)}"
+          value="${escapeHtml(value)}"
+          required
+        />
+      </label>
+      ${authUiState.codeRequested ? `
+        <label>
+          <span>Код</span>
+          <input
+            name="code"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            placeholder="Код"
+            value="${escapeHtml(authUiState.code)}"
+            required
+          />
+        </label>
+        <button class="button auth-submit" type="submit">Войти</button>
+      ` : `
+        <button id="requestAuthCode" class="button auth-submit" type="button">Получить код</button>
+      `}
+    </div>
+  `;
+}
+
+function renderSignIn(message = '') {
   ensureSignInPath();
   setAuthMode(false);
   setHeader('Вход в кабинет партнёра');
@@ -277,19 +325,6 @@ function renderSignIn(message = '', options = {}) {
     pushPrompt.className = 'push-prompt hidden';
     pushPrompt.innerHTML = '';
   }
-
-  authUiState.type = options.type || authUiState.type || 'password';
-  if (Object.prototype.hasOwnProperty.call(options, 'codeRequested')) {
-    authUiState.codeRequested = Boolean(options.codeRequested);
-  }
-
-  const type = authUiState.type;
-  const isCodeMode = type === 'sms' || type === 'email';
-  const isCodeReady = isCodeMode && authUiState.codeRequested;
-
-  const actionButton = isCodeMode && !isCodeReady
-    ? '<button id="requestAuthCode" class="button auth-submit" type="button">Получить код</button>'
-    : '<button class="button auth-submit" type="submit">Войти</button>';
 
   app.innerHTML = `
     <section class="auth-screen auth-screen-wakesurf">
@@ -305,24 +340,10 @@ function renderSignIn(message = '', options = {}) {
             <p>Войдите, чтобы управлять данными</p>
           </div>
 
-          <form id="signInForm" class="auth-form auth-form-wakesurf" data-auth-type="${type}">
+          <form id="signInForm" class="auth-form auth-form-wakesurf">
+            ${authTabsHtml()}
             <div id="authNotice" class="${message ? 'notice error' : 'hidden'}">${escapeHtml(message)}</div>
-
-            <div class="auth-type-switcher" role="group" aria-label="Тип авторизации">
-              ${authTabHtml('sms', type)}
-              ${authTabHtml('email', type)}
-              ${authTabHtml('password', type)}
-            </div>
-
-            ${authIdentifierFieldHtml(type)}
-            ${type === 'password' ? authPasswordFieldHtml() : ''}
-            ${isCodeReady ? `
-              <label class="auth-field">
-                <span>Код</span>
-                <input name="code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="Код" value="${escapeHtml(authUiState.values.code)}" required />
-              </label>
-            ` : ''}
-            ${actionButton}
+            ${authUiState.method === 'password' ? passwordAuthFieldsHtml() : codeAuthFieldsHtml()}
           </form>
         </div>
       </div>
@@ -330,51 +351,56 @@ function renderSignIn(message = '', options = {}) {
   `;
 
   const form = document.querySelector('#signInForm');
-  form?.addEventListener('submit', handleSignInSubmit);
-  form?.addEventListener('input', (event) => {
-    const target = event.target;
-    if (target?.name === 'phone') {
-      const formatted = formatPhoneMask(target.value);
-      target.value = formatted;
-      authUiState.values.phone = formatted;
-      return;
-    }
-    updateAuthValuesFromForm(form);
-  });
 
-  document.querySelectorAll('[data-auth-type]').forEach((button) => {
+  form?.querySelectorAll('[data-auth-method]').forEach((button) => {
     button.addEventListener('click', () => {
-      updateAuthValuesFromForm(form);
-      authUiState.type = button.dataset.authType;
+      storeAuthFormValues(form);
+      authUiState.method = button.dataset.authMethod || 'password';
       authUiState.codeRequested = false;
-      authUiState.values.code = '';
-      renderSignIn('', { type: authUiState.type, codeRequested: false });
+      authUiState.code = '';
+      renderSignIn();
     });
   });
 
-  document.querySelector('#requestAuthCode')?.addEventListener('click', () => {
-    updateAuthValuesFromForm(form);
-    const identifier = form?.querySelector('input[name="phone"], input[name="email"]');
-    if (identifier && !identifier.checkValidity()) {
-      identifier.reportValidity();
-      return;
-    }
-    authUiState.codeRequested = true;
-    authUiState.values.code = '';
-    renderSignIn('', { type: authUiState.type, codeRequested: true });
-    requestAnimationFrame(() => document.querySelector('input[name="code"]')?.focus());
-  });
+  form?.querySelector('#requestAuthCode')?.addEventListener('click', handleAuthCodeRequest);
+  form?.querySelector('.auth-password-toggle')?.addEventListener('click', handlePasswordVisibilityToggle);
+  form?.addEventListener('submit', handleSignInSubmit);
+}
 
-  document.querySelector('#toggleAuthPassword')?.addEventListener('click', () => {
-    const input = document.querySelector('#authPasswordInput');
-    const toggle = document.querySelector('#toggleAuthPassword');
-    if (!input || !toggle) return;
-    const show = input.type === 'password';
-    input.type = show ? 'text' : 'password';
-    toggle.textContent = show ? 'Скрыть' : 'Показать';
-    toggle.setAttribute('aria-label', show ? 'Скрыть пароль' : 'Показать пароль');
-    input.focus();
-  });
+function handlePasswordVisibilityToggle(event) {
+  const button = event.currentTarget;
+  const input = document.querySelector('#authPasswordInput');
+  if (!input) return;
+
+  const shouldShow = input.type === 'password';
+  input.type = shouldShow ? 'text' : 'password';
+  button.textContent = shouldShow ? 'Скрыть' : 'Показать';
+  button.setAttribute('aria-label', shouldShow ? 'Скрыть пароль' : 'Показать пароль');
+}
+
+function handleAuthCodeRequest(event) {
+  event.preventDefault();
+  const form = event.currentTarget.closest('form');
+  const notice = form?.querySelector('#authNotice');
+
+  storeAuthFormValues(form);
+
+  const config = getAuthIdentifierConfig(authUiState.method);
+  const value = authUiState[config.name];
+
+  if (!value) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = authUiState.method === 'sms'
+        ? 'Введите телефон, чтобы получить код.'
+        : 'Введите email, чтобы получить код.';
+    }
+    return;
+  }
+
+  authUiState.codeRequested = true;
+  authUiState.code = '';
+  renderSignIn();
 }
 
 async function handleSignInSubmit(event) {
@@ -382,32 +408,25 @@ async function handleSignInSubmit(event) {
   const form = event.currentTarget;
   const submit = form.querySelector('button[type="submit"]');
   const notice = form.querySelector('#authNotice');
-  const type = form.dataset.authType || authUiState.type || 'password';
 
-  updateAuthValuesFromForm(form);
+  storeAuthFormValues(form);
+
+  if (authUiState.method !== 'password') {
+    notice.className = 'notice error';
+    notice.textContent = 'Запросы для входа по SMS и Email будут подключены после описания модели API.';
+    return;
+  }
 
   submit.disabled = true;
-  const defaultText = submit.textContent;
   submit.textContent = 'Входим...';
   notice.className = 'hidden';
   notice.textContent = '';
 
   try {
-    if (type !== 'password') {
-      notice.className = 'notice';
-      notice.textContent = 'Экран входа по коду подготовлен. Модель запроса для SMS/Email будет подключена после описания API.';
-      return;
-    }
-
-    const payload = {
-      method: 'password',
-      login: authUiState.values.login,
-      password: authUiState.values.password
-    };
-
+    const formData = new FormData(form);
     const result = await api('/api/auth/sign-in', {
       method: 'POST',
-      body: JSON.stringify(payload)
+      body: JSON.stringify(Object.fromEntries(formData.entries()))
     });
 
     currentUser = result.user;
@@ -420,7 +439,7 @@ async function handleSignInSubmit(event) {
     notice.textContent = error.message;
   } finally {
     submit.disabled = false;
-    submit.textContent = defaultText || 'Войти';
+    submit.textContent = 'Войти';
   }
 }
 
