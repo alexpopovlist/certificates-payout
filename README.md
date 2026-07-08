@@ -436,6 +436,30 @@ POST https://partner-wowlife.ru/restapi/profile.getProfile
 Backend отправляет `cabinet`, `contactId` и `token` из текущей авторизационной сессии партнёра. URL можно переопределить через переменную окружения:
 
 ```env
+
+### Источник заявок на оплату
+
+Для экрана `/payments` используется та же env-переменная, что и для сертификатов:
+
+```env
+CERTIFICATES_USE_SERVICE=true
+```
+
+- `true` — список заявок и детальная карточка заявки берутся из WOWlife через `POST /restapi/certificate.getVerifications`; кнопка создания локальной заявки скрывается, потому что модель создания заявки в WOWlife пока не задана;
+- `false` — данные берутся из локальной PostgreSQL БД.
+
+Для WOWlife-заявок настройте URL сервиса:
+
+```env
+VERIFICATIONS_SERVICE_URL=https://partner-wowlife.ru/restapi/certificate.getVerifications
+```
+
+Backend формирует payload из текущей авторизационной сессии:
+
+```json
+{"allIds":["485"]}
+```
+
 PROFILE_SERVICE_URL=https://partner-wowlife.ru/restapi/profile.getProfile
 ```
 

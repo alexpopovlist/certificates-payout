@@ -1663,6 +1663,9 @@ async function renderPayments() {
     const itemsHtml = data.items.length
       ? data.items.map(paymentCard).join('')
       : '<div class="empty-state">Заявок на оплату пока нет.</div>';
+    const createActionHtml = data.source === 'wowlife'
+      ? ''
+      : '<a class="button" href="/payments/create">Создать заявку</a>';
 
     app.innerHTML = `
       <div class="stack">
@@ -1671,7 +1674,7 @@ async function renderPayments() {
             <div class="summary-label">Общая сумма выплат за весь период:</div>
             <div class="summary-amount">${formatMoney(data.summary.totalPaidAmountCents)}</div>
           </div>
-          <a class="button" href="/payments/create">Создать заявку</a>
+          ${createActionHtml}
         </section>
         <div class="list">${itemsHtml}</div>
       </div>
@@ -1689,7 +1692,7 @@ async function renderPaymentDetail(id) {
   try {
     const data = await api(`/api/payment-requests/${id}`);
     const item = data.item;
-    const canMarkPaid = item.status === 'PROCESSING';
+    const canMarkPaid = item.status === 'PROCESSING' && data.source !== 'wowlife';
 
     app.innerHTML = `
       <div class="stack">
@@ -1701,6 +1704,7 @@ async function renderPaymentDetail(id) {
               <span>${item.certificateCount} ${declension(item.certificateCount, ['сертификат', 'сертификата', 'сертификатов'])}</span>
               ${statusHtml(paymentStatus, item.status)}
             </div>
+            ${item.docLink ? `<a class="doc-link" href="${escapeHtml(item.docLink)}" target="_blank" rel="noopener noreferrer">Документ по заявке</a>` : ''}
           </div>
           ${canMarkPaid ? '<button id="markPaid" class="button" type="button">Отметить оплаченной</button>' : ''}
         </section>

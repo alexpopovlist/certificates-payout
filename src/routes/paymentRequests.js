@@ -1,6 +1,7 @@
 const express = require('express');
 const { query, withTransaction } = require('../db');
 const { broadcastPush } = require('../services/pushService');
+const { fetchPartnerVerifications, fetchPartnerVerificationById } = require('../services/paymentVerificationService');
 
 const router = express.Router();
 
@@ -17,6 +18,16 @@ function sendPushInBackground(payload) {
   });
 }
 
+function isTruthyEnv(value) {
+  return ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
+}
+
+function shouldUseCertificatesService() {
+  if (process.env.CERTIFICATES_USE_SERVICE === undefined || process.env.CERTIFICATES_USE_SERVICE === '') {
+    return true;
+  }
+  return isTruthyEnv(process.env.CERTIFICATES_USE_SERVICE);
+}
 
 function toPaymentRequestDto(row) {
   return {
@@ -29,7 +40,8 @@ function toPaymentRequestDto(row) {
     totalAmountCents: Number(row.total_amount_cents || 0),
     createdAt: row.created_at,
     paidAt: row.paid_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    docLink: row.doc_link || null
   };
 }
 
@@ -68,8 +80,13 @@ function buildCandidateFilters(filters) {
   return { where: conditions.join(' AND '), values };
 }
 
-router.get('/', async (_request, response, next) => {
+router.get('/', async (request, response, next) => {
   try {
+    if (shouldUseCertificatesService()) {
+      const data = await fetchPartnerVerifications({ session: request.auth });
+      return response.json(data);
+    }
+
     const [requests, summary] = await Promise.all([
       query(`
         SELECT *
@@ -96,6 +113,10 @@ router.get('/', async (_request, response, next) => {
 
 router.get('/candidates', async (request, response, next) => {
   try {
+    if (shouldUseCertificatesService()) {
+      return response.status(409).json({ error: 'Создание заявки через WOWlife пока не подключено. Переключите CERTIFICATES_USE_SERVICE=false для локальной БД.' });
+    }
+
     const { where, values } = buildCandidateFilters(request.query);
     const { rows } = await query(
       `
@@ -122,6 +143,11 @@ router.get('/candidates', async (request, response, next) => {
 
 router.get('/:id', async (request, response, next) => {
   try {
+    if (shouldUseCertificatesService()) {
+      const data = await fetchPartnerVerificationById({ session: request.auth, id: request.params.id });
+      return response.json(data);
+    }
+
     const requestResult = await query(
       'SELECT * FROM payment_requests WHERE id = $1',
       [request.params.id]
@@ -152,6 +178,10 @@ router.get('/:id', async (request, response, next) => {
 });
 
 router.post('/', async (request, response, next) => {
+  if (shouldUseCertificatesService()) {
+    return response.status(409).json({ error: 'Создание заявки через WOWlife пока не подключено. Переключите CERTIFICATES_USE_SERVICE=false для локальной БД.' });
+  }
+
   const { certificateIds, periodFrom, periodTo } = request.body;
 
   if (!Array.isArray(certificateIds) || certificateIds.length === 0) {
@@ -246,6 +276,10 @@ router.post('/', async (request, response, next) => {
 
 router.patch('/:id/pay', async (request, response, next) => {
   try {
+    if (shouldUseCertificatesService()) {
+      return response.status(409).json({ error: 'Изменение статуса заявки через WOWlife пока не подключено. Переключите CERTIFICATES_USE_SERVICE=false для локальной БД.' });
+    }
+
     const result = await withTransaction(async (client) => {
       const found = await client.query(
         'SELECT * FROM payment_requests WHERE id = $1 FOR UPDATE',
