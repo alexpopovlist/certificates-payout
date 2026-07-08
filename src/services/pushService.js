@@ -102,7 +102,7 @@ async function deactivateSubscription(endpoint) {
 
 function normalizePayload(payload = {}) {
   return {
-    title: payload.title || 'WakeSurf',
+    title: payload.title || 'WowLife',
     body: payload.body || 'Новое уведомление',
     url: payload.url || '/',
     icon: payload.icon || '/assets/pwa-icon-192.png',

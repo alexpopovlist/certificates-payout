@@ -15,12 +15,12 @@ self.addEventListener('push', (event) => {
     data = event.data ? event.data.json() : {};
   } catch (_error) {
     data = {
-      title: 'WakeSurf',
+      title: 'WowLife',
       body: event.data ? event.data.text() : 'Новое уведомление'
     };
   }
 
-  const title = data.title || 'WakeSurf';
+  const title = data.title || 'WowLife';
   const options = {
     body: data.body || 'Новое уведомление',
     icon: data.icon || '/assets/pwa-icon-192.png',

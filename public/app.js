@@ -128,7 +128,7 @@ function setAuthMode(isAuthenticated) {
 
 function renderSignIn(message = '') {
   setAuthMode(false);
-  setHeader('Авторизация');
+  setHeader('Войдите, чтобы управлять данными');
   setActiveNavigation('');
   stopQrScanner({ keepModalOpen: false });
   if (pushPrompt) {
@@ -140,10 +140,10 @@ function renderSignIn(message = '') {
     <section class="auth-screen">
       <div class="auth-card card">
         <div class="auth-brand">
-          <img src="/assets/wakemesurf-logo.svg" alt="" />
+          <img src="/assets/wowlife-logo.svg" alt="" />
           <div>
             <strong>Вход в кабинет партнёра</strong>
-            <span>Авторизация</span>
+            <span>Войдите, чтобы управлять данными</span>
           </div>
         </div>
         <form id="signInForm" class="auth-form">

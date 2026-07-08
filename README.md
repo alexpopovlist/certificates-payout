@@ -105,7 +105,7 @@ curl -X POST https://YOUR_DOMAIN/api/push/broadcast \
   -H "Content-Type: application/json" \
   -H "X-Push-Admin-Token: change-me" \
   -d '{
-    "title": "WakeSurf",
+    "title": "WowLife",
     "body": "Новая заявка или обновление по сертификатам",
     "url": "/#certificates"
   }'
@@ -148,7 +148,7 @@ curl https://YOUR_DOMAIN/api/push/subscriptions/summary \
 
 ## Обновления интерфейса
 
-- Интерфейс переведён на стиль проекта WakeSurf: шрифт Manrope, светлая админ-тема, обновлённый фон, карточки, навигация и логотип.
+- Интерфейс переведён на стиль проекта WowLife: шрифт Manrope, светлая админ-тема, обновлённый фон, карточки, навигация и логотип.
 - Кнопка «Сканировать по QR коду» открывает модальное окно с камерой через `navigator.mediaDevices.getUserMedia`.
 - Автораспознавание QR работает через браузерный `BarcodeDetector`, если он поддерживается устройством/браузером.
 - Поддерживаемые форматы QR:
@@ -260,7 +260,7 @@ curl -X POST https://YOUR_DOMAIN/api/push/broadcast \
   -H "Content-Type: application/json" \
   -H "X-Push-Admin-Token: change-me" \
   -d '{
-    "title": "WakeSurf",
+    "title": "WowLife",
     "body": "Новая заявка или обновление по сертификатам",
     "url": "/#certificates"
   }'
@@ -303,7 +303,7 @@ curl https://YOUR_DOMAIN/api/push/subscriptions/summary \
 
 ## Обновления интерфейса
 
-- Интерфейс переведён на стиль проекта WakeSurf: шрифт Manrope, светлая админ-тема, обновлённый фон, карточки, навигация и логотип.
+- Интерфейс переведён на стиль проекта WowLife: шрифт Manrope, светлая админ-тема, обновлённый фон, карточки, навигация и логотип.
 - Кнопка «Сканировать по QR коду» открывает модальное окно с камерой через `navigator.mediaDevices.getUserMedia`.
 - Автораспознавание QR работает через браузерный `BarcodeDetector`, если он поддерживается устройством/браузером.
 - Поддерживаемые форматы QR:
