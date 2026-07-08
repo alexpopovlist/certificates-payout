@@ -5,6 +5,8 @@ const express = require('express');
 const certificateRoutes = require('./routes/certificates');
 const paymentRequestRoutes = require('./routes/paymentRequests');
 const pushNotificationRoutes = require('./routes/pushNotifications');
+const authRoutes = require('./routes/auth');
+const { requireAuth } = require('./middleware/auth');
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -16,9 +18,10 @@ app.get('/api/health', (_request, response) => {
   response.json({ status: 'ok' });
 });
 
-app.use('/api/certificates', certificateRoutes);
-app.use('/api/payment-requests', paymentRequestRoutes);
-app.use('/api/push', pushNotificationRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/certificates', requireAuth, certificateRoutes);
+app.use('/api/payment-requests', requireAuth, paymentRequestRoutes);
+app.use('/api/push', requireAuth, pushNotificationRoutes);
 
 app.use('/api', (_request, response) => {
   response.status(404).json({ error: 'API endpoint not found' });

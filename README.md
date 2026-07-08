@@ -156,3 +156,36 @@ curl https://YOUR_DOMAIN/api/push/subscriptions/summary \
   - URL query: `...?certificateNumber=S00000001&secretCode=123456`
   - простая строка: `S00000001 123456`
 - Доступ к камере в production работает только по HTTPS. На локальной машине работает через `localhost`.
+
+## Авторизация через WOWlife
+
+Приложение защищает API и интерфейс локальной сессией. Вход выполняется через сервис авторизации партнёрского кабинета WOWlife.
+
+Переменные окружения:
+
+```env
+AUTH_BASE_URL=https://partner-wowlife.ru
+AUTH_LOGIN_URL=https://partner-wowlife.ru/api/authentication/sign-in
+AUTH_USERNAME_FIELD=login
+AUTH_PASSWORD_FIELD=password
+AUTH_SESSION_SECRET=replace-with-long-random-string
+AUTH_SESSION_TTL_SECONDS=604800
+```
+
+Если `AUTH_LOGIN_URL` не задан, сервер пробует несколько типовых endpoint-ов на `AUTH_BASE_URL`:
+
+- `/api/authentication/sign-in`
+- `/api/auth/sign-in`
+- `/api/account/sign-in`
+- `/api/login`
+- `/authentication/sign-in`
+
+Для production лучше указать точный `AUTH_LOGIN_URL` из Network-инспектора WOWlife. После успешного входа backend сохраняет локальную `HttpOnly` session-cookie, поэтому запросы к сертификатам, заявкам и PUSH защищены от неавторизованных пользователей.
+
+Для локальной разработки без внешней авторизации можно временно поставить:
+
+```env
+AUTH_DISABLED=true
+```
+
+Для production это значение использовать нельзя.

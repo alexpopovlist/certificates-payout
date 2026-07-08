@@ -2,6 +2,9 @@ const app = document.querySelector('#app');
 const pageTitle = document.querySelector('#pageTitle');
 const backButton = document.querySelector('#backButton');
 const pushPrompt = document.querySelector('#pushPrompt');
+const logoutButton = document.querySelector('.logout-button');
+
+let currentUser = null;
 
 const createRequestState = {
   items: [],
@@ -96,6 +99,7 @@ function showError(error) {
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
+    credentials: 'same-origin',
     headers: {
       'Content-Type': 'application/json',
       ...(options.headers || {})
@@ -106,10 +110,117 @@ async function api(path, options = {}) {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    if (response.status === 401 && !path.startsWith('/api/auth')) {
+      currentUser = null;
+      renderSignIn('Сессия истекла. Войдите снова.');
+    }
+
     throw new Error(payload.error || 'Ошибка запроса');
   }
 
   return payload;
+}
+
+function setAuthMode(isAuthenticated) {
+  document.body.classList.toggle('is-login', !isAuthenticated);
+  document.body.classList.toggle('is-authenticated', isAuthenticated);
+}
+
+function renderSignIn(message = '') {
+  setAuthMode(false);
+  setHeader('Авторизация');
+  setActiveNavigation('');
+  stopQrScanner({ keepModalOpen: false });
+  if (pushPrompt) {
+    pushPrompt.className = 'push-prompt hidden';
+    pushPrompt.innerHTML = '';
+  }
+
+  app.innerHTML = `
+    <section class="auth-screen">
+      <div class="auth-card card">
+        <div class="auth-brand">
+          <img src="/assets/wakemesurf-logo.svg" alt="" />
+          <div>
+            <strong>WakeSurf</strong>
+            <span>Авторизация через WOWlife</span>
+          </div>
+        </div>
+        <h1>Вход в кабинет партнёра</h1>
+        <p>Используйте логин и пароль от партнёрского кабинета WOWlife.</p>
+        <form id="signInForm" class="auth-form">
+          <label>
+            <span>Логин</span>
+            <input name="login" autocomplete="username" placeholder="Телефон, email или логин" required />
+          </label>
+          <label>
+            <span>Пароль</span>
+            <input name="password" type="password" autocomplete="current-password" placeholder="Пароль" required />
+          </label>
+          <button class="button auth-submit" type="submit">Войти</button>
+          <div id="authNotice" class="${message ? 'notice error' : 'hidden'}">${escapeHtml(message)}</div>
+        </form>
+      </div>
+    </section>
+  `;
+
+  document.querySelector('#signInForm')?.addEventListener('submit', handleSignInSubmit);
+}
+
+async function handleSignInSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = form.querySelector('button[type="submit"]');
+  const notice = form.querySelector('#authNotice');
+
+  submit.disabled = true;
+  submit.textContent = 'Входим...';
+  notice.className = 'hidden';
+  notice.textContent = '';
+
+  try {
+    const formData = new FormData(form);
+    const result = await api('/api/auth/sign-in', {
+      method: 'POST',
+      body: JSON.stringify(Object.fromEntries(formData.entries()))
+    });
+
+    currentUser = result.user;
+    setAuthMode(true);
+    route();
+    initializePushClient();
+  } catch (error) {
+    notice.className = 'notice error';
+    notice.textContent = error.message;
+  } finally {
+    submit.disabled = false;
+    submit.textContent = 'Войти';
+  }
+}
+
+async function initializeAuth() {
+  showLoading();
+  try {
+    const result = await api('/api/auth/me');
+    currentUser = result.user;
+    setAuthMode(true);
+    return true;
+  } catch (_error) {
+    currentUser = null;
+    renderSignIn();
+    return false;
+  }
+}
+
+async function signOut() {
+  try {
+    await api('/api/auth/sign-out', { method: 'POST' });
+  } catch (_error) {
+    // Даже если сервер недоступен, очищаем состояние интерфейса.
+  }
+
+  currentUser = null;
+  renderSignIn();
 }
 
 
@@ -1133,6 +1244,11 @@ function certificatesTable(certificates, options = {}) {
 }
 
 function route() {
+  if (!currentUser) {
+    renderSignIn();
+    return;
+  }
+
   stopQrScanner({ keepModalOpen: false });
   const hash = window.location.hash || '#redeem';
   const [root, id] = hash.replace(/^#/, '').split('/');
@@ -1154,7 +1270,11 @@ function route() {
 
 window.addEventListener('beforeunload', () => stopQrScanner());
 window.addEventListener('hashchange', route);
-window.addEventListener('DOMContentLoaded', () => {
-  route();
-  initializePushClient();
+logoutButton?.addEventListener('click', signOut);
+window.addEventListener('DOMContentLoaded', async () => {
+  const authenticated = await initializeAuth();
+  if (authenticated) {
+    route();
+    initializePushClient();
+  }
 });

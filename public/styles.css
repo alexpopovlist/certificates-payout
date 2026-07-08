@@ -1406,3 +1406,137 @@ input[type="checkbox"] {
     font-size: 15px;
   }
 }
+
+body.is-login {
+  min-height: 100vh;
+}
+
+body.is-login .layout {
+  display: block;
+  min-height: 100vh;
+}
+
+body.is-login .sidebar,
+body.is-login .topbar,
+body.is-login .bottom-nav,
+body.is-login #pushPrompt {
+  display: none !important;
+}
+
+body.is-login .workspace {
+  min-height: 100vh;
+  display: block;
+}
+
+body.is-login .content {
+  width: 100%;
+  min-height: 100vh;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+}
+
+.auth-screen {
+  width: min(100%, 480px);
+}
+
+.auth-card {
+  padding: 32px;
+  border-radius: 32px;
+  box-shadow: var(--shadow);
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 26px;
+}
+
+.auth-brand img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.auth-brand div {
+  display: grid;
+  gap: 2px;
+}
+
+.auth-brand strong {
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.auth-brand span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auth-card h1 {
+  margin: 0 0 10px;
+  font-size: clamp(26px, 5vw, 34px);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+}
+
+.auth-card p {
+  margin: 0 0 26px;
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.auth-form {
+  display: grid;
+  gap: 16px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.auth-form input {
+  width: 100%;
+  height: 54px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 0 18px;
+  background: #ffffff;
+  color: var(--text);
+  outline: 0;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.auth-form input:focus {
+  border-color: rgba(34, 174, 232, 0.58);
+  box-shadow: 0 0 0 4px rgba(34, 174, 232, 0.12);
+}
+
+.auth-submit {
+  width: 100%;
+  min-height: 54px;
+  border-radius: 22px;
+  margin-top: 4px;
+}
+
+@media (max-width: 560px) {
+  body.is-login .content {
+    padding: 18px;
+  }
+
+  .auth-card {
+    padding: 24px;
+    border-radius: 28px;
+  }
+}
