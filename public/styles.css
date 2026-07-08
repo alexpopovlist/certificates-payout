@@ -2270,8 +2270,11 @@ body:not(.is-login) .multiselect-option:hover {
   }
 
   body:not(.is-login) .topbar h1 {
-    font-size: 20px;
-    font-weight: 700;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.2;
+    color: #0f172a;
+    letter-spacing: 0;
   }
 
   body:not(.is-login) .content {
