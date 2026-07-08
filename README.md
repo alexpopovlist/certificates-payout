@@ -196,6 +196,8 @@ POST https://partner-wowlife.ru/restapi/auth.authorization
 
 После успешного второго шага backend создаёт локальную `HttpOnly` session-cookie. Пароль пользователя в сессию не сохраняется.
 
+Если первый ответ WOWlife содержит `contactId` и `token` не на верхнем уровне, backend теперь ищет эти поля рекурсивно и без учёта регистра (`contactId`, `contact_id`, `CONTACT_ID`, `id`, `ID`, `token`, `TOKEN`). Для редкой нестандартной структуры можно явно указать пути через `AUTH_PASSWORD_CONTACT_ID_PATH` и `AUTH_PASSWORD_TOKEN_PATH`.
+
 Переменные окружения:
 
 ```env
@@ -205,6 +207,10 @@ AUTH_AUTHORIZATION_URL=https://partner-wowlife.ru/restapi/auth.authorization
 AUTH_DOMAIN=wowlife-crm.ru
 AUTH_CABINET=partner
 AUTH_METHOD=password
+# Optional: only if WOWlife returns contactId/token in a non-standard nested shape.
+# Examples: data.contact.id, result.contact.ID, data.token
+AUTH_PASSWORD_CONTACT_ID_PATH=
+AUTH_PASSWORD_TOKEN_PATH=
 AUTH_SESSION_SECRET=replace-with-long-random-string
 AUTH_SESSION_TTL_SECONDS=604800
 ```

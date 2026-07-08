@@ -135,29 +135,71 @@ function getAuthMethod() {
   return process.env.AUTH_METHOD || 'password';
 }
 
+function collectNestedCandidates(value, depth = 0, seen = new Set()) {
+  if (!value || typeof value !== 'object' || depth > 8 || seen.has(value)) {
+    return [];
+  }
+
+  seen.add(value);
+  const candidates = [value];
+  const values = Array.isArray(value) ? value : Object.values(value);
+
+  for (const child of values) {
+    if (child && typeof child === 'object') {
+      candidates.push(...collectNestedCandidates(child, depth + 1, seen));
+    }
+  }
+
+  return candidates;
+}
+
 function getNestedCandidates(payload) {
-  return [
-    payload,
-    payload?.data,
-    payload?.result,
-    payload?.response,
-    payload?.payload,
-    payload?.user,
-    payload?.contact,
-    payload?.data?.user,
-    payload?.data?.contact,
-    payload?.result?.user,
-    payload?.result?.contact,
-    payload?.response?.user,
-    payload?.response?.contact
-  ].filter((candidate) => candidate && typeof candidate === 'object');
+  return collectNestedCandidates(payload).filter((candidate) => candidate && typeof candidate === 'object');
+}
+
+function normalizeFieldName(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function getObjectFieldCaseInsensitive(object, fieldName) {
+  if (!object || typeof object !== 'object') return undefined;
+
+  if (Object.prototype.hasOwnProperty.call(object, fieldName)) {
+    return object[fieldName];
+  }
+
+  const normalizedTarget = normalizeFieldName(fieldName);
+  const matchedKey = Object.keys(object).find((key) => normalizeFieldName(key) === normalizedTarget);
+  return matchedKey ? object[matchedKey] : undefined;
+}
+
+function getValueByPath(payload, path) {
+  if (!path) return undefined;
+
+  return String(path)
+    .split('.')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce((current, part) => getObjectFieldCaseInsensitive(current, part), payload);
+}
+
+function pickFirstPath(payload, paths) {
+  for (const path of paths) {
+    const value = getValueByPath(payload, path);
+    if (value !== undefined && value !== null && String(value) !== '') {
+      return String(value);
+    }
+  }
+
+  return null;
 }
 
 function pickFirstField(payload, fieldNames) {
+  const normalizedNames = new Set(fieldNames.map(normalizeFieldName));
+
   for (const candidate of getNestedCandidates(payload)) {
-    for (const fieldName of fieldNames) {
-      const value = candidate[fieldName];
-      if (value !== undefined && value !== null && String(value) !== '') {
+    for (const [key, value] of Object.entries(candidate)) {
+      if (value !== undefined && value !== null && String(value) !== '' && normalizedNames.has(normalizeFieldName(key))) {
         return String(value);
       }
     }
@@ -220,22 +262,68 @@ function pickUser(payload, login, fallback = {}) {
 }
 
 function extractToken(payload) {
-  return pickFirstField(payload, [
+  const configuredPath = process.env.AUTH_PASSWORD_TOKEN_PATH || process.env.AUTH_TOKEN_PATH;
+  return pickFirstPath(payload, [configuredPath].filter(Boolean)) || pickFirstField(payload, [
     'accessToken',
     'access_token',
     'token',
     'jwt',
     'authToken',
-    'authorizationToken'
+    'authorizationToken',
+    'TOKEN',
+    'AUTH_TOKEN'
   ]);
 }
 
 function extractRefreshToken(payload) {
-  return pickFirstField(payload, ['refreshToken', 'refresh_token']);
+  return pickFirstField(payload, ['refreshToken', 'refresh_token', 'REFRESH_TOKEN']);
 }
 
 function extractContactId(payload) {
-  return pickFirstField(payload, ['contactId', 'contact_id', 'contactID']);
+  const configuredPath = process.env.AUTH_PASSWORD_CONTACT_ID_PATH || process.env.AUTH_CONTACT_ID_PATH;
+  const configuredValue = pickFirstPath(payload, [configuredPath].filter(Boolean));
+  if (configuredValue) return configuredValue;
+
+  for (const candidate of getNestedCandidates(payload)) {
+    const explicitValue = pickFirstField(candidate, [
+      'contactId',
+      'contact_id',
+      'contactID',
+      'CONTACT_ID'
+    ]);
+    if (explicitValue) return explicitValue;
+
+    const contactValue = getObjectFieldCaseInsensitive(candidate, 'contact');
+    if (contactValue !== undefined && contactValue !== null && typeof contactValue !== 'object' && String(contactValue) !== '') {
+      return String(contactValue);
+    }
+
+    const idValue = pickFirstField(candidate, ['id', 'ID']);
+    if (idValue) return idValue;
+  }
+
+  return null;
+}
+
+function sanitizeAuthPayload(value, depth = 0, seen = new Set()) {
+  if (!value || typeof value !== 'object' || depth > 5 || seen.has(value)) {
+    return value;
+  }
+
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.slice(0, 5).map((item) => sanitizeAuthPayload(item, depth + 1, seen));
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => {
+      const normalizedKey = normalizeFieldName(key);
+      if (normalizedKey.includes('password')) return [key, '[hidden]'];
+      if (normalizedKey.includes('token')) return [key, entry ? '[present]' : entry];
+      return [key, sanitizeAuthPayload(entry, depth + 1, seen)];
+    })
+  );
 }
 
 function getSetCookieHeaders(headers) {
@@ -266,15 +354,25 @@ function buildAuthorizationBody({ contactId, token }) {
   };
 }
 
-async function requestJsonPost(url, body) {
+async function requestJsonPost(url, body, options = {}) {
+  const cookieHeader = Array.isArray(options.cookies)
+    ? options.cookies.map((cookie) => String(cookie).split(';')[0]).filter(Boolean).join('; ')
+    : '';
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json, text/plain, */*',
+    'Origin': normalizeAuthBaseUrl(),
+    'Referer': `${normalizeAuthBaseUrl()}/authentication/sign-in`
+  };
+
+  if (cookieHeader) {
+    headers.Cookie = cookieHeader;
+  }
+
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json, text/plain, */*',
-      'Origin': normalizeAuthBaseUrl(),
-      'Referer': `${normalizeAuthBaseUrl()}/authentication/sign-in`
-    },
+    headers,
     body: JSON.stringify(body)
   });
 
@@ -338,6 +436,7 @@ async function signInWithPartner({ login, password }) {
   const token = extractToken(passwordResult.payload);
 
   if (!contactId || !token) {
+    console.warn('WOWlife auth.goPassword payload missing contactId/token', sanitizeAuthPayload(passwordResult.payload));
     const error = new Error('WOWlife auth.goPassword did not return contactId/token');
     error.statusCode = 502;
     error.publicMessage = 'Сервис авторизации WOWlife не вернул contactId/token для второго шага авторизации.';
@@ -346,7 +445,7 @@ async function signInWithPartner({ login, password }) {
 
   let authorizationResult;
   try {
-    authorizationResult = await requestJsonPost(authorizationUrl, buildAuthorizationBody({ contactId, token }));
+    authorizationResult = await requestJsonPost(authorizationUrl, buildAuthorizationBody({ contactId, token }), { cookies: passwordResult.cookies });
   } catch (error) {
     const serviceError = new Error(`WOWlife authorization request failed: ${error.message}`);
     serviceError.statusCode = 502;
