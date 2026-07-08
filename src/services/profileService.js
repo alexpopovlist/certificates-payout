@@ -24,6 +24,10 @@ function getAuthCabinet() {
   return process.env.AUTH_CABINET || 'partner';
 }
 
+function getAuthDomain() {
+  return process.env.AUTH_DOMAIN || 'wowlife-crm.ru';
+}
+
 function parseJsonSafe(text) {
   if (!text) return {};
   try {
@@ -34,11 +38,23 @@ function parseJsonSafe(text) {
 }
 
 function getSessionContactId(session) {
-  return session?.upstream?.contactId || session?.user?.id || null;
+  return (
+    session?.upstream?.contactId ||
+    session?.upstream?.allIds?.[0] ||
+    session?.user?.id ||
+    process.env.PROFILE_CONTACT_ID ||
+    null
+  );
 }
 
 function getSessionToken(session) {
-  return session?.upstream?.token || null;
+  return (
+    session?.upstream?.token ||
+    session?.upstream?.authToken ||
+    session?.upstream?.accessToken ||
+    process.env.PROFILE_TOKEN ||
+    null
+  );
 }
 
 function getUpstreamCookies(session) {
@@ -59,8 +75,38 @@ function getServiceErrorMessage(payload) {
   return payload?.error || payload?.message || payload?.errorMessage || payload?.result?.error || payload?.result?.message;
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 function getPayloadResult(payload) {
-  return payload?.result && typeof payload.result === 'object' ? payload.result : payload;
+  if (isPlainObject(payload?.result)) return payload.result;
+  if (isPlainObject(payload?.data)) return payload.data;
+  if (isPlainObject(payload?.response)) return payload.response;
+  return payload;
+}
+
+function hasProfileIdentity(profile) {
+  return Boolean(
+    profile &&
+    typeof profile === 'object' &&
+    (profile.ID || profile.id || profile.TITLE || profile.title || profile.PHONE || profile.EMAIL || profile.REQUISITES)
+  );
+}
+
+function sanitizeProfilePayload(value, depth = 0, seen = new Set()) {
+  if (!value || typeof value !== 'object' || depth > 4 || seen.has(value)) return value;
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.slice(0, 5).map((item) => sanitizeProfilePayload(item, depth + 1, seen));
+  }
+
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => {
+    const normalizedKey = String(key).toLowerCase();
+    if (normalizedKey.includes('token')) return [key, entry ? '[present]' : entry];
+    return [key, sanitizeProfilePayload(entry, depth + 1, seen)];
+  }));
 }
 
 function asArray(value) {
@@ -122,7 +168,7 @@ function hasIm(profile, predicate) {
 }
 
 function normalizeProfile(rawProfile) {
-  const profile = rawProfile || {};
+  const profile = getPayloadResult(rawProfile || {});
   const requisite = getFirstRequisite(profile);
   const bankRequisite = profile.BANK_REQUISITES || profile.bankRequisites || {};
   const addresses = asArray(profile.UF_CRM_1692176867840).map(normalizeAddress).filter(Boolean);
@@ -235,8 +281,21 @@ async function fetchPartnerProfile({ session }) {
     token
   };
 
+  if (process.env.PROFILE_INCLUDE_DOMAIN === 'true') {
+    requestPayload.domain = getAuthDomain();
+  }
+
   const { payload } = await postToProfileService(session, requestPayload);
   const result = getPayloadResult(payload);
+
+  if (!hasProfileIdentity(result)) {
+    console.warn('WOWlife profile payload does not contain partner profile fields', sanitizeProfilePayload(payload));
+    const error = new Error('WOWlife profile response is empty');
+    error.statusCode = 502;
+    error.publicMessage = 'Сервис WOWlife profile.getProfile вернул пустой профиль. Проверьте, что текущая сессия содержит актуальные contactId/token, и войдите заново.';
+    error.upstreamPayload = sanitizeProfilePayload(payload);
+    throw error;
+  }
 
   return {
     item: normalizeProfile(result),
