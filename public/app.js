@@ -6,6 +6,39 @@ const logoutButton = document.querySelector('.logout-button');
 
 let currentUser = null;
 
+const SIGN_IN_PATH = '/authentication/sign-in';
+
+function getCurrentAppUrl() {
+  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+}
+
+function safeNextPath(value) {
+  const next = String(value || '').trim();
+  if (!next || !next.startsWith('/') || next.startsWith('//')) return '/#redeem';
+  if (next.startsWith(SIGN_IN_PATH)) return '/#redeem';
+  return next;
+}
+
+function ensureSignInPath() {
+  if (window.location.pathname === SIGN_IN_PATH) return;
+
+  const current = getCurrentAppUrl();
+  const next = current && current !== '/' ? current : '/#redeem';
+  window.history.replaceState({}, '', `${SIGN_IN_PATH}?next=${encodeURIComponent(next)}`);
+}
+
+function leaveSignInPathAfterAuth() {
+  if (window.location.pathname !== SIGN_IN_PATH) {
+    if (!window.location.hash) window.location.hash = '#redeem';
+    return;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const next = safeNextPath(params.get('next'));
+  window.history.replaceState({}, '', next);
+  if (!window.location.hash) window.location.hash = '#redeem';
+}
+
 const createRequestState = {
   items: [],
   selectedIds: new Set(),
@@ -127,8 +160,9 @@ function setAuthMode(isAuthenticated) {
 }
 
 function renderSignIn(message = '') {
+  ensureSignInPath();
   setAuthMode(false);
-  setHeader('Войдите, чтобы управлять данными');
+  setHeader('Вход в кабинет партнёра');
   setActiveNavigation('');
   stopQrScanner({ keepModalOpen: false });
   if (pushPrompt) {
@@ -137,27 +171,33 @@ function renderSignIn(message = '') {
   }
 
   app.innerHTML = `
-    <section class="auth-screen">
-      <div class="auth-card card">
-        <div class="auth-brand">
-          <img src="/assets/wowlife-logo.svg" alt="" />
-          <div>
-            <strong>Вход в кабинет партнёра</strong>
-            <span>Войдите, чтобы управлять данными</span>
+    <section class="auth-screen auth-screen-wakesurf">
+      <div class="auth-brand-panel" aria-hidden="true">
+        <img src="/assets/wowlife-logo.svg" alt="" />
+      </div>
+
+      <div class="auth-panel">
+        <div class="auth-panel-inner">
+          <div class="auth-heading">
+            <img class="auth-mobile-logo" src="/assets/wowlife-logo.svg" alt="" />
+            <h1>Вход в кабинет партнёра</h1>
+            <p>Войдите, чтобы управлять данными</p>
           </div>
+
+          <form id="signInForm" class="auth-form auth-form-wakesurf">
+            <div id="authNotice" class="${message ? 'notice error' : 'hidden'}">${escapeHtml(message)}</div>
+
+            <label>
+              <span>Логин</span>
+              <input name="login" type="text" inputmode="email" autocomplete="username" placeholder="Логин партнёрского кабинета" required />
+            </label>
+            <label>
+              <span>Пароль</span>
+              <input name="password" type="password" autocomplete="current-password" placeholder="••••••" required />
+            </label>
+            <button class="button auth-submit" type="submit">Войти</button>
+          </form>
         </div>
-        <form id="signInForm" class="auth-form">
-          <label>
-            <span>Логин</span>
-            <input name="login" type="text" inputmode="email" autocomplete="username" placeholder="Логин или email партнёрского кабинета" required />
-          </label>
-          <label>
-            <span>Пароль</span>
-            <input name="password" type="password" autocomplete="current-password" placeholder="Пароль" required />
-          </label>
-          <button class="button auth-submit" type="submit">Войти</button>
-          <div id="authNotice" class="${message ? 'notice error' : 'hidden'}">${escapeHtml(message)}</div>
-        </form>
       </div>
     </section>
   `;
@@ -185,6 +225,7 @@ async function handleSignInSubmit(event) {
 
     currentUser = result.user;
     setAuthMode(true);
+    leaveSignInPathAfterAuth();
     route();
     initializePushClient();
   } catch (error) {
@@ -202,6 +243,7 @@ async function initializeAuth() {
     const result = await api('/api/auth/me');
     currentUser = result.user;
     setAuthMode(true);
+    leaveSignInPathAfterAuth();
     return true;
   } catch (_error) {
     currentUser = null;
@@ -1245,6 +1287,10 @@ function route() {
   if (!currentUser) {
     renderSignIn();
     return;
+  }
+
+  if (window.location.pathname === SIGN_IN_PATH) {
+    leaveSignInPathAfterAuth();
   }
 
   stopQrScanner({ keepModalOpen: false });

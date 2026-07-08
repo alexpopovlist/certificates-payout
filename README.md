@@ -311,3 +311,13 @@ curl https://YOUR_DOMAIN/api/push/subscriptions/summary \
   - URL query: `...?certificateNumber=S00000001&secretCode=123456`
   - простая строка: `S00000001 123456`
 - Доступ к камере в production работает только по HTTPS. На локальной машине работает через `localhost`.
+
+### Роут экрана авторизации
+
+Экран авторизации доступен по прямому URL:
+
+```text
+/authentication/sign-in
+```
+
+Если пользователь не авторизован и открывает любой защищённый раздел, приложение переводит его на `/authentication/sign-in` и сохраняет исходный путь в `next`.
