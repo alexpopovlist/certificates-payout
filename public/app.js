@@ -18,7 +18,7 @@ const authUiState = {
 
 const SIGN_IN_PATH = '/authentication/sign-in';
 const DEFAULT_APP_PATH = '/redeem';
-const APP_ROUTES = new Set(['redeem', 'certificates', 'payments']);
+const APP_ROUTES = new Set(['redeem', 'certificates', 'payments', 'profile']);
 
 function getCurrentAppUrl() {
   return `${window.location.pathname}${window.location.search}`;
@@ -1480,6 +1480,179 @@ async function renderCertificateDetail(id) {
   }
 }
 
+
+function normalizeExternalUrl(value) {
+  const url = String(value || '').trim();
+  if (!url) return '';
+  if (/^(https?:|mailto:|tel:)/i.test(url)) return url;
+  if (url.includes('@') && !url.includes('/')) return `mailto:${url}`;
+  if (/^\+?[\d\s()\-]+$/.test(url)) return `tel:${url.replace(/[^+\d]/g, '')}`;
+  return `https://${url}`;
+}
+
+function profileEmpty(value = 'Не указано') {
+  return `<span class="profile-empty">${escapeHtml(value)}</span>`;
+}
+
+function profileText(value, fallback = 'Не указано') {
+  const text = String(value ?? '').trim();
+  return text ? escapeHtml(text) : profileEmpty(fallback);
+}
+
+function profileMultilineText(value, fallback = 'Не указано') {
+  const text = String(value ?? '').trim();
+  if (!text) return profileEmpty(fallback);
+  return escapeHtml(text).replaceAll('\n', '<br />');
+}
+
+function profileField(label, value, fallback = 'Не указано') {
+  return `<div class="profile-line"><span>${escapeHtml(label)}</span><strong>${profileText(value, fallback)}</strong></div>`;
+}
+
+function profileLink(value, label = value) {
+  const text = String(label || value || '').trim();
+  if (!text) return '';
+  const href = normalizeExternalUrl(value || text);
+  return href
+    ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`
+    : escapeHtml(text);
+}
+
+function profileInlineList(values, fallback = 'Не указано') {
+  const items = Array.isArray(values) ? values.filter((value) => String(value || '').trim()) : [];
+  if (items.length === 0) return profileEmpty(fallback);
+  return items.map((value) => profileLink(value)).join(', ');
+}
+
+function profileBulletList(values, fallback = 'Не указано') {
+  const items = Array.isArray(values) ? values.filter((value) => String(value || '').trim()) : [];
+  if (items.length === 0) return profileEmpty(fallback);
+  return `<ul class="profile-list">${items.map((value) => `<li>${profileMultilineText(value)}</li>`).join('')}</ul>`;
+}
+
+function profileInitials(title) {
+  const words = String(title || 'Профиль').trim().split(/\s+/).filter(Boolean);
+  const initials = words.slice(0, 2).map((word) => word[0]).join('').toUpperCase();
+  return initials || 'WL';
+}
+
+function profileDocumentsHtml(documents = []) {
+  const items = Array.isArray(documents) ? documents.filter((document) => document?.name || document?.url) : [];
+  if (items.length === 0) return profileEmpty('Документы не прикреплены');
+
+  return `<ul class="profile-documents">${items.map((document) => {
+    const name = document.name || 'Документ';
+    if (!document.url) return `<li>${escapeHtml(name)}</li>`;
+    return `<li><a href="${escapeHtml(document.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(name)}</a></li>`;
+  }).join('')}</ul>`;
+}
+
+function profileNotificationChannelsHtml(channels = []) {
+  const items = Array.isArray(channels) ? channels : [];
+  if (items.length === 0) return profileEmpty('Каналы не настроены');
+
+  return `
+    <div class="profile-channels">
+      ${items.map((channel) => `
+        <label class="profile-channel ${channel.enabled ? 'active' : ''}">
+          <span class="profile-checkbox" aria-hidden="true">${channel.enabled ? '✓' : ''}</span>
+          <span class="profile-channel-body">
+            <strong>${escapeHtml(channel.title || '')}</strong>
+            ${channel.note ? `<small>${escapeHtml(channel.note)}</small>` : ''}
+          </span>
+        </label>
+      `).join('')}
+    </div>
+  `;
+}
+
+function profileSection(title, body, extraClass = '') {
+  return `
+    <section class="card profile-section ${extraClass}">
+      <h2>${escapeHtml(title)}</h2>
+      <div class="profile-section-body">${body}</div>
+    </section>
+  `;
+}
+
+async function renderProfile() {
+  setHeader('Профиль');
+  setActiveNavigation('profile');
+  showLoading();
+
+  try {
+    const { item } = await api('/api/profile');
+    const profile = item || {};
+    const requisites = profile.requisites || {};
+    const work = profile.work || {};
+    const contactsBody = `
+      <div class="profile-line"><span>Сайты</span><strong>${profileInlineList(profile.sites, 'Не указаны')}</strong></div>
+      ${profileField('Почта', profile.email, 'Не указана')}
+      ${profileField('Телефон', profile.phone, 'Не указан')}
+      ${profileField('Контакт ОЛ', profile.openLineContact, 'Не указан')}
+      ${profileField('Почта ОЛ', profile.openLineEmail, 'Не указана')}
+      ${profileField('Телефон ОЛ', profile.openLinePhone, 'Не указан')}
+      ${profileField('Локация', profile.location, 'Не указана')}
+    `;
+    const workItems = [];
+    if (Array.isArray(work.addresses) && work.addresses.length > 0) {
+      workItems.push(`<div class="profile-block-label">Адреса проведения услуг</div>${profileBulletList(work.addresses)}`);
+    }
+    if (work.schedule) {
+      workItems.push(`<div class="profile-block-label">Рабочее время / расписание</div><p>${profileMultilineText(work.schedule)}</p>`);
+    }
+    if (work.cancellationPolicy) {
+      workItems.push(`<div class="profile-block-label">Правила отмены</div><p>${profileMultilineText(work.cancellationPolicy)}</p>`);
+    }
+
+    const documentsBody = `
+      <div class="profile-block-label">Прикрепленный договор (PDF, DOCX)</div>
+      ${profileDocumentsHtml(profile.documents)}
+    `;
+    const requisitesBody = `
+      ${profileField('Название юридического лица', requisites.legalName)}
+      ${profileField('ИНН', requisites.inn)}
+      ${profileField('ОГРНИП', requisites.ogrnip)}
+      ${profileField('КПП', requisites.kpp)}
+      ${profileField('ОГРН', requisites.ogrn)}
+      ${requisites.bankName ? profileField('Банк', requisites.bankName) : ''}
+      ${requisites.accountNumber ? profileField('Расчетный счет', requisites.accountNumber) : ''}
+      ${requisites.bik ? profileField('БИК', requisites.bik) : ''}
+    `;
+
+    app.innerHTML = `
+      <div class="profile-page">
+        <section class="card profile-hero">
+          <div class="profile-hero-main">
+            ${profile.profilePhotoUrl
+              ? `<img class="profile-avatar" src="${escapeHtml(profile.profilePhotoUrl)}" alt="" />`
+              : `<div class="profile-avatar profile-avatar-fallback">${escapeHtml(profileInitials(profile.title))}</div>`}
+            <div>
+              <h2>${escapeHtml(profile.title || 'Профиль партнёра')}</h2>
+              <p>${profileText(profile.description, 'Описание компании')}</p>
+            </div>
+          </div>
+          <div class="profile-actions">
+            <button class="button secondary" type="button" disabled>Заявка на модерацию</button>
+            <button class="button secondary" type="button" disabled>Пароль</button>
+          </div>
+        </section>
+
+        <div class="profile-grid">
+          ${profileSection('Контакты', contactsBody)}
+          ${profileSection('Канал связи для уведомлений', profileNotificationChannelsHtml(profile.notificationChannels))}
+          ${profileSection('Локация и рабочее время', workItems.length ? workItems.join('') : profileEmpty('Информация не указана'))}
+          ${profileSection('Документы', documentsBody)}
+          ${profileSection('Финансовые реквизиты', requisitesBody)}
+          ${profileSection('Дополнительная информация', profile.additionalInfo ? `<p>${profileMultilineText(profile.additionalInfo)}</p>` : profileEmpty('Информация не указана'))}
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    showError(error);
+  }
+}
+
 async function renderPayments() {
   setHeader('Заявки на оплату');
   setActiveNavigation('payments');
@@ -1801,6 +1974,7 @@ function route() {
   if (root === 'redeem') return renderRedeem();
   if (root === 'certificates' && id) return renderCertificateDetail(id);
   if (root === 'certificates') return renderCertificates();
+  if (root === 'profile') return renderProfile();
   if (root === 'payments' && id === 'create') return renderCreatePayment();
   if (root === 'payments' && id) return renderPaymentDetail(id);
   if (root === 'payments') return renderPayments();

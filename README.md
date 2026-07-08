@@ -424,3 +424,19 @@ CERTIFICATES_GROUP_IDS=new,waiting,confirmed,visited,verification,paid,canceled,
 ```
 
 Если пользователь не авторизован и открывает любой защищённый раздел, приложение переводит его на `/authentication/sign-in` и сохраняет исходный путь в `next`.
+
+## Профиль партнёра
+
+Добавлен экран `/profile`. Данные профиля берутся из WOWlife:
+
+```http
+POST https://partner-wowlife.ru/restapi/profile.getProfile
+```
+
+Backend отправляет `cabinet`, `contactId` и `token` из текущей авторизационной сессии партнёра. URL можно переопределить через переменную окружения:
+
+```env
+PROFILE_SERVICE_URL=https://partner-wowlife.ru/restapi/profile.getProfile
+```
+
+На экране отображаются блоки: контакты, каналы связи для уведомлений, локация и рабочее время, документы, финансовые реквизиты и дополнительная информация.
