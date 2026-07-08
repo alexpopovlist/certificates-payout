@@ -1879,10 +1879,10 @@ body:not(.is-login) .sidebar {
 }
 
 body:not(.is-login) .brand {
-  min-height: 176px;
-  height: auto;
+  min-height: 56px;
+  height: 56px;
   margin: 0;
-  padding: 2mm;
+  padding: 2mm 12px;
   border-bottom: 1px solid #e2e8f0;
   gap: 10px;
   font-size: 16px;
@@ -1891,7 +1891,7 @@ body:not(.is-login) .brand {
 body:not(.is-login) .brand img {
   width: 160px;
   height: auto;
-  max-height: 160px;
+  max-height: calc(56px - 4mm);
   object-fit: contain;
 }
 
@@ -2521,10 +2521,6 @@ body:not(.is-login) .multiselect-option[aria-selected="true"] .multiselect-check
 }
 
 /* Profile page */
-body:not(.is-login) .brand {
-  padding: 2mm 12px;
-}
-
 .nav-icon-svg svg {
   display: block;
   width: 26px;
