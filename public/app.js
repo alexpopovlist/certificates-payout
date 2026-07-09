@@ -79,6 +79,11 @@ const certificatesListState = {
   itemsById: new Map()
 };
 
+const scheduleProfileCache = {
+  item: null,
+  promise: null
+};
+
 const certificateStatus = {
   NEW: { label: 'Новый', className: '' },
   REDEEMED: { label: 'Погашен', className: 'redeemed' },
@@ -1796,6 +1801,22 @@ function closeCertificateScheduleDialog() {
   document.querySelector('#certificateScheduleModal')?.remove();
 }
 
+async function getScheduleProfile() {
+  if (scheduleProfileCache.item) return scheduleProfileCache.item;
+  if (!scheduleProfileCache.promise) {
+    scheduleProfileCache.promise = api('/api/profile')
+      .then((response) => {
+        scheduleProfileCache.item = response.item || null;
+        return scheduleProfileCache.item;
+      })
+      .catch((error) => {
+        scheduleProfileCache.promise = null;
+        throw error;
+      });
+  }
+  return scheduleProfileCache.promise;
+}
+
 async function openCertificateScheduleDialog(item = {}, options = {}) {
   closeCertificateScheduleDialog();
   document.body.insertAdjacentHTML('beforeend', `
@@ -1817,8 +1838,7 @@ async function openCertificateScheduleDialog(item = {}, options = {}) {
 
   let profile = null;
   try {
-    const response = await api('/api/profile');
-    profile = response.item || null;
+    profile = await getScheduleProfile();
   } catch (_error) {
     profile = null;
   }

@@ -21,7 +21,7 @@ function getProfileUrl() {
 }
 
 function getAuthCabinet() {
-  return process.env.AUTH_CABINET || 'partner';
+  return process.env.PROFILE_CABINET || process.env.AUTH_PROFILE_CABINET || 'partnerLow';
 }
 
 function getAuthDomain() {
@@ -71,6 +71,28 @@ function getSetCookieHeaders(headers) {
   return value ? [value] : [];
 }
 
+const profileResponseCache = new Map();
+const PROFILE_CACHE_TTL_MS = Number.parseInt(process.env.PROFILE_CACHE_TTL_MS || '300000', 10);
+
+function getProfileCacheKey(contactId, token) {
+  return [getProfileUrl(), getAuthCabinet(), String(contactId || ''), String(token || '').slice(-12)].join('|');
+}
+
+function getCachedProfile(cacheKey) {
+  const cached = profileResponseCache.get(cacheKey);
+  if (!cached) return null;
+  if (Date.now() - cached.createdAt > PROFILE_CACHE_TTL_MS) {
+    profileResponseCache.delete(cacheKey);
+    return null;
+  }
+  return cached.value;
+}
+
+function setCachedProfile(cacheKey, value) {
+  if (!PROFILE_CACHE_TTL_MS || PROFILE_CACHE_TTL_MS <= 0) return;
+  profileResponseCache.set(cacheKey, { createdAt: Date.now(), value });
+}
+
 function getServiceErrorMessage(payload) {
   return payload?.error || payload?.message || payload?.errorMessage || payload?.result?.error || payload?.result?.message;
 }
@@ -79,11 +101,22 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function unwrapProfileContainer(value) {
+  if (Array.isArray(value)) return value[0] || {};
+  if (!isPlainObject(value)) return value || {};
+
+  if (isPlainObject(value[0])) return value[0];
+  if (isPlainObject(value['0'])) return value['0'];
+
+  const numericKey = Object.keys(value).find((key) => /^\d+$/.test(key) && isPlainObject(value[key]));
+  return numericKey ? value[numericKey] : value;
+}
+
 function getPayloadResult(payload) {
-  if (isPlainObject(payload?.result)) return payload.result;
-  if (isPlainObject(payload?.data)) return payload.data;
-  if (isPlainObject(payload?.response)) return payload.response;
-  return payload;
+  if (isPlainObject(payload?.result) || Array.isArray(payload?.result)) return unwrapProfileContainer(payload.result);
+  if (isPlainObject(payload?.data) || Array.isArray(payload?.data)) return unwrapProfileContainer(payload.data);
+  if (isPlainObject(payload?.response) || Array.isArray(payload?.response)) return unwrapProfileContainer(payload.response);
+  return unwrapProfileContainer(payload);
 }
 
 function hasProfileIdentity(profile) {
@@ -152,6 +185,19 @@ function normalizeFiles(files) {
   }));
 }
 
+function normalizeContactValue(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string' || typeof value === 'number') return String(value).trim();
+  if (isPlainObject(value)) {
+    return String(value.VALUE || value.value || value.EMAIL || value.PHONE || value.phone || value.email || '').trim();
+  }
+  return '';
+}
+
+function firstContactValue(value) {
+  return asArray(value).map(normalizeContactValue).find(Boolean) || null;
+}
+
 function normalizeSites(profile) {
   return asArray(profile.WEB || profile.web).map((item) => {
     if (typeof item === 'string') return item;
@@ -181,8 +227,8 @@ function normalizeProfile(rawProfile) {
     title: profile.TITLE || profile.title || 'Профиль партнёра',
     description: profile.DESCRIPTION || profile.description || profile.UF_CRM_1684102058711 || '',
     industry: profile.INDUSTRY || profile.industry || null,
-    phone: profile.PHONE || profile.phone || null,
-    email: profile.EMAIL || profile.email || null,
+    phone: firstContactValue(profile.PHONE || profile.phone),
+    email: firstContactValue(profile.EMAIL || profile.email),
     sites: normalizeSites(profile),
     location: profile.UF_CRM_1684102866982 || profile.ADDRESS_CITY || profile.ADDRESS || null,
     openLineContact: profile.OPEN_LINE_CONTACT || profile.UF_CRM_1689949947876 || null,
@@ -285,7 +331,13 @@ async function fetchPartnerProfile({ session }) {
     requestPayload.domain = getAuthDomain();
   }
 
-  const { payload } = await postToProfileService(session, requestPayload);
+  const cacheKey = getProfileCacheKey(contactId, token);
+  const cachedResult = getCachedProfile(cacheKey);
+  const payload = cachedResult || (await postToProfileService(session, requestPayload)).payload;
+  if (!cachedResult) {
+    setCachedProfile(cacheKey, payload);
+  }
+
   const result = getPayloadResult(payload);
 
   if (!hasProfileIdentity(result)) {
