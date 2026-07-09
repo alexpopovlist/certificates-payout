@@ -2,6 +2,10 @@ const DEFAULT_AUTH_BASE_URL = 'https://partner-wowlife.ru';
 const DEFAULT_CERTIFICATES_PATH = '/restapi/certificate.getPartnerCertificates';
 const DEFAULT_CHANGE_STAGE_PATH = '/restapi/certificate.changeCertificateStage';
 const DEFAULT_REDEEM_INFO_PATH = '/restapi/certificate.getCertificateForRedeem';
+const DEFAULT_REDEEM_CERTIFICATE_PATH = '/restapi/certificate.redeemCertificate';
+const DEFAULT_SCHEDULE_TIME_ZONE = 'Europe/Moscow';
+
+const { fetchPartnerProfile } = require('./profileService');
 
 const DEFAULT_GROUP_IDS = [
   'new',
@@ -53,6 +57,14 @@ function getRedeemInfoUrl() {
     process.env.CERTIFICATE_REDEEM_INFO_URL || process.env.CERTIFICATE_INFO_FOR_REDEEM_URL,
     process.env.CERTIFICATE_REDEEM_INFO_PATH || process.env.CERTIFICATE_INFO_FOR_REDEEM_PATH,
     DEFAULT_REDEEM_INFO_PATH
+  );
+}
+
+function getRedeemCertificateUrl() {
+  return resolveUrl(
+    process.env.CERTIFICATE_REDEEM_URL || process.env.CERTIFICATE_REDEEM_CERTIFICATE_URL,
+    process.env.CERTIFICATE_REDEEM_PATH || process.env.CERTIFICATE_REDEEM_CERTIFICATE_PATH,
+    DEFAULT_REDEEM_CERTIFICATE_PATH
   );
 }
 
@@ -550,6 +562,163 @@ async function fetchPartnerCertificateForRedeem({ session, body = {} }) {
   }
 }
 
+
+function getNewStageId() {
+  return process.env.CERTIFICATE_NEW_STAGE_ID || 'C2:UC_MCMFWK';
+}
+
+function normalizeStatusValues(item = {}) {
+  return [
+    item.status,
+    item.statusLabel,
+    item.stageGroupId,
+    item.stageId,
+    item.raw?.STAGE_ID,
+    item.raw?.STAGE?.id,
+    item.raw?.STAGE?.group_id,
+    item.raw?.STAGE?.group_title,
+    item.raw?.IS_NEW
+  ].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
+}
+
+function isNewCertificateForRedeem(item = {}) {
+  const newStageId = String(getNewStageId()).trim().toLowerCase();
+  return normalizeStatusValues(item).some((value) => {
+    if (value === 'new' || value === 'новый' || value === 'новая заявка') return true;
+    if (value === 'y') return true;
+    if (newStageId && value === newStageId) return true;
+    return /(:|^)new$/.test(value);
+  });
+}
+
+function isConfirmedCertificateForRedeem(item = {}) {
+  const scheduleStageId = String(getDefaultScheduleStageId()).trim().toLowerCase();
+  return normalizeStatusValues(item).some((value) => {
+    if (value === 'confirmed' || value === 'подтвержден' || value === 'подтверждён' || value === 'записан') return true;
+    if (scheduleStageId && value === scheduleStageId) return true;
+    return false;
+  });
+}
+
+function formatCurrentDateTime(timeZone = process.env.CERTIFICATE_SCHEDULE_TIME_ZONE || DEFAULT_SCHEDULE_TIME_ZONE) {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(now).reduce((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    time: `${parts.hour}:${parts.minute}`
+  };
+}
+
+function getRawProfileAddresses(profile = {}) {
+  const values = profile?.raw?.UF_CRM_1692176867840 || profile?.work?.addresses || [];
+  return Array.isArray(values) ? values.map((value) => String(value || '').trim()).filter(Boolean) : [];
+}
+
+function getDefaultSchedulePhone(item = {}, profile = {}) {
+  const phones = Array.isArray(item.customerPhones) ? item.customerPhones : [];
+  return item.customerPhone || phones[0] || profile.phone || '';
+}
+
+function buildAutomaticSchedulePayload(item = {}, profile = {}) {
+  const addressArray = getRawProfileAddresses(profile);
+  const address = addressArray[0] || '';
+  const { date, time } = formatCurrentDateTime();
+
+  if (!address) {
+    const error = new Error('Profile address is missing');
+    error.statusCode = 400;
+    error.publicMessage = 'Для записи сертификата не найден адрес в профиле партнёра.';
+    throw error;
+  }
+
+  return buildSchedulePayload({
+    dealId: item.externalId || item.id,
+    id: item.id,
+    title: item.service || item.title || item.certificateNumber || 'Сертификат',
+    date,
+    time,
+    phone: getDefaultSchedulePhone(item, profile),
+    address,
+    addressArray,
+    notes: '',
+    cancel: '',
+    datetime: `${date}T${time}:00`,
+    stageId: getDefaultScheduleStageId()
+  });
+}
+
+async function redeemPartnerCertificateById({ session, certificateId }) {
+  const normalizedCertificateId = normalizeDealId(certificateId);
+  if (!normalizedCertificateId) {
+    const error = new Error('Certificate id is required for redeem');
+    error.statusCode = 400;
+    error.publicMessage = 'Не указан идентификатор сертификата для погашения.';
+    throw error;
+  }
+
+  const requestPayload = { certificateId: normalizedCertificateId };
+
+  try {
+    const { payload } = await postJsonToPartnerService(session, getRedeemCertificateUrl(), requestPayload, '/redeem');
+    const result = getPayloadResult(payload) || {};
+    return {
+      raw: result,
+      source: 'wowlife',
+      request: requestPayload
+    };
+  } catch (error) {
+    if (!error.publicMessage || error.publicMessage === 'Не удалось выполнить запрос в сервис WOWlife.') {
+      error.publicMessage = 'Не удалось погасить сертификат в сервисе WOWlife.';
+    }
+    throw error;
+  }
+}
+
+async function redeemPartnerCertificate({ session, body = {} }) {
+  const info = await fetchPartnerCertificateForRedeem({ session, body });
+  const item = info.item;
+  const certificateId = item.externalId || item.id;
+  let scheduleResult = null;
+
+  if (isNewCertificateForRedeem(item)) {
+    const { item: profile } = await fetchPartnerProfile({ session });
+    const schedulePayload = buildAutomaticSchedulePayload(item, profile);
+    const { payload } = await postJsonToPartnerService(session, getChangeStageUrl(), schedulePayload, '/certificates');
+    scheduleResult = getPayloadResult(payload) || {};
+  }
+
+  const redeemResult = await redeemPartnerCertificateById({ session, certificateId });
+
+  return {
+    item: {
+      ...item,
+      status: 'REDEEMED',
+      statusLabel: 'Погашен',
+      redeemed: true,
+      rawRedeem: redeemResult.raw,
+      rawSchedule: scheduleResult
+    },
+    source: 'wowlife',
+    request: {
+      certificateId,
+      scheduledBeforeRedeem: Boolean(scheduleResult),
+      directRedeem: isConfirmedCertificateForRedeem(item) || !scheduleResult
+    }
+  };
+}
+
 async function changePartnerCertificateStage({ session, body = {} }) {
   const requestPayload = buildSchedulePayload(body);
 
@@ -579,6 +748,8 @@ module.exports = {
   fetchPartnerCertificates,
   fetchPartnerCertificateById,
   fetchPartnerCertificateForRedeem,
+  redeemPartnerCertificate,
+  redeemPartnerCertificateById,
   changePartnerCertificateStage,
   DEFAULT_GROUP_IDS
 };

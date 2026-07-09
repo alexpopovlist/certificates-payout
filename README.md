@@ -512,6 +512,8 @@ Payload формируется в формате:
 ```env
 CERTIFICATE_STAGE_CHANGE_URL=https://partner-wowlife.ru/restapi/certificate.changeCertificateStage
 CERTIFICATE_SCHEDULE_STAGE_ID=C2:UC_4Q05NY
+CERTIFICATE_NEW_STAGE_ID=C2:UC_MCMFWK
+CERTIFICATE_SCHEDULE_TIME_ZONE=Europe/Moscow
 ```
 
 ### Просмотр данных сертификата перед погашением
@@ -520,6 +522,7 @@ CERTIFICATE_SCHEDULE_STAGE_ID=C2:UC_4Q05NY
 
 ```env
 CERTIFICATE_REDEEM_INFO_URL=https://partner-wowlife.ru/restapi/certificate.getCertificateForRedeem
+CERTIFICATE_REDEEM_URL=https://partner-wowlife.ru/restapi/certificate.redeemCertificate
 ```
 
 Backend формирует payload из номера сертификата, секретного кода и `allIds` текущей авторизованной сессии, например:

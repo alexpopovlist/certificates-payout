@@ -5,6 +5,7 @@ const {
   fetchPartnerCertificates,
   fetchPartnerCertificateById,
   fetchPartnerCertificateForRedeem,
+  redeemPartnerCertificate,
   changePartnerCertificateStage
 } = require('../services/partnerCertificateService');
 
@@ -238,6 +239,21 @@ router.post('/redeem', async (request, response, next) => {
   }
 
   try {
+    if (shouldUseCertificatesService()) {
+      const result = await redeemPartnerCertificate({
+        session: request.auth,
+        body: request.body
+      });
+
+      sendPushInBackground({
+        title: 'Сертификат погашен',
+        body: `${result.item.certificateNumber} · ${result.item.title}`,
+        url: `/certificates/${result.item.id}`
+      });
+
+      return response.status(201).json(result);
+    }
+
     const certificate = await withTransaction(async (client) => {
       const found = await client.query(
         `
