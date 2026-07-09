@@ -3371,3 +3371,31 @@ body:not(.is-login) .services-name-cell {
     width: 100%;
   }
 }
+
+/* Desktop certificates table: use the same table language as reconciliations. */
+.certificates-table-card .table-wrapper table {
+  min-width: 980px;
+}
+
+.certificate-table-row {
+  cursor: pointer;
+}
+
+.certificate-table-row:hover td {
+  background: rgba(47, 126, 231, 0.04);
+}
+
+.certificate-table-row:focus-visible {
+  outline: 3px solid rgba(47, 126, 231, 0.28);
+  outline-offset: -3px;
+}
+
+.table-actions-cell {
+  min-width: 144px;
+  text-align: right;
+}
+
+.table-action-button {
+  min-width: 116px;
+  padding-inline: 18px;
+}

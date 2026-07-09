@@ -862,13 +862,8 @@ function renderPushPrompt(message, type = '') {
         return;
       }
 
-      pushPrompt.className = 'push-prompt';
-      pushPrompt.innerHTML = `
-        <div>
-          <strong>Добавьте приложение на экран телефона</strong>
-          <span>После запуска из ярлыка можно включить PUSH-уведомления.</span>
-        </div>
-      `;
+      pushPrompt.className = 'push-prompt hidden';
+      pushPrompt.innerHTML = '';
       return;
     }
 
@@ -1840,11 +1835,23 @@ function renderCertificatesResult(data, emptyText = 'Погашенных сер
   const pagination = document.querySelector('#certificatesPagination');
   if (!list) return;
 
-  certificatesListState.itemsById = new Map((data.items || []).map((item) => [String(item.id), item]));
+  const items = data.items || [];
+  certificatesListState.itemsById = new Map(items.map((item) => [String(item.id), item]));
 
-  list.innerHTML = data.items?.length
-    ? data.items.map(certificateCard).join('')
-    : `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
+  if (items.length) {
+    list.className = 'card table-card certificates-table-card';
+    list.innerHTML = `
+      <div class="table-header">
+        <div>
+          <h2>Сертификаты</h2>
+        </div>
+      </div>
+      ${certificatesTable(items, { selectable: false, linkNumbers: true, scheduleActions: true, rowLinks: true })}
+    `;
+  } else {
+    list.className = 'card table-card certificates-table-card';
+    list.innerHTML = `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
+  }
 
   bindCertificateListActions(list);
 
@@ -1930,7 +1937,7 @@ async function renderCertificates() {
           <button id="applyCertificateFilters" class="button filter-apply certificate-apply-button" type="button">Применить</button>
         </div>
       </div>
-      <div id="certificatesList" class="list"><div class="loading-card">Загрузка...</div></div>
+      <section id="certificatesList" class="card table-card certificates-table-card"><div class="loading-card">Загрузка...</div></section>
       <div id="certificatesPagination"></div>
     </div>
   `;
@@ -1956,7 +1963,10 @@ async function loadFilteredCertificates(page = 1, emptyText = 'По выбран
 
   const list = document.querySelector('#certificatesList');
   const pagination = document.querySelector('#certificatesPagination');
-  if (list) list.innerHTML = '<div class="loading-card">Загрузка...</div>';
+  if (list) {
+    list.className = 'card table-card certificates-table-card';
+    list.innerHTML = '<div class="loading-card">Загрузка...</div>';
+  }
   if (pagination) pagination.innerHTML = '';
 
   try {
@@ -2917,6 +2927,8 @@ async function createPaymentRequest() {
 function certificatesTable(certificates, options = {}) {
   const selectable = Boolean(options.selectable);
   const linkNumbers = Boolean(options.linkNumbers);
+  const scheduleActions = Boolean(options.scheduleActions);
+  const rowLinks = Boolean(options.rowLinks);
 
   const certificateNumberMarkup = (certificate) => {
     const number = escapeHtml(certificate.certificateNumber);
@@ -2929,13 +2941,22 @@ function certificatesTable(certificates, options = {}) {
     return `<a class="certificate-number-link" href="/certificates/${escapeHtml(certificate.id)}" aria-label="Открыть сертификат ${number}">${content}</a>`;
   };
 
+  const scheduleActionMarkup = (certificate) => {
+    if (!scheduleActions || !isNewCertificateStatus(certificate)) return '—';
+
+    return `<button class="button certificate-list-action table-action-button" type="button" data-certificate-schedule-id="${escapeHtml(certificate.id)}">Записать</button>`;
+  };
+
   const rows = certificates.map((certificate) => {
     const checkbox = selectable
       ? `<td class="checkbox-cell"><input data-certificate-checkbox type="checkbox" value="${escapeHtml(certificate.id)}" checked /></td>`
       : '';
+    const rowLinkAttributes = rowLinks && certificate.id
+      ? ` class="certificate-table-row" data-certificate-link="/certificates/${escapeHtml(certificate.id)}" tabindex="0" role="link"`
+      : '';
 
     return `
-      <tr>
+      <tr${rowLinkAttributes}>
         ${checkbox}
         <td>${certificateNumberMarkup(certificate)}</td>
         <td>${escapeHtml(certificate.title)}</td>
@@ -2943,6 +2964,7 @@ function certificatesTable(certificates, options = {}) {
         <td>${escapeHtml(certificate.customerFullName || '—')}</td>
         <td><strong>${formatMoney(certificate.amountCents)}</strong></td>
         <td>${statusHtml(certificateStatus, certificate.status, certificate.statusLabel)}</td>
+        ${scheduleActions ? `<td class="table-actions-cell">${scheduleActionMarkup(certificate)}</td>` : ''}
       </tr>
     `;
   }).join('');
@@ -2951,10 +2973,13 @@ function certificatesTable(certificates, options = {}) {
     const checkbox = selectable
       ? `<input data-certificate-checkbox type="checkbox" value="${escapeHtml(certificate.id)}" checked />`
       : '';
+    const cardLinkAttributes = rowLinks && certificate.id
+      ? ` data-certificate-link="/certificates/${escapeHtml(certificate.id)}" role="link" tabindex="0"`
+      : '';
 
     if (!selectable) {
       return `
-        <article class="card certificate-card certificate-table-mobile-card">
+        <article class="card certificate-card certificate-table-mobile-card ${rowLinks ? 'certificate-card-clickable' : ''}"${cardLinkAttributes}>
           <div class="card-topline">
             <div class="card-title">${certificateNumberMarkup(certificate)}</div>
             <div class="money">${formatPlainMoney(certificate.amountCents)}</div>
@@ -2968,6 +2993,11 @@ function certificatesTable(certificates, options = {}) {
           <div class="status-row certificate-table-mobile-client">
             <span>Клиент: ${escapeHtml(certificate.customerFullName || '—')}</span>
           </div>
+          ${scheduleActions && isNewCertificateStatus(certificate) ? `
+            <div class="certificate-card-actions">
+              <button class="button certificate-list-action" type="button" data-certificate-schedule-id="${escapeHtml(certificate.id)}">Записать</button>
+            </div>
+          ` : ''}
         </article>
       `;
     }
@@ -3000,6 +3030,7 @@ function certificatesTable(certificates, options = {}) {
             <th>Клиент</th>
             <th>Сумма</th>
             <th>Статус</th>
+            ${scheduleActions ? '<th>Действия</th>' : ''}
           </tr>
         </thead>
         <tbody>${rows}</tbody>
