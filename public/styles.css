@@ -871,7 +871,7 @@ input[type="checkbox"] {
     z-index: 20;
     height: 92px;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     background: rgba(255, 255, 255, 0.96);
     border-top: 1px solid var(--line);
     box-shadow: 0 -8px 24px rgba(31, 41, 55, 0.08);
@@ -2735,7 +2735,7 @@ body:not(.is-login) .multiselect-option[aria-selected="true"] .multiselect-check
 
 @media (max-width: 920px) {
   body:not(.is-login) .bottom-nav {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
   }
 
   .profile-hero {
@@ -3149,5 +3149,22 @@ body:not(.is-login) .schedule-field label {
   .schedule-field input[type="time"]::-webkit-date-and-time-value {
     min-width: 0;
     text-align: left;
+  }
+}
+
+
+.reconciliations-page .summary-card {
+  align-items: center;
+}
+
+@media (max-width: 920px) {
+  body:not(.is-login) .bottom-nav a {
+    font-size: 11px;
+    gap: 4px;
+  }
+
+  body:not(.is-login) .bottom-nav .nav-icon {
+    width: 28px;
+    height: 28px;
   }
 }

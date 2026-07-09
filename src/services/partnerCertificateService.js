@@ -361,6 +361,40 @@ async function fetchPartnerCertificates({ session, query = {}, page, limit, orde
   };
 }
 
+async function fetchPartnerVisitedCertificatesForReconciliation({ session }) {
+  const allIds = getSessionAllIds(session);
+
+  if (allIds.length === 0) {
+    const error = new Error('No partner identifiers in session');
+    error.statusCode = 401;
+    error.publicMessage = 'В сессии не найден идентификатор партнёра. Войдите в приложение заново.';
+    throw error;
+  }
+
+  const requestPayload = {
+    page: 1,
+    limit: 1000,
+    groupIds: ['visited'],
+    allIds
+  };
+
+  const { payload } = await postToCertificatesService(session, requestPayload);
+  const result = getPayloadResult(payload) || {};
+  const data = Array.isArray(result.data) ? result.data : [];
+  const pagination = normalizePagination(result.pagination, requestPayload);
+
+  return {
+    items: data.map(mapCertificate),
+    pagination,
+    source: 'wowlife',
+    request: {
+      page: requestPayload.page,
+      limit: requestPayload.limit,
+      groupIds: requestPayload.groupIds
+    }
+  };
+}
+
 function isSameCertificate(item, id) {
   const normalizedId = String(id || '').trim();
   return String(item.id) === normalizedId || String(item.externalId || '') === normalizedId || String(item.certificateNumber) === normalizedId;
@@ -756,6 +790,7 @@ async function changePartnerCertificateStage({ session, body = {} }) {
 
 module.exports = {
   fetchPartnerCertificates,
+  fetchPartnerVisitedCertificatesForReconciliation,
   fetchPartnerCertificateById,
   fetchPartnerCertificateForRedeem,
   redeemPartnerCertificate,

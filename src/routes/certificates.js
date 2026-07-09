@@ -3,6 +3,7 @@ const { query, withTransaction } = require('../db');
 const { broadcastPush } = require('../services/pushService');
 const {
   fetchPartnerCertificates,
+  fetchPartnerVisitedCertificatesForReconciliation,
   fetchPartnerCertificateById,
   fetchPartnerCertificateForRedeem,
   redeemPartnerCertificate,
@@ -156,6 +157,35 @@ async function fetchDbRedeemedCertificates(filters) {
   };
 }
 
+
+async function fetchDbReconciliationCertificates() {
+  const { rows } = await query(
+    `
+      SELECT
+        c.*,
+        pri.payment_request_id,
+        pr.status AS payment_request_status
+      FROM certificates c
+      LEFT JOIN payment_request_items pri ON pri.certificate_id = c.id
+      LEFT JOIN payment_requests pr ON pr.id = pri.payment_request_id
+      WHERE c.status = 'REDEEMED'
+      ORDER BY c.redeemed_at DESC, c.created_at DESC
+      LIMIT 1000
+    `
+  );
+
+  return {
+    items: rows.map(toCertificateDto),
+    pagination: {
+      currentPage: 1,
+      limit: 1000,
+      totalItems: rows.length,
+      totalPages: 1
+    },
+    source: 'database'
+  };
+}
+
 async function fetchDbCertificateById(id) {
   const normalizedId = String(id || '').trim();
   if (!normalizedId) {
@@ -189,6 +219,19 @@ async function fetchDbCertificateById(id) {
 
   return toCertificateDto(rows[0]);
 }
+
+
+router.get('/reconciliations', async (request, response, next) => {
+  try {
+    const data = shouldUseCertificatesService()
+      ? await fetchPartnerVisitedCertificatesForReconciliation({ session: request.auth })
+      : await fetchDbReconciliationCertificates();
+
+    response.json(data);
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get('/redeemed', async (request, response, next) => {
   try {

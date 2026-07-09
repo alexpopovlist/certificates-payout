@@ -18,7 +18,7 @@ const authUiState = {
 
 const SIGN_IN_PATH = '/authentication/sign-in';
 const DEFAULT_APP_PATH = '/redeem';
-const APP_ROUTES = new Set(['redeem', 'certificates', 'payments', 'profile']);
+const APP_ROUTES = new Set(['redeem', 'certificates', 'reconciliations', 'payments', 'profile']);
 
 const MOBILE_DIALOG_QUERY = '(max-width: 680px)';
 
@@ -106,6 +106,10 @@ const certificatesListState = {
   page: 1,
   limit: 20,
   itemsById: new Map()
+};
+
+const reconciliationsState = {
+  items: []
 };
 
 const scheduleProfileCache = {
@@ -2305,6 +2309,83 @@ async function renderProfile() {
   }
 }
 
+
+function renderReconciliationsTable(items = []) {
+  const container = document.querySelector('#reconciliationsTable');
+  if (!container) return;
+
+  if (items.length === 0) {
+    container.innerHTML = `
+      <div class="table-header">
+        <div>
+          <h2>Сертификаты для сверки</h2>
+          <p>Нет сертификатов в статусе «Посетил».</p>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const tableItems = items.map((item) => ({
+    ...item,
+    statusLabel: null
+  }));
+
+  container.innerHTML = `
+    <div class="table-header">
+      <div>
+        <h2>Сертификаты для сверки</h2>
+        <p>${items.length} ${declension(items.length, ['сертификат', 'сертификата', 'сертификатов'])} в статусе «Посетил».</p>
+      </div>
+    </div>
+    ${certificatesTable(tableItems, { selectable: false })}
+  `;
+}
+
+async function renderReconciliations() {
+  setHeader('Сверки');
+  setActiveNavigation('reconciliations');
+  showLoading();
+
+  app.innerHTML = `
+    <div class="stack reconciliations-page">
+      <section class="card summary-card">
+        <div>
+          <div class="summary-label">Сертификаты в статусе «Посетил»</div>
+          <div id="reconciliationsSummary" class="summary-amount">—</div>
+        </div>
+        <button id="createReconciliation" class="button" type="button">Создать сверку</button>
+      </section>
+      <div id="reconciliationNotice" class="notice hidden"></div>
+      <section id="reconciliationsTable" class="card table-card">
+        <div class="loading-card">Загрузка...</div>
+      </section>
+    </div>
+  `;
+
+  const notice = document.querySelector('#reconciliationNotice');
+  const createButton = document.querySelector('#createReconciliation');
+  createButton?.addEventListener('click', () => {
+    if (!notice) return;
+    notice.className = 'notice';
+    notice.textContent = 'Кнопка добавлена. Модель создания сверки будет подключена после описания запроса.';
+  });
+
+  try {
+    const data = await api('/api/certificates/reconciliations');
+    reconciliationsState.items = data.items || [];
+    const summary = document.querySelector('#reconciliationsSummary');
+    if (summary) {
+      const totalAmountCents = reconciliationsState.items.reduce((sum, item) => sum + Number(item.amountCents || 0), 0);
+      summary.textContent = `${reconciliationsState.items.length} · ${formatMoney(totalAmountCents)}`;
+    }
+    renderReconciliationsTable(reconciliationsState.items);
+  } catch (error) {
+    const table = document.querySelector('#reconciliationsTable');
+    if (table) table.innerHTML = `<div class="error-state">${escapeHtml(error.message)}</div>`;
+  }
+}
+
 async function renderPayments() {
   setHeader('Заявки на оплату');
   setActiveNavigation('payments');
@@ -2632,6 +2713,7 @@ function route() {
   if (root === 'certificates' && id && action === 'schedule') return renderCertificateScheduleScreen(id);
   if (root === 'certificates' && id) return renderCertificateDetail(id);
   if (root === 'certificates') return renderCertificates();
+  if (root === 'reconciliations') return renderReconciliations();
   if (root === 'profile') return renderProfile();
   if (root === 'payments' && id === 'create') return renderCreatePayment();
   if (root === 'payments' && id) return renderPaymentDetail(id);
