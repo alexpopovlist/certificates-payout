@@ -3168,3 +3168,34 @@ body:not(.is-login) .schedule-field label {
     height: 28px;
   }
 }
+
+.certificate-number-link {
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+  text-underline-offset: 3px;
+}
+
+.certificate-number-link:hover {
+  color: var(--accent-dark);
+}
+
+.mobile-check-card .certificate-number-link {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-bottom: 4px;
+}
+
+.reconciliations-page .summary-amount {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: clamp(18px, 2vw, 24px);
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.reconciliations-page .summary-amount span {
+  display: block;
+}

@@ -2335,10 +2335,9 @@ function renderReconciliationsTable(items = []) {
     <div class="table-header">
       <div>
         <h2>Сертификаты для сверки</h2>
-        <p>${items.length} ${declension(items.length, ['сертификат', 'сертификата', 'сертификатов'])} в статусе «Посетил».</p>
       </div>
     </div>
-    ${certificatesTable(tableItems, { selectable: false })}
+    ${certificatesTable(tableItems, { selectable: false, linkNumbers: true })}
   `;
 }
 
@@ -2377,7 +2376,10 @@ async function renderReconciliations() {
     const summary = document.querySelector('#reconciliationsSummary');
     if (summary) {
       const totalAmountCents = reconciliationsState.items.reduce((sum, item) => sum + Number(item.amountCents || 0), 0);
-      summary.textContent = `${reconciliationsState.items.length} · ${formatMoney(totalAmountCents)}`;
+      summary.innerHTML = `
+        <span>Количество сертификатов в статусе &quot;Посетил&quot;: ${reconciliationsState.items.length}</span>
+        <span>Сумма: ${formatMoney(totalAmountCents)}</span>
+      `;
     }
     renderReconciliationsTable(reconciliationsState.items);
   } catch (error) {
@@ -2448,7 +2450,7 @@ async function renderPaymentDetail(id) {
               <p>Период: ${formatDate(item.periodFrom)} — ${formatDate(item.periodTo)}</p>
             </div>
           </div>
-          ${certificatesTable(data.certificates, { selectable: false })}
+          ${certificatesTable(data.certificates, { selectable: false, linkNumbers: true })}
         </section>
       </div>
     `;
@@ -2620,6 +2622,19 @@ async function createPaymentRequest() {
 
 function certificatesTable(certificates, options = {}) {
   const selectable = Boolean(options.selectable);
+  const linkNumbers = Boolean(options.linkNumbers);
+
+  const certificateNumberMarkup = (certificate) => {
+    const number = escapeHtml(certificate.certificateNumber);
+    const content = `<strong>${number}</strong>`;
+
+    if (!linkNumbers || !certificate.id) {
+      return content;
+    }
+
+    return `<a class="certificate-number-link" href="/certificates/${escapeHtml(certificate.id)}" aria-label="Открыть сертификат ${number}">${content}</a>`;
+  };
+
   const rows = certificates.map((certificate) => {
     const checkbox = selectable
       ? `<td class="checkbox-cell"><input data-certificate-checkbox type="checkbox" value="${escapeHtml(certificate.id)}" checked /></td>`
@@ -2628,7 +2643,7 @@ function certificatesTable(certificates, options = {}) {
     return `
       <tr>
         ${checkbox}
-        <td><strong>${escapeHtml(certificate.certificateNumber)}</strong></td>
+        <td>${certificateNumberMarkup(certificate)}</td>
         <td>${escapeHtml(certificate.title)}</td>
         <td>${formatDate(certificate.serviceDate)} ${formatTime(certificate.serviceTime)}</td>
         <td>${escapeHtml(certificate.customerFullName || '—')}</td>
@@ -2647,7 +2662,7 @@ function certificatesTable(certificates, options = {}) {
       <div class="mobile-check-card">
         <div>${checkbox}</div>
         <div>
-          <strong>${escapeHtml(certificate.certificateNumber)}</strong>
+          ${certificateNumberMarkup(certificate)}
           <p>${escapeHtml(certificate.title)}</p>
           <p>${formatDate(certificate.serviceDate)} · ${escapeHtml(certificate.customerFullName || '—')}</p>
           <div class="status-row">
