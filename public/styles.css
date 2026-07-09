@@ -871,7 +871,7 @@ input[type="checkbox"] {
     z-index: 20;
     height: 92px;
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     background: rgba(255, 255, 255, 0.96);
     border-top: 1px solid var(--line);
     box-shadow: 0 -8px 24px rgba(31, 41, 55, 0.08);
@@ -2735,7 +2735,7 @@ body:not(.is-login) .multiselect-option[aria-selected="true"] .multiselect-check
 
 @media (max-width: 920px) {
   body:not(.is-login) .bottom-nav {
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
   }
 
   .profile-hero {
@@ -3208,4 +3208,102 @@ body:not(.is-login) .reconciliations-page .summary-amount {
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: 0;
+}
+
+/* Services page */
+.services-table {
+  min-width: 980px;
+}
+
+.services-name-cell {
+  max-width: 320px;
+  line-height: 1.45;
+}
+
+.services-link,
+.certificate-number-link {
+  color: #4c1d95;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.services-link:hover,
+.certificate-number-link:hover {
+  text-decoration: underline;
+}
+
+.services-open-price {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.services-price-edit {
+  width: 30px;
+  height: 30px;
+  color: #334155;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.services-edit-button {
+  min-width: 128px;
+  min-height: 42px;
+  padding: 0 22px;
+  border-radius: 12px;
+}
+
+.services-mobile-card .services-edit-button {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.services-mobile-actions {
+  margin-top: 12px;
+}
+
+body:not(.is-login) .services-link,
+body:not(.is-login) .certificate-number-link {
+  color: #4c1d95;
+}
+
+body:not(.is-login) .services-table {
+  min-width: 980px;
+}
+
+body:not(.is-login) .services-name-cell {
+  color: #64748b;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+@media (max-width: 920px) {
+  .bottom-nav {
+    grid-template-columns: repeat(6, 1fr);
+  }
+
+  .bottom-nav a {
+    font-size: 12px;
+    gap: 4px;
+  }
+
+  .nav-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .nav-icon-image img {
+    width: 24px;
+    height: 24px;
+  }
+
+  body:not(.is-login) .bottom-nav {
+    grid-template-columns: repeat(6, 1fr);
+  }
+
+  body:not(.is-login) .bottom-nav a {
+    font-size: 12px;
+  }
 }

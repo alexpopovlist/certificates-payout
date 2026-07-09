@@ -5,6 +5,7 @@ const DEFAULT_REDEEM_INFO_PATH = '/restapi/certificate.getCertificateForRedeem';
 const DEFAULT_REDEEM_CERTIFICATE_PATH = '/restapi/certificate.redeemCertificate';
 const DEFAULT_LAST_VERIFICATION_DATE_PATH = '/restapi/certificate.getLastVerificationDate';
 const DEFAULT_CREATE_VERIFICATION_PATH = '/restapi/certificate.createVerification';
+const DEFAULT_PRODUCTS_PATH = '/restapi/product.getPartnerProducts';
 const DEFAULT_SCHEDULE_TIME_ZONE = 'Europe/Moscow';
 
 const { fetchPartnerProfile } = require('./profileService');
@@ -86,6 +87,14 @@ function getCreateVerificationUrl() {
   );
 }
 
+function getPartnerProductsUrl() {
+  return resolveUrl(
+    process.env.PRODUCTS_SERVICE_URL || process.env.PARTNER_PRODUCTS_URL,
+    process.env.PRODUCTS_SERVICE_PATH || process.env.PARTNER_PRODUCTS_PATH,
+    DEFAULT_PRODUCTS_PATH
+  );
+}
+
 function parseJsonSafe(text) {
   if (!text) return null;
   try {
@@ -103,6 +112,18 @@ function getSessionAllIds(session) {
 
   const contactId = session?.upstream?.contactId || session?.user?.id;
   return contactId ? [String(contactId)] : [];
+}
+
+function parseIdList(value) {
+  return String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function getProductPartnerIds() {
+  const configuredIds = parseIdList(process.env.PRODUCTS_ALL_IDS || process.env.PRODUCT_PARTNER_IDS || process.env.PARTNER_PRODUCT_IDS);
+  return configuredIds.length > 0 ? configuredIds : ['301'];
 }
 
 function getUpstreamCookies(session) {
@@ -273,6 +294,75 @@ function mapCertificate(raw = {}) {
     updatedAt: null,
     raw
   };
+}
+
+
+function parseProductMoney(value) {
+  if (value === null || value === undefined || value === '') return 0;
+  const amount = Number(String(value).replace(',', '.'));
+  return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+}
+
+function formatProductMoneyLabel(value, fallback = '0') {
+  if (value === null || value === undefined || value === '') return fallback;
+  const amount = Number(String(value).replace(',', '.'));
+  if (!Number.isFinite(amount)) return String(value).trim() || fallback;
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(amount);
+}
+
+function mapPartnerProduct(raw = {}) {
+  const priceRaw = raw.SELFPRICE ?? raw.selfprice ?? raw.price ?? 0;
+  const openPriceRaw = raw.OPEN_PRICE ?? raw.openPrice ?? raw.open_price ?? 0;
+
+  return {
+    id: String(raw.ELEMENT_ID || raw.elementId || raw.id || raw.PRODUCT || raw.product || ''),
+    elementId: raw.ELEMENT_ID || raw.elementId || null,
+    name: raw.ELEMENT_NAME || raw.elementName || raw.name || 'Услуга',
+    priceCents: parseProductMoney(priceRaw),
+    priceLabel: formatProductMoneyLabel(priceRaw),
+    openPriceCents: parseProductMoney(openPriceRaw),
+    openPriceLabel: formatProductMoneyLabel(openPriceRaw),
+    activeFrom: raw.ACTIVE_FROM || raw.activeFrom || null,
+    activeTo: raw.ACTIVE_TO || raw.activeTo || null,
+    active: raw.ACTIVE || raw.active || null,
+    partnerId: raw.PARTNER || raw.partner || null,
+    productId: raw.PRODUCT || raw.product || null,
+    parentId: raw.PARENT_ID || raw.parentId || null,
+    productCode: raw.PRODUCT_CODE || raw.productCode || null,
+    productRegion: raw.PRODUCT_REGION || raw.productRegion || null,
+    productLink: raw.PRODUCT_LINK || raw.productLink || null,
+    raw
+  };
+}
+
+async function fetchPartnerProducts({ session }) {
+  const allIds = getProductPartnerIds();
+
+  if (allIds.length === 0) {
+    const error = new Error('No product partner identifiers configured');
+    error.statusCode = 400;
+    error.publicMessage = 'Не настроены идентификаторы партнёра для загрузки услуг.';
+    throw error;
+  }
+
+  const requestPayload = { allIds };
+
+  try {
+    const { payload } = await postJsonToPartnerService(session, getPartnerProductsUrl(), requestPayload, '/services');
+    const result = getPayloadResult(payload) || [];
+    const data = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : []);
+
+    return {
+      items: data.map(mapPartnerProduct),
+      source: 'wowlife',
+      request: requestPayload
+    };
+  } catch (error) {
+    if (!error.publicMessage || error.publicMessage === 'Не удалось выполнить запрос в сервис WOWlife.') {
+      error.publicMessage = 'Не удалось получить список услуг из сервиса WOWlife.';
+    }
+    throw error;
+  }
 }
 
 function normalizePagination(payloadPagination = {}, requestPayload = {}) {
@@ -906,6 +996,7 @@ async function changePartnerCertificateStage({ session, body = {} }) {
 
 module.exports = {
   fetchPartnerCertificates,
+  fetchPartnerProducts,
   fetchPartnerVisitedCertificatesForReconciliation,
   fetchPartnerLastVerificationDateForReconciliation,
   createPartnerVerificationForReconciliation,

@@ -18,7 +18,7 @@ const authUiState = {
 
 const SIGN_IN_PATH = '/authentication/sign-in';
 const DEFAULT_APP_PATH = '/redeem';
-const APP_ROUTES = new Set(['redeem', 'certificates', 'reconciliations', 'payments', 'profile']);
+const APP_ROUTES = new Set(['redeem', 'services', 'certificates', 'reconciliations', 'payments', 'profile']);
 
 const MOBILE_DIALOG_QUERY = '(max-width: 680px)';
 
@@ -60,14 +60,68 @@ function safeNextPath(value) {
   return next;
 }
 
+function safeOptionalPath(value) {
+  const next = String(value || '').trim();
+  if (!next || !next.startsWith('/') || next.startsWith('//')) return '';
+  if (next.startsWith(SIGN_IN_PATH)) return '';
+  return next;
+}
+
+function navigationStateFor(path, options = {}) {
+  const state = {};
+  const explicitFrom = safeOptionalPath(options.from);
+  const currentPath = safeOptionalPath(getCurrentAppUrl());
+  const previousState = window.history.state && typeof window.history.state === 'object'
+    ? window.history.state
+    : {};
+  const preservedFrom = safeOptionalPath(previousState.from);
+
+  if (options.replace) {
+    const from = explicitFrom || preservedFrom;
+    if (from && from !== path) state.from = from;
+    return state;
+  }
+
+  const from = explicitFrom || currentPath;
+  if (from && from !== path) state.from = from;
+  return state;
+}
+
 function navigate(path, options = {}) {
   const nextPath = safeNextPath(path);
+  const state = navigationStateFor(nextPath, options);
   if (options.replace) {
-    window.history.replaceState({}, '', nextPath);
+    window.history.replaceState(state, '', nextPath);
   } else {
-    window.history.pushState({}, '', nextPath);
+    window.history.pushState(state, '', nextPath);
   }
   route();
+}
+
+function getHistoryBackPath(fallback = DEFAULT_APP_PATH) {
+  const state = window.history.state && typeof window.history.state === 'object'
+    ? window.history.state
+    : {};
+  return safeOptionalPath(state.backTo || state.from) || fallback;
+}
+
+function shouldUseHistoryBack(backPath) {
+  const state = window.history.state && typeof window.history.state === 'object'
+    ? window.history.state
+    : {};
+  return window.history.length > 1 && safeOptionalPath(state.from) === backPath;
+}
+
+function getCertificateDetailBackPath(id) {
+  const fallback = '/certificates';
+  const backPath = getHistoryBackPath(fallback);
+  const currentPath = getCurrentAppUrl();
+  const normalizedId = encodeURIComponent(String(id || ''));
+
+  if (backPath === currentPath) return fallback;
+  if (backPath === `/certificates/${normalizedId}`) return fallback;
+  if (backPath.startsWith(`/certificates/${normalizedId}/schedule`)) return fallback;
+  return backPath;
 }
 
 function normalizeLegacyHashRoute() {
@@ -204,10 +258,14 @@ function formatDateTime(value) {
 
 function setHeader(title, options = {}) {
   pageTitle.textContent = title;
-  const showBack = Boolean(options.backTo);
+  const showBack = Boolean(options.backTo || options.onBack);
   backButton.classList.toggle('hidden', !showBack);
   backButton.onclick = showBack
     ? () => {
+        if (typeof options.onBack === 'function') {
+          options.onBack();
+          return;
+        }
         navigate(options.backTo);
       }
     : null;
@@ -1282,6 +1340,124 @@ function paymentCard(paymentRequest) {
 }
 
 
+function formatProductDateTime(value) {
+  const text = String(value || '').trim();
+  if (!text) return '—';
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/);
+  if (!match) return escapeHtml(text);
+  return `${escapeHtml(match[1])}<br />${escapeHtml(match[2])}`;
+}
+
+function productLinkHtml(value) {
+  const url = normalizeExternalUrl(value);
+  if (!url) return '—';
+  return `<a class="services-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Ссылка</a>`;
+}
+
+function productOpenPriceHtml(item = {}) {
+  const label = String(item.openPriceLabel ?? '0').trim() || '0';
+  return `
+    <span class="services-open-price">
+      <span>${escapeHtml(label)}</span>
+      <button class="icon-button services-price-edit" type="button" data-service-price-id="${escapeHtml(item.id)}" aria-label="Изменить открытую цену">✎</button>
+    </span>
+  `;
+}
+
+function productsTable(items = []) {
+  if (items.length === 0) {
+    return `<div class="empty-state">Услуги не найдены.</div>`;
+  }
+
+  const rows = items.map((item) => `
+    <tr>
+      <td class="services-name-cell">${escapeHtml(item.name)}</td>
+      <td>${formatMoney(item.priceCents)}</td>
+      <td>${productOpenPriceHtml(item)}</td>
+      <td>${formatProductDateTime(item.activeFrom)}</td>
+      <td>${productLinkHtml(item.productLink)}</td>
+      <td><button class="button services-edit-button" type="button" data-service-edit-id="${escapeHtml(item.id)}">Изменить</button></td>
+    </tr>
+  `).join('');
+
+  const mobileCards = items.map((item) => `
+    <article class="mobile-check-card services-mobile-card">
+      <div></div>
+      <div>
+        <strong>${escapeHtml(item.name)}</strong>
+        <p>Цена: ${formatMoney(item.priceCents)}</p>
+        <p>Открытая цена: ${escapeHtml(String(item.openPriceLabel ?? '0'))}</p>
+        <p>Дата начала: ${String(formatProductDateTime(item.activeFrom)).replace('<br />', ' ')}</p>
+        <p>Сайт: ${productLinkHtml(item.productLink)}</p>
+        <div class="services-mobile-actions">
+          <button class="button services-edit-button" type="button" data-service-edit-id="${escapeHtml(item.id)}">Изменить</button>
+        </div>
+      </div>
+    </article>
+  `).join('');
+
+  return `
+    <div class="table-wrapper services-table-wrapper">
+      <table class="services-table">
+        <thead>
+          <tr>
+            <th>Название</th>
+            <th>Цена</th>
+            <th>Открытая цена</th>
+            <th>Дата начала</th>
+            <th>Сайт</th>
+            <th>Действия</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="mobile-cards">${mobileCards}</div>
+  `;
+}
+
+function bindProductsActions() {
+  const notice = document.querySelector('#servicesNotice');
+  const showNotice = (message) => {
+    if (!notice) return;
+    notice.className = 'notice';
+    notice.textContent = message;
+  };
+
+  document.querySelectorAll('[data-service-edit-id], [data-service-price-id]').forEach((button) => {
+    button.addEventListener('click', () => {
+      showNotice('Редактирование услуги будет подключено после описания запроса.');
+    });
+  });
+}
+
+async function renderServices() {
+  setHeader('Услуги');
+  setActiveNavigation('services');
+  showLoading();
+
+  try {
+    const { items = [] } = await api('/api/services');
+    app.innerHTML = `
+      <div class="stack services-page">
+        <div id="servicesNotice" class="notice hidden"></div>
+        <section class="card table-card services-table-card">
+          <div class="table-header">
+            <div>
+              <h2>Услуги</h2>
+              <p>${items.length} ${declension(items.length, ['услуга', 'услуги', 'услуг'])}</p>
+            </div>
+          </div>
+          ${productsTable(items)}
+        </section>
+      </div>
+    `;
+    bindProductsActions();
+  } catch (error) {
+    showError(error);
+  }
+}
+
 function redeemInfoValue(value, fallback = '—') {
   const text = String(value ?? '').trim();
   return text ? escapeHtml(text) : escapeHtml(fallback);
@@ -2098,7 +2274,17 @@ async function renderCertificateScheduleScreen(id) {
 }
 
 async function renderCertificateDetail(id) {
-  setHeader('Информация о сертификате', { backTo: '/certificates' });
+  const backTo = getCertificateDetailBackPath(id);
+  setHeader('Информация о сертификате', {
+    backTo,
+    onBack: () => {
+      if (shouldUseHistoryBack(backTo)) {
+        window.history.back();
+        return;
+      }
+      navigate(backTo);
+    }
+  });
   setActiveNavigation('certificates');
   showLoading();
 
@@ -2834,6 +3020,7 @@ function route() {
   if (root === 'certificates' && id && action === 'schedule') return renderCertificateScheduleScreen(id);
   if (root === 'certificates' && id) return renderCertificateDetail(id);
   if (root === 'certificates') return renderCertificates();
+  if (root === 'services') return renderServices();
   if (root === 'reconciliations') return renderReconciliations();
   if (root === 'profile') return renderProfile();
   if (root === 'payments' && id === 'create') return renderCreatePayment();

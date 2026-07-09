@@ -7,6 +7,7 @@ const paymentRequestRoutes = require('./routes/paymentRequests');
 const pushNotificationRoutes = require('./routes/pushNotifications');
 const authRoutes = require('./routes/auth');
 const profileRoutes = require('./routes/profile');
+const servicesRoutes = require('./routes/services');
 const { requireAuth } = require('./middleware/auth');
 
 const app = express();
@@ -23,6 +24,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/certificates', requireAuth, certificateRoutes);
 app.use('/api/payment-requests', requireAuth, paymentRequestRoutes);
 app.use('/api/profile', requireAuth, profileRoutes);
+app.use('/api/services', requireAuth, servicesRoutes);
 app.use('/api/push', requireAuth, pushNotificationRoutes);
 
 app.use('/api', (_request, response) => {

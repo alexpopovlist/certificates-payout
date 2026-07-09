@@ -588,3 +588,32 @@ Payload:
 }
 ```
 
+
+## Services page
+
+Added `/services` — **Услуги**. The page loads partner services from WOWlife:
+
+```http
+POST https://partner-wowlife.ru/restapi/product.getPartnerProducts
+```
+
+Payload is built from `PRODUCTS_ALL_IDS`:
+
+```json
+{"allIds":["301"]}
+```
+
+Displayed columns:
+- Название
+- Цена
+- Открытая цена
+- Дата начала
+- Сайт
+- Действия
+
+Configuration:
+
+```env
+PRODUCTS_SERVICE_URL=https://partner-wowlife.ru/restapi/product.getPartnerProducts
+PRODUCTS_ALL_IDS=301
+```
