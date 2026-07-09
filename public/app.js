@@ -1243,11 +1243,11 @@ function redeemInfoValue(value, fallback = '—') {
   return text ? escapeHtml(text) : escapeHtml(fallback);
 }
 
-function redeemInfoRow(label, value) {
+function redeemInfoField(label, value, { full = true } = {}) {
   return `
-    <div class="redeem-info-row">
-      <span>${escapeHtml(label)}</span>
-      <strong>${redeemInfoValue(value)}</strong>
+    <div class="schedule-field ${full ? 'schedule-field-full' : ''} redeem-info-field">
+      <label>${escapeHtml(label)}</label>
+      <div class="redeem-info-control" role="textbox" aria-readonly="true">${redeemInfoValue(value)}</div>
     </div>
   `;
 }
@@ -1276,20 +1276,22 @@ function certificateRedeemInfoDialogHtml(item = {}) {
           <h2 id="redeemInfoTitle">Данные сертификата</h2>
           <button class="icon-button schedule-close" type="button" data-close-redeem-info aria-label="Закрыть">×</button>
         </header>
-        <div class="redeem-info-body">
-          <div class="redeem-info-list">
-            ${redeemInfoRow('Номер сертификата:', item.certificateNumber)}
-            ${redeemInfoRow('Имя получателя:', item.customerFullName)}
-            ${redeemInfoRow('Услуга:', item.service || item.title)}
-            ${redeemInfoRow('Сумма:', amount)}
-            ${redeemInfoRow('Дата:', formatDate(item.serviceDate || item.scheduleTime))}
-            ${redeemInfoRow('Email:', getRedeemInfoEmail(item))}
-            ${redeemInfoRow('Телефон:', getRedeemInfoPhone(item))}
+        <div class="schedule-form redeem-info-form">
+          ${redeemInfoField('Номер сертификата', item.certificateNumber)}
+          ${redeemInfoField('Имя получателя', item.customerFullName)}
+          ${redeemInfoField('Услуга', item.service || item.title)}
+          <div class="schedule-grid-2 redeem-info-grid">
+            ${redeemInfoField('Сумма', amount, { full: false })}
+            ${redeemInfoField('Дата', formatDate(item.serviceDate || item.scheduleTime), { full: false })}
+          </div>
+          <div class="schedule-grid-2 redeem-info-grid">
+            ${redeemInfoField('Email', getRedeemInfoEmail(item), { full: false })}
+            ${redeemInfoField('Телефон', getRedeemInfoPhone(item), { full: false })}
           </div>
           <div id="redeemInfoNotice" class="hidden"></div>
           <div class="schedule-actions redeem-info-actions">
-            <button class="button secondary" type="button" data-close-redeem-info>Закрыть</button>
-            <button id="redeemInfoRedeemButton" class="button" type="button">Погасить сертификат</button>
+            <button id="redeemInfoRedeemButton" class="button schedule-submit" type="button">Погасить сертификат</button>
+            <button class="button secondary schedule-cancel" type="button" data-close-redeem-info>Закрыть</button>
           </div>
         </div>
       </section>

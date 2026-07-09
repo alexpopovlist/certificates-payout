@@ -3003,7 +3003,7 @@ body:not(.is-login) .schedule-field label {
   }
 }
 
-/* Redeem certificate preview dialog. */
+/* Redeem certificate preview dialog: reuse the schedule dialog design system. */
 .redeem-actions {
   justify-content: flex-end;
 }
@@ -3012,40 +3012,39 @@ body:not(.is-login) .schedule-field label {
   width: min(100%, 760px);
 }
 
-.redeem-info-body {
-  display: grid;
-  gap: 24px;
-  padding: 28px;
+.redeem-info-form {
+  gap: 22px;
 }
 
-.redeem-info-list {
-  display: grid;
+.redeem-info-grid {
   gap: 18px;
 }
 
-.redeem-info-row {
-  display: grid;
-  grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1fr);
-  gap: 22px;
-  align-items: start;
-  color: #334155;
-  font-size: 16px;
-  line-height: 1.45;
-}
-
-.redeem-info-row span {
+.redeem-info-field label {
   color: #64748b;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
 }
 
-.redeem-info-row strong {
+.redeem-info-control {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
   color: #0f172a;
-  font-weight: 600;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 .redeem-info-actions {
-  padding-top: 4px;
+  padding-top: 8px;
 }
 
 @media (max-width: 680px) {
@@ -3058,16 +3057,6 @@ body:not(.is-login) .schedule-field label {
   .redeem-actions .button,
   .redeem-info-actions .button {
     width: 100%;
-  }
-
-  .redeem-info-body {
-    padding: 20px;
-  }
-
-  .redeem-info-row {
-    grid-template-columns: 1fr;
-    gap: 6px;
-    font-size: 15px;
   }
 }
 
