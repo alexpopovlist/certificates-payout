@@ -109,7 +109,8 @@ const certificatesListState = {
 };
 
 const reconciliationsState = {
-  items: []
+  items: [],
+  availability: null
 };
 
 const scheduleProfileCache = {
@@ -2341,6 +2342,131 @@ function renderReconciliationsTable(items = []) {
   `;
 }
 
+
+function formatReconciliationAvailabilityMessage(availability = {}) {
+  if (availability.message) return String(availability.message);
+  const daysLeft = Number(availability.daysLeft || 0);
+  if (daysLeft > 0) {
+    return `Новая сверка будет доступна через ${daysLeft} ${declension(daysLeft, ['день', 'дня', 'дней'])}`;
+  }
+  return 'Создание новой сверки доступно.';
+}
+
+function updateReconciliationAvailability(availability = {}, options = {}) {
+  const button = document.querySelector('#createReconciliation');
+  const notice = document.querySelector('#reconciliationNotice');
+  const available = availability.available !== false;
+
+  if (button) {
+    button.disabled = !available;
+    button.setAttribute('aria-disabled', String(!available));
+  }
+
+  if (!notice || options.keepNotice) return;
+
+  if (!available) {
+    notice.className = 'notice';
+    notice.textContent = formatReconciliationAvailabilityMessage(availability);
+    return;
+  }
+
+  notice.className = 'notice hidden';
+  notice.textContent = '';
+}
+
+function updateReconciliationsSummary(items = []) {
+  const summary = document.querySelector('#reconciliationsSummary');
+  if (!summary) return;
+
+  const totalAmountCents = items.reduce((sum, item) => sum + Number(item.amountCents || 0), 0);
+  summary.innerHTML = `
+    <span>Количество сертификатов в статусе &quot;Посетил&quot;: ${items.length}</span>
+    <span>Сумма: ${formatMoney(totalAmountCents)}</span>
+  `;
+}
+
+async function loadReconciliationsData(options = {}) {
+  const notice = document.querySelector('#reconciliationNotice');
+  const createButton = document.querySelector('#createReconciliation');
+
+  const [certificatesResult, availabilityResult] = await Promise.allSettled([
+    api('/api/certificates/reconciliations'),
+    api('/api/certificates/reconciliations/availability')
+  ]);
+
+  if (availabilityResult.status === 'fulfilled') {
+    reconciliationsState.availability = availabilityResult.value;
+    updateReconciliationAvailability(availabilityResult.value, options);
+  } else {
+    if (createButton) createButton.disabled = true;
+    if (notice && !options.keepNotice) {
+      notice.className = 'notice error';
+      notice.textContent = availabilityResult.reason?.message || 'Не удалось проверить доступность создания сверки.';
+    }
+  }
+
+  if (certificatesResult.status === 'fulfilled') {
+    const data = certificatesResult.value;
+    reconciliationsState.items = data.items || [];
+    updateReconciliationsSummary(reconciliationsState.items);
+    renderReconciliationsTable(reconciliationsState.items);
+  } else {
+    const table = document.querySelector('#reconciliationsTable');
+    if (table) table.innerHTML = `<div class="error-state">${escapeHtml(certificatesResult.reason?.message || 'Ошибка загрузки данных')}</div>`;
+  }
+}
+
+async function createReconciliation() {
+  const notice = document.querySelector('#reconciliationNotice');
+  const button = document.querySelector('#createReconciliation');
+  const availability = reconciliationsState.availability || {};
+
+  if (availability.available === false) {
+    if (notice) {
+      notice.className = 'notice';
+      notice.textContent = formatReconciliationAvailabilityMessage(availability);
+    }
+    return;
+  }
+
+  try {
+    if (button) {
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+    }
+    if (notice) {
+      notice.className = 'notice';
+      notice.textContent = 'Создаём сверку...';
+    }
+
+    const result = await api('/api/certificates/reconciliations', {
+      method: 'POST',
+      body: JSON.stringify({})
+    });
+
+    const successMessage = result.message || 'Сверка создана.';
+    if (notice) {
+      notice.className = 'notice';
+      notice.textContent = successMessage;
+    }
+
+    await loadReconciliationsData();
+
+    if (notice && reconciliationsState.availability?.available !== false) {
+      notice.className = 'notice';
+      notice.textContent = successMessage;
+    }
+  } catch (error) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = error.message || 'Не удалось создать сверку.';
+    }
+    updateReconciliationAvailability(reconciliationsState.availability || {}, { keepNotice: true });
+  } finally {
+    if (button) button.removeAttribute('aria-busy');
+  }
+}
+
 async function renderReconciliations() {
   setHeader('Сверки');
   setActiveNavigation('reconciliations');
@@ -2349,10 +2475,7 @@ async function renderReconciliations() {
   app.innerHTML = `
     <div class="stack reconciliations-page">
       <section class="card summary-card">
-        <div>
-          <div class="summary-label">Сертификаты в статусе «Посетил»</div>
-          <div id="reconciliationsSummary" class="summary-amount">—</div>
-        </div>
+        <div id="reconciliationsSummary" class="summary-amount">—</div>
         <button id="createReconciliation" class="button" type="button">Создать сверку</button>
       </section>
       <div id="reconciliationNotice" class="notice hidden"></div>
@@ -2362,30 +2485,13 @@ async function renderReconciliations() {
     </div>
   `;
 
-  const notice = document.querySelector('#reconciliationNotice');
   const createButton = document.querySelector('#createReconciliation');
-  createButton?.addEventListener('click', () => {
-    if (!notice) return;
-    notice.className = 'notice';
-    notice.textContent = 'Кнопка добавлена. Модель создания сверки будет подключена после описания запроса.';
-  });
-
-  try {
-    const data = await api('/api/certificates/reconciliations');
-    reconciliationsState.items = data.items || [];
-    const summary = document.querySelector('#reconciliationsSummary');
-    if (summary) {
-      const totalAmountCents = reconciliationsState.items.reduce((sum, item) => sum + Number(item.amountCents || 0), 0);
-      summary.innerHTML = `
-        <span>Количество сертификатов в статусе &quot;Посетил&quot;: ${reconciliationsState.items.length}</span>
-        <span>Сумма: ${formatMoney(totalAmountCents)}</span>
-      `;
-    }
-    renderReconciliationsTable(reconciliationsState.items);
-  } catch (error) {
-    const table = document.querySelector('#reconciliationsTable');
-    if (table) table.innerHTML = `<div class="error-state">${escapeHtml(error.message)}</div>`;
+  if (createButton) {
+    createButton.disabled = true;
+    createButton.addEventListener('click', createReconciliation);
   }
+
+  await loadReconciliationsData();
 }
 
 async function renderPayments() {

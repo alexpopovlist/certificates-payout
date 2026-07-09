@@ -3,6 +3,8 @@ const DEFAULT_CERTIFICATES_PATH = '/restapi/certificate.getPartnerCertificates';
 const DEFAULT_CHANGE_STAGE_PATH = '/restapi/certificate.changeCertificateStage';
 const DEFAULT_REDEEM_INFO_PATH = '/restapi/certificate.getCertificateForRedeem';
 const DEFAULT_REDEEM_CERTIFICATE_PATH = '/restapi/certificate.redeemCertificate';
+const DEFAULT_LAST_VERIFICATION_DATE_PATH = '/restapi/certificate.getLastVerificationDate';
+const DEFAULT_CREATE_VERIFICATION_PATH = '/restapi/certificate.createVerification';
 const DEFAULT_SCHEDULE_TIME_ZONE = 'Europe/Moscow';
 
 const { fetchPartnerProfile } = require('./profileService');
@@ -65,6 +67,22 @@ function getRedeemCertificateUrl() {
     process.env.CERTIFICATE_REDEEM_URL || process.env.CERTIFICATE_REDEEM_CERTIFICATE_URL,
     process.env.CERTIFICATE_REDEEM_PATH || process.env.CERTIFICATE_REDEEM_CERTIFICATE_PATH,
     DEFAULT_REDEEM_CERTIFICATE_PATH
+  );
+}
+
+function getLastVerificationDateUrl() {
+  return resolveUrl(
+    process.env.CERTIFICATE_LAST_VERIFICATION_DATE_URL || process.env.CERTIFICATE_LAST_VERIFICATION_URL,
+    process.env.CERTIFICATE_LAST_VERIFICATION_DATE_PATH || process.env.CERTIFICATE_LAST_VERIFICATION_PATH,
+    DEFAULT_LAST_VERIFICATION_DATE_PATH
+  );
+}
+
+function getCreateVerificationUrl() {
+  return resolveUrl(
+    process.env.CERTIFICATE_CREATE_VERIFICATION_URL || process.env.CERTIFICATE_VERIFICATION_CREATE_URL,
+    process.env.CERTIFICATE_CREATE_VERIFICATION_PATH || process.env.CERTIFICATE_VERIFICATION_CREATE_PATH,
+    DEFAULT_CREATE_VERIFICATION_PATH
   );
 }
 
@@ -359,6 +377,104 @@ async function fetchPartnerCertificates({ session, query = {}, page, limit, orde
       groupIds: requestPayload.groupIds
     }
   };
+}
+
+
+function formatDaysLeftLabel(daysLeft) {
+  const count = Math.abs(Number(daysLeft)) % 100;
+  const last = count % 10;
+  if (count > 10 && count < 20) return 'дней';
+  if (last > 1 && last < 5) return 'дня';
+  if (last === 1) return 'день';
+  return 'дней';
+}
+
+function normalizeLastVerificationDateResult(result = {}) {
+  const parsedDaysLeft = Number(result.daysLeft ?? result.days_left ?? result.DAYS_LEFT);
+  const daysLeft = Number.isFinite(parsedDaysLeft) ? parsedDaysLeft : null;
+  const available = daysLeft === null ? true : daysLeft <= 0;
+
+  return {
+    lastVerificationDate: result.lastVerificationDate || result.last_verification_date || result.LAST_VERIFICATION_DATE || null,
+    nextVerificationDate: result.nextVerificationDate || result.next_verification_date || result.NEXT_VERIFICATION_DATE || null,
+    daysLeft,
+    available,
+    message: !available
+      ? `Новая сверка будет доступна через ${daysLeft} ${formatDaysLeftLabel(daysLeft)}`
+      : 'Создание новой сверки доступно.',
+    raw: result
+  };
+}
+
+async function fetchPartnerLastVerificationDateForReconciliation({ session }) {
+  const allIds = getSessionAllIds(session);
+
+  if (allIds.length === 0) {
+    const error = new Error('No partner identifiers in session');
+    error.statusCode = 401;
+    error.publicMessage = 'В сессии не найден идентификатор партнёра. Войдите в приложение заново.';
+    throw error;
+  }
+
+  const requestPayload = { allIds };
+
+  try {
+    const { payload } = await postJsonToPartnerService(
+      session,
+      getLastVerificationDateUrl(),
+      requestPayload,
+      '/certificates'
+    );
+    const result = getPayloadResult(payload) || {};
+
+    return {
+      ...normalizeLastVerificationDateResult(result),
+      source: 'wowlife',
+      request: requestPayload
+    };
+  } catch (error) {
+    if (!error.publicMessage || error.publicMessage === 'Не удалось выполнить запрос в сервис WOWlife.') {
+      error.publicMessage = 'Не удалось проверить доступность создания сверки.';
+    }
+    throw error;
+  }
+}
+
+
+async function createPartnerVerificationForReconciliation({ session }) {
+  const allIds = getSessionAllIds(session);
+
+  if (allIds.length === 0) {
+    const error = new Error('No partner identifiers in session');
+    error.statusCode = 401;
+    error.publicMessage = 'В сессии не найден идентификатор партнёра. Войдите в приложение заново.';
+    throw error;
+  }
+
+  const requestPayload = { allIds };
+
+  try {
+    const { payload } = await postJsonToPartnerService(
+      session,
+      getCreateVerificationUrl(),
+      requestPayload,
+      '/reconciliations'
+    );
+    const result = getPayloadResult(payload) || {};
+
+    return {
+      result,
+      raw: result,
+      source: 'wowlife',
+      request: requestPayload,
+      message: 'Сверка создана.'
+    };
+  } catch (error) {
+    if (!error.publicMessage || error.publicMessage === 'Не удалось выполнить запрос в сервис WOWlife.') {
+      error.publicMessage = 'Не удалось создать сверку.';
+    }
+    throw error;
+  }
 }
 
 async function fetchPartnerVisitedCertificatesForReconciliation({ session }) {
@@ -791,6 +907,8 @@ async function changePartnerCertificateStage({ session, body = {} }) {
 module.exports = {
   fetchPartnerCertificates,
   fetchPartnerVisitedCertificatesForReconciliation,
+  fetchPartnerLastVerificationDateForReconciliation,
+  createPartnerVerificationForReconciliation,
   fetchPartnerCertificateById,
   fetchPartnerCertificateForRedeem,
   redeemPartnerCertificate,

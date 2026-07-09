@@ -3191,11 +3191,21 @@ body:not(.is-login) .schedule-field label {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: clamp(18px, 2vw, 24px);
-  line-height: 1.35;
+  color: #0f172a;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
   letter-spacing: 0;
 }
 
 .reconciliations-page .summary-amount span {
   display: block;
+}
+
+body:not(.is-login) .reconciliations-page .summary-amount {
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0;
 }

@@ -4,6 +4,8 @@ const { broadcastPush } = require('../services/pushService');
 const {
   fetchPartnerCertificates,
   fetchPartnerVisitedCertificatesForReconciliation,
+  fetchPartnerLastVerificationDateForReconciliation,
+  createPartnerVerificationForReconciliation,
   fetchPartnerCertificateById,
   fetchPartnerCertificateForRedeem,
   redeemPartnerCertificate,
@@ -228,6 +230,40 @@ router.get('/reconciliations', async (request, response, next) => {
       : await fetchDbReconciliationCertificates();
 
     response.json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+router.post('/reconciliations', async (request, response, next) => {
+  try {
+    if (!shouldUseCertificatesService()) {
+      return response.status(409).json({
+        error: 'Создание сверки через WOWlife доступно только при CERTIFICATES_USE_SERVICE=true.'
+      });
+    }
+
+    const data = await createPartnerVerificationForReconciliation({ session: request.auth });
+    return response.status(201).json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/reconciliations/availability', async (request, response, next) => {
+  try {
+    if (!shouldUseCertificatesService()) {
+      return response.json({
+        available: true,
+        daysLeft: 0,
+        message: 'Создание новой сверки доступно.',
+        source: 'database'
+      });
+    }
+
+    const data = await fetchPartnerLastVerificationDateForReconciliation({ session: request.auth });
+    return response.json(data);
   } catch (error) {
     next(error);
   }
