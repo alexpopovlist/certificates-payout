@@ -52,17 +52,35 @@ function toCertificateDto(row) {
   };
 }
 
+function normalizeDbCertificateStatuses(statusQuery) {
+  const statusMap = {
+    new: 'REDEEMED',
+    visited: 'REDEEMED',
+    canceled: 'REDEEMED',
+    waiting: 'PAYMENT_PROCESSING',
+    confirmed: 'PAYMENT_PROCESSING',
+    verification: 'PAYMENT_PROCESSING',
+    paid: 'PAID',
+    REDEEMED: 'REDEEMED',
+    PAYMENT_PROCESSING: 'PAYMENT_PROCESSING',
+    PAID: 'PAID'
+  };
+
+  const statuses = Array.isArray(statusQuery)
+    ? statusQuery
+    : String(statusQuery || '').split(',');
+
+  return Array.from(new Set(statuses
+    .map((status) => statusMap[String(status).trim()] || null)
+    .filter(Boolean)));
+}
+
 function buildRedeemedFilters(filters) {
   const conditions = ["c.status <> 'NEW'"];
   const values = [];
 
   if (filters.status) {
-    const statuses = Array.isArray(filters.status)
-      ? filters.status
-      : String(filters.status).split(',');
-    const normalizedStatuses = statuses
-      .map((status) => String(status).trim())
-      .filter((status) => ['REDEEMED', 'PAYMENT_PROCESSING', 'PAID'].includes(status));
+    const normalizedStatuses = normalizeDbCertificateStatuses(filters.status);
 
     if (normalizedStatuses.length > 0) {
       values.push(normalizedStatuses);

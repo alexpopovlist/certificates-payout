@@ -149,7 +149,7 @@ POST https://partner-wowlife.ru/restapi/certificate.getPartnerCertificates
   "page": 1,
   "limit": 20,
   "order": "DESC",
-  "groupIds": ["new", "waiting", "confirmed", "visited", "verification", "paid", "canceled", "notcome", "notrepaid"],
+  "groupIds": ["new", "waiting", "confirmed", "visited", "verification", "paid", "canceled"],
   "allIds": ["485"],
   "filters": {}
 }
@@ -162,7 +162,7 @@ POST https://partner-wowlife.ru/restapi/certificate.getPartnerCertificates
   "page": 1,
   "limit": 20,
   "order": "DESC",
-  "groupIds": ["new", "waiting", "confirmed", "visited", "verification", "paid", "canceled", "notcome", "notrepaid"],
+  "groupIds": ["new", "waiting", "confirmed", "visited", "verification", "paid", "canceled"],
   "allIds": ["485"],
   "filters": {
     "certificate_id": {
@@ -180,7 +180,7 @@ Env-переменные источника сертификатов:
 # true — брать сертификаты из WOWlife, false — из локальной PostgreSQL БД
 CERTIFICATES_USE_SERVICE=true
 CERTIFICATES_SERVICE_URL=https://partner-wowlife.ru/restapi/certificate.getPartnerCertificates
-CERTIFICATES_GROUP_IDS=new,waiting,confirmed,visited,verification,paid,canceled,notcome,notrepaid
+CERTIFICATES_GROUP_IDS=new,waiting,confirmed,visited,verification,paid,canceled
 ```
 
 ### Заявки на оплату
@@ -360,7 +360,7 @@ POST https://partner-wowlife.ru/restapi/certificate.getPartnerCertificates
   "page": 1,
   "limit": 20,
   "order": "DESC",
-  "groupIds": ["new", "waiting", "confirmed", "visited", "verification", "paid", "canceled", "notcome", "notrepaid"],
+  "groupIds": ["new", "waiting", "confirmed", "visited", "verification", "paid", "canceled"],
   "allIds": ["485"],
   "filters": {}
 }
@@ -373,7 +373,7 @@ POST https://partner-wowlife.ru/restapi/certificate.getPartnerCertificates
   "page": 1,
   "limit": 20,
   "order": "DESC",
-  "groupIds": ["new", "waiting", "confirmed", "visited", "verification", "paid", "canceled", "notcome", "notrepaid"],
+  "groupIds": ["new", "waiting", "confirmed", "visited", "verification", "paid", "canceled"],
   "allIds": ["485"],
   "filters": {
     "certificate_id": {
@@ -391,7 +391,7 @@ Env-переменные источника сертификатов:
 # true — брать сертификаты из WOWlife, false — из локальной PostgreSQL БД
 CERTIFICATES_USE_SERVICE=true
 CERTIFICATES_SERVICE_URL=https://partner-wowlife.ru/restapi/certificate.getPartnerCertificates
-CERTIFICATES_GROUP_IDS=new,waiting,confirmed,visited,verification,paid,canceled,notcome,notrepaid
+CERTIFICATES_GROUP_IDS=new,waiting,confirmed,visited,verification,paid,canceled
 ```
 
 ### Заявки на оплату

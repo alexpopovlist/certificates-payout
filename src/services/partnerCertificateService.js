@@ -8,13 +8,13 @@ const DEFAULT_GROUP_IDS = [
   'visited',
   'verification',
   'paid',
-  'canceled',
-  'notcome',
-  'notrepaid'
+  'canceled'
 ];
 
-const STATUS_TO_GROUP_IDS = {
-  REDEEMED: ['new', 'visited', 'canceled', 'notcome', 'notrepaid'],
+const ALLOWED_STAGE_GROUP_IDS = new Set(DEFAULT_GROUP_IDS);
+
+const LEGACY_STATUS_TO_GROUP_IDS = {
+  REDEEMED: ['new', 'visited', 'canceled'],
   PAYMENT_PROCESSING: ['waiting', 'confirmed', 'verification'],
   PAID: ['paid']
 };
@@ -78,11 +78,11 @@ function parseDefaultGroupIds() {
   const groupIds = raw
     .split(',')
     .map((item) => item.trim())
-    .filter(Boolean);
+    .filter((item) => ALLOWED_STAGE_GROUP_IDS.has(item));
   return groupIds.length > 0 ? groupIds : DEFAULT_GROUP_IDS;
 }
 
-function buildGroupIds(statusQuery) {
+function getSelectedStageGroupIds(statusQuery) {
   const statuses = Array.isArray(statusQuery)
     ? statusQuery
     : String(statusQuery || '')
@@ -90,14 +90,32 @@ function buildGroupIds(statusQuery) {
         .map((item) => item.trim())
         .filter(Boolean);
 
-  if (statuses.length === 0) return parseDefaultGroupIds();
+  if (statuses.length === 0) return [];
 
-  const groupIds = statuses.flatMap((status) => STATUS_TO_GROUP_IDS[status] || []);
-  return groupIds.length > 0 ? Array.from(new Set(groupIds)) : parseDefaultGroupIds();
+  const groupIds = statuses.flatMap((status) => {
+    const normalized = String(status || '').trim();
+    if (ALLOWED_STAGE_GROUP_IDS.has(normalized)) return [normalized];
+
+    const legacyStatus = normalized.toUpperCase();
+    return LEGACY_STATUS_TO_GROUP_IDS[legacyStatus] || [];
+  });
+
+  return Array.from(new Set(groupIds));
+}
+
+function buildGroupIds(statusQuery) {
+  const selectedGroupIds = getSelectedStageGroupIds(statusQuery);
+  return selectedGroupIds.length > 0 ? selectedGroupIds : parseDefaultGroupIds();
 }
 
 function buildServiceFilters(query = {}, extraFilters = {}) {
   const filters = { ...extraFilters };
+
+  const selectedGroupIds = getSelectedStageGroupIds(query.status);
+  if (selectedGroupIds.length === 1 && !filters.stage_id) {
+    filters.stage_id = { EQUAL: selectedGroupIds[0] };
+  }
+
 
   if (query.from) {
     filters.from = query.from;
@@ -138,6 +156,7 @@ function formatServiceDate(value) {
 function mapStageToStatus(stage = {}) {
   const groupId = String(stage.group_id || stage.groupId || '').toLowerCase();
 
+  if (ALLOWED_STAGE_GROUP_IDS.has(groupId)) return groupId;
   if (groupId === 'paid') return 'PAID';
   if (['waiting', 'confirmed', 'verification'].includes(groupId)) return 'PAYMENT_PROCESSING';
   return 'REDEEMED';

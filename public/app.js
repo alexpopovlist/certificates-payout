@@ -82,7 +82,14 @@ const certificateStatus = {
   NEW: { label: 'Новый', className: '' },
   REDEEMED: { label: 'Погашен', className: 'redeemed' },
   PAYMENT_PROCESSING: { label: 'В процессе оплаты', className: 'processing' },
-  PAID: { label: 'Оплачен', className: 'paid' }
+  PAID: { label: 'Оплачен', className: 'paid' },
+  new: { label: 'Новая заявка', className: '' },
+  waiting: { label: 'Согласование', className: 'processing' },
+  confirmed: { label: 'Записан', className: 'processing' },
+  visited: { label: 'Посетил', className: 'redeemed' },
+  verification: { label: 'Ожидание оплаты', className: 'processing' },
+  paid: { label: 'Оплачен', className: 'paid' },
+  canceled: { label: 'Отменен', className: '' }
 };
 
 const paymentStatus = {
@@ -1384,19 +1391,39 @@ async function renderCertificates() {
               </button>
               <div class="multiselect-menu" role="listbox" aria-label="Статус сертификата" aria-multiselectable="true">
                 <label class="multiselect-option" role="option" aria-selected="false">
-                  <input type="checkbox" value="REDEEMED" data-label="Погашено" />
+                  <input type="checkbox" value="new" data-label="Новая заявка" />
                   <span class="multiselect-check" aria-hidden="true">✓</span>
-                  <span>Погашено</span>
+                  <span>Новая заявка</span>
                 </label>
                 <label class="multiselect-option" role="option" aria-selected="false">
-                  <input type="checkbox" value="PAYMENT_PROCESSING" data-label="В процессе оплаты" />
+                  <input type="checkbox" value="waiting" data-label="Согласование" />
                   <span class="multiselect-check" aria-hidden="true">✓</span>
-                  <span>В процессе оплаты</span>
+                  <span>Согласование</span>
                 </label>
                 <label class="multiselect-option" role="option" aria-selected="false">
-                  <input type="checkbox" value="PAID" data-label="Оплачено" />
+                  <input type="checkbox" value="confirmed" data-label="Записан" />
                   <span class="multiselect-check" aria-hidden="true">✓</span>
-                  <span>Оплачено</span>
+                  <span>Записан</span>
+                </label>
+                <label class="multiselect-option" role="option" aria-selected="false">
+                  <input type="checkbox" value="visited" data-label="Посетил" />
+                  <span class="multiselect-check" aria-hidden="true">✓</span>
+                  <span>Посетил</span>
+                </label>
+                <label class="multiselect-option" role="option" aria-selected="false">
+                  <input type="checkbox" value="verification" data-label="Ожидание оплаты" />
+                  <span class="multiselect-check" aria-hidden="true">✓</span>
+                  <span>Ожидание оплаты</span>
+                </label>
+                <label class="multiselect-option" role="option" aria-selected="false">
+                  <input type="checkbox" value="paid" data-label="Оплачен" />
+                  <span class="multiselect-check" aria-hidden="true">✓</span>
+                  <span>Оплачен</span>
+                </label>
+                <label class="multiselect-option" role="option" aria-selected="false">
+                  <input type="checkbox" value="canceled" data-label="Отменен" />
+                  <span class="multiselect-check" aria-hidden="true">✓</span>
+                  <span>Отменен</span>
                 </label>
               </div>
             </div>
