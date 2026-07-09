@@ -1,7 +1,11 @@
 const express = require('express');
 const { query, withTransaction } = require('../db');
 const { broadcastPush } = require('../services/pushService');
-const { fetchPartnerCertificates, fetchPartnerCertificateById } = require('../services/partnerCertificateService');
+const {
+  fetchPartnerCertificates,
+  fetchPartnerCertificateById,
+  changePartnerCertificateStage
+} = require('../services/partnerCertificateService');
 
 const router = express.Router();
 
@@ -279,6 +283,32 @@ router.post('/redeem', async (request, response, next) => {
     });
 
     response.status(201).json({ item });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+router.post('/:id/schedule', async (request, response, next) => {
+  try {
+    if (!shouldUseCertificatesService()) {
+      return response.status(409).json({
+        error: 'Запись сертификата через WOWlife доступна только при CERTIFICATES_USE_SERVICE=true.'
+      });
+    }
+
+    const payload = {
+      ...request.body,
+      id: request.params.id,
+      dealId: request.body?.dealId || request.params.id
+    };
+
+    const result = await changePartnerCertificateStage({
+      session: request.auth,
+      body: payload
+    });
+
+    return response.json(result);
   } catch (error) {
     next(error);
   }

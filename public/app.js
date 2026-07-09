@@ -1478,6 +1478,232 @@ async function loadFilteredCertificates(page = 1, emptyText = 'По выбран
   }
 }
 
+
+const CERTIFICATE_SCHEDULE_STAGE_ID = 'C2:UC_4Q05NY';
+
+function isNewCertificateStatus(item = {}) {
+  const values = [item.status, item.stageGroupId, item.statusLabel, item?.raw?.STAGE?.group_id, item?.raw?.STAGE?.group_title]
+    .map((value) => String(value || '').trim().toLowerCase());
+  return values.some((value) => value === 'new' || value === 'новая заявка');
+}
+
+function decodeHtmlEntities(value) {
+  const text = String(value || '');
+  if (!text) return '';
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = text;
+  return textarea.value;
+}
+
+function displayAddress(value) {
+  return decodeHtmlEntities(String(value || '').split('|')[0].trim());
+}
+
+function getDateInputValue(value) {
+  const match = String(value || '').match(/\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : formatDateInputValue(new Date());
+}
+
+function getTimeInputValue(value) {
+  const match = String(value || '').match(/\d{2}:\d{2}/);
+  return match ? match[0] : '00:00';
+}
+
+function certificateDealId(item = {}) {
+  return item.externalId || item?.raw?.ID || item.id;
+}
+
+function certificateScheduleTitle(item = {}) {
+  return item?.raw?.TITLE || item?.raw?.OPTIONS || item.title || '';
+}
+
+function getProfileRawAddresses(profile = {}) {
+  const rawAddresses = profile?.raw?.UF_CRM_1692176867840;
+  const normalizedAddresses = profile?.work?.addresses;
+  const values = Array.isArray(rawAddresses) && rawAddresses.length > 0
+    ? rawAddresses
+    : Array.isArray(normalizedAddresses)
+      ? normalizedAddresses
+      : [];
+
+  return values.map((value) => String(value || '').trim()).filter(Boolean);
+}
+
+function getCertificateAddressArray(item = {}, profile = {}) {
+  const fromProfile = getProfileRawAddresses(profile);
+  const candidates = [item.address, item?.raw?.ADDRESS, item?.raw?.address, ...fromProfile]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(candidates));
+}
+
+function getCertificateDefaultPhone(item = {}, profile = {}) {
+  const contacts = item?.raw?.CONTACTS || {};
+  const phones = Array.isArray(contacts.PHONES) ? contacts.PHONES : [];
+  return item.customerPhone || phones[0] || profile.phone || '';
+}
+
+function certificateScheduleDialogHtml(item = {}, profile = {}) {
+  const addressArray = getCertificateAddressArray(item, profile);
+  const selectedAddress = item.address || item?.raw?.ADDRESS || addressArray[0] || '';
+  const title = certificateScheduleTitle(item);
+  const date = getDateInputValue(item.serviceDate || item?.raw?.SCHEDULE_TIME || item?.raw?.ACTIVATION_DATE);
+  const time = getTimeInputValue(item.serviceTime || item?.raw?.SCHEDULE_TIME);
+  const phone = getCertificateDefaultPhone(item, profile);
+
+  const addressOptions = addressArray.length > 0
+    ? addressArray.map((address) => `
+        <option value="${escapeHtml(address)}" ${address === selectedAddress ? 'selected' : ''}>${escapeHtml(displayAddress(address))}</option>
+      `).join('')
+    : '<option value="">Адрес не найден</option>';
+
+  return `
+    <div id="certificateScheduleModal" class="schedule-modal" role="dialog" aria-modal="true" aria-labelledby="certificateScheduleTitle">
+      <button class="schedule-modal-backdrop" type="button" data-close-schedule aria-label="Закрыть"></button>
+      <section class="schedule-panel">
+        <header class="schedule-header">
+          <h2 id="certificateScheduleTitle">Редактирование услуги</h2>
+          <button class="icon-button schedule-close" type="button" data-close-schedule aria-label="Закрыть">×</button>
+        </header>
+        <form id="certificateScheduleForm" class="schedule-form">
+          <div class="schedule-field schedule-field-full">
+            <label for="scheduleTitle">Название услуги</label>
+            <input id="scheduleTitle" name="title" value="${escapeHtml(title)}" placeholder="Название услуги" required />
+          </div>
+
+          <div class="schedule-grid-2">
+            <div class="schedule-field">
+              <label for="scheduleDate">Дата</label>
+              <input id="scheduleDate" name="date" type="date" value="${escapeHtml(date)}" required />
+            </div>
+            <div class="schedule-field">
+              <label for="scheduleTime">Время</label>
+              <input id="scheduleTime" name="time" type="time" value="${escapeHtml(time)}" required />
+            </div>
+          </div>
+
+          <div class="schedule-field schedule-field-full">
+            <label for="schedulePhone">Телефон для связи</label>
+            <input id="schedulePhone" name="phone" value="${escapeHtml(phone)}" placeholder="+7" required />
+          </div>
+
+          <div class="schedule-field schedule-field-full">
+            <label for="scheduleAddress">Адрес проведения</label>
+            <select id="scheduleAddress" name="address" required>${addressOptions}</select>
+          </div>
+
+          <div class="schedule-field schedule-field-full schedule-textarea-field">
+            <label for="scheduleNotes">Примечание</label>
+            <textarea id="scheduleNotes" name="notes" rows="4" placeholder="Примечание"></textarea>
+          </div>
+
+          <div id="certificateScheduleNotice" class="hidden"></div>
+
+          <div class="schedule-actions">
+            <button class="button schedule-submit" type="submit">Подтвердить</button>
+            <button class="button secondary schedule-cancel" type="button" data-close-schedule>Отмена</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function closeCertificateScheduleDialog() {
+  document.querySelector('#certificateScheduleModal')?.remove();
+}
+
+async function openCertificateScheduleDialog(item = {}) {
+  closeCertificateScheduleDialog();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="certificateScheduleModal" class="schedule-modal" role="dialog" aria-modal="true" aria-labelledby="certificateScheduleTitle">
+      <button class="schedule-modal-backdrop" type="button" data-close-schedule aria-label="Закрыть"></button>
+      <section class="schedule-panel schedule-panel-loading">
+        <header class="schedule-header">
+          <h2 id="certificateScheduleTitle">Редактирование услуги</h2>
+          <button class="icon-button schedule-close" type="button" data-close-schedule aria-label="Закрыть">×</button>
+        </header>
+        <div class="loading-card">Загрузка данных...</div>
+      </section>
+    </div>
+  `);
+
+  document.querySelectorAll('[data-close-schedule]').forEach((button) => {
+    button.addEventListener('click', closeCertificateScheduleDialog);
+  });
+
+  let profile = null;
+  try {
+    const response = await api('/api/profile');
+    profile = response.item || null;
+  } catch (_error) {
+    profile = null;
+  }
+
+  closeCertificateScheduleDialog();
+  document.body.insertAdjacentHTML('beforeend', certificateScheduleDialogHtml(item, profile || {}));
+
+  document.querySelectorAll('[data-close-schedule]').forEach((button) => {
+    button.addEventListener('click', closeCertificateScheduleDialog);
+  });
+
+  document.querySelector('#certificateScheduleForm')?.addEventListener('submit', (event) => {
+    handleCertificateScheduleSubmit(event, item, getCertificateAddressArray(item, profile || {}));
+  });
+}
+
+async function handleCertificateScheduleSubmit(event, item = {}, addressArray = []) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const notice = form.querySelector('#certificateScheduleNotice');
+  const submit = form.querySelector('button[type="submit"]');
+  const formData = new FormData(form);
+  const date = String(formData.get('date') || '').trim();
+  const time = String(formData.get('time') || '').trim();
+
+  const payload = {
+    dealId: certificateDealId(item),
+    title: String(formData.get('title') || '').trim(),
+    date,
+    time,
+    phone: String(formData.get('phone') || '').trim(),
+    address: String(formData.get('address') || '').trim(),
+    addressArray,
+    notes: String(formData.get('notes') || ''),
+    cancel: '',
+    datetime: date && time ? `${date}T${time}:00` : '',
+    stageId: CERTIFICATE_SCHEDULE_STAGE_ID
+  };
+
+  if (notice) {
+    notice.className = 'hidden';
+    notice.textContent = '';
+  }
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = 'Сохраняем...';
+  }
+
+  try {
+    await api(`/api/certificates/${encodeURIComponent(item.id)}/schedule`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    closeCertificateScheduleDialog();
+    await renderCertificateDetail(item.id);
+  } catch (error) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = error.message;
+    }
+  } finally {
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = 'Подтвердить';
+    }
+  }
+}
+
 async function renderCertificateDetail(id) {
   setHeader('Информация о сертификате', { backTo: '/certificates' });
   setActiveNavigation('certificates');
@@ -1485,6 +1711,8 @@ async function renderCertificateDetail(id) {
 
   try {
     const { item } = await api(`/api/certificates/${id}`);
+    const showScheduleButton = isNewCertificateStatus(item);
+
     app.innerHTML = `
       <section class="card detail-card">
         <img class="hero-image" src="${certificateDetailHeroImage}" alt="${escapeHtml(item.title)}" />
@@ -1499,9 +1727,16 @@ async function renderCertificateDetail(id) {
             <div class="detail-row total"><span>Сумма:</span><strong>${formatMoney(item.amountCents)}</strong></div>
             <div class="detail-row"><span>Статус:</span><strong>${statusHtml(certificateStatus, item.status, item.statusLabel)}</strong></div>
           </div>
+          ${showScheduleButton ? `
+            <div class="detail-actions detail-actions-right">
+              <button id="openScheduleDialog" class="button detail-action-button" type="button">Записать</button>
+            </div>
+          ` : ''}
         </div>
       </section>
     `;
+
+    document.querySelector('#openScheduleDialog')?.addEventListener('click', () => openCertificateScheduleDialog(item));
   } catch (error) {
     showError(error);
   }

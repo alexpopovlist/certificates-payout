@@ -2787,3 +2787,218 @@ body:not(.is-login) .multiselect-option[aria-selected="true"] .multiselect-check
     width: 100%;
   }
 }
+
+/* Certificate schedule dialog: admin-style modal adapted to certificates-payout design. */
+.detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.detail-actions-right {
+  justify-content: flex-end;
+}
+
+.detail-action-button {
+  min-width: 132px;
+}
+
+.schedule-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.schedule-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(15, 23, 42, 0.58);
+  cursor: default;
+}
+
+.schedule-panel {
+  position: relative;
+  width: min(100%, 760px);
+  max-height: min(900px, calc(100vh - 48px));
+  overflow: auto;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.24);
+}
+
+.schedule-panel-loading {
+  width: min(100%, 560px);
+}
+
+.schedule-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 28px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.schedule-header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.schedule-close {
+  flex: 0 0 auto;
+}
+
+.schedule-form {
+  display: grid;
+  gap: 22px;
+  padding: 28px;
+}
+
+.schedule-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.schedule-field {
+  position: relative;
+  display: grid;
+  gap: 8px;
+}
+
+.schedule-field label {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.schedule-field input,
+.schedule-field select,
+.schedule-field textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.schedule-field input,
+.schedule-field select {
+  height: 48px;
+  padding: 0 14px;
+}
+
+.schedule-field textarea {
+  resize: vertical;
+  min-height: 118px;
+  padding: 14px;
+}
+
+.schedule-field input:focus,
+.schedule-field select:focus,
+.schedule-field textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.schedule-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.schedule-submit,
+.schedule-cancel {
+  min-width: 156px;
+}
+
+.schedule-submit:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+body:not(.is-login) .schedule-panel {
+  border-radius: 16px;
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.22);
+}
+
+body:not(.is-login) .schedule-header {
+  padding: 24px;
+}
+
+body:not(.is-login) .schedule-form {
+  padding: 24px;
+}
+
+body:not(.is-login) .schedule-field input,
+body:not(.is-login) .schedule-field select,
+body:not(.is-login) .schedule-field textarea {
+  border-color: #e2e8f0;
+  border-radius: 14px;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+body:not(.is-login) .schedule-field label {
+  color: #64748b;
+}
+
+@media (max-width: 680px) {
+  .schedule-modal {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .schedule-panel {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+    border-radius: 22px;
+  }
+
+  .schedule-header,
+  body:not(.is-login) .schedule-header {
+    padding: 20px;
+  }
+
+  .schedule-header h2 {
+    font-size: 21px;
+  }
+
+  .schedule-form,
+  body:not(.is-login) .schedule-form {
+    padding: 20px;
+    gap: 18px;
+  }
+
+  .schedule-grid-2 {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .schedule-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .schedule-submit,
+  .schedule-cancel {
+    width: 100%;
+  }
+}

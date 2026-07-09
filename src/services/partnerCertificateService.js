@@ -1,5 +1,6 @@
 const DEFAULT_AUTH_BASE_URL = 'https://partner-wowlife.ru';
 const DEFAULT_CERTIFICATES_PATH = '/restapi/certificate.getPartnerCertificates';
+const DEFAULT_CHANGE_STAGE_PATH = '/restapi/certificate.changeCertificateStage';
 
 const DEFAULT_GROUP_IDS = [
   'new',
@@ -35,6 +36,14 @@ function getCertificatesUrl() {
     process.env.CERTIFICATES_SERVICE_URL || process.env.AUTH_CERTIFICATES_URL,
     process.env.CERTIFICATES_SERVICE_PATH || process.env.AUTH_CERTIFICATES_PATH,
     DEFAULT_CERTIFICATES_PATH
+  );
+}
+
+function getChangeStageUrl() {
+  return resolveUrl(
+    process.env.CERTIFICATE_STAGE_CHANGE_URL || process.env.CERTIFICATE_CHANGE_STAGE_URL,
+    process.env.CERTIFICATE_STAGE_CHANGE_PATH || process.env.CERTIFICATE_CHANGE_STAGE_PATH,
+    DEFAULT_CHANGE_STAGE_PATH
   );
 }
 
@@ -228,13 +237,13 @@ function getServiceErrorMessage(payload) {
   return payload?.error || payload?.message || payload?.errorMessage || payload?.result?.error || payload?.result?.message;
 }
 
-async function postToCertificatesService(session, body) {
-  const url = getCertificatesUrl();
+
+async function postJsonToPartnerService(session, url, body, refererPath = '/certificates') {
   const headers = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
     'Origin': normalizeBaseUrl(),
-    'Referer': `${normalizeBaseUrl()}/authentication/sign-in`
+    'Referer': `${normalizeBaseUrl()}${refererPath}`
   };
 
   const cookies = getUpstreamCookies(session);
@@ -252,14 +261,25 @@ async function postToCertificatesService(session, body) {
   const payload = parseJsonSafe(text);
 
   if (!response.ok || payload?.result === false || payload?.result === 'error' || payload?.error) {
-    const error = new Error(`WOWlife certificates request failed: ${response.status}`);
+    const error = new Error(`WOWlife request failed: ${response.status}`);
     error.statusCode = response.status >= 400 ? response.status : 502;
-    error.publicMessage = getServiceErrorMessage(payload) || 'Не удалось получить сертификаты из сервиса WOWlife.';
+    error.publicMessage = getServiceErrorMessage(payload) || 'Не удалось выполнить запрос в сервис WOWlife.';
     error.upstreamPayload = payload;
     throw error;
   }
 
   return { payload, url };
+}
+
+async function postToCertificatesService(session, body) {
+  try {
+    return await postJsonToPartnerService(session, getCertificatesUrl(), body, '/authentication/sign-in');
+  } catch (error) {
+    if (!error.publicMessage || error.publicMessage === 'Не удалось выполнить запрос в сервис WOWlife.') {
+      error.publicMessage = 'Не удалось получить сертификаты из сервиса WOWlife.';
+    }
+    throw error;
+  }
 }
 
 async function fetchPartnerCertificates({ session, query = {}, page, limit, order, filters = {} }) {
@@ -332,8 +352,129 @@ async function fetchPartnerCertificateById({ session, id }) {
   throw error;
 }
 
+
+function getDefaultScheduleStageId() {
+  return process.env.CERTIFICATE_SCHEDULE_STAGE_ID || 'C2:UC_4Q05NY';
+}
+
+function normalizeDealId(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  const numeric = Number(text);
+  return Number.isFinite(numeric) && String(Math.trunc(numeric)) === text ? Math.trunc(numeric) : text;
+}
+
+function normalizeScheduleDate(value) {
+  const text = String(value || '').trim();
+  const match = text.match(/^\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : '';
+}
+
+function normalizeScheduleTime(value) {
+  const text = String(value || '').trim();
+  const match = text.match(/^\d{2}:\d{2}/);
+  return match ? match[0] : '';
+}
+
+function normalizeAddressArray(addressArray, selectedAddress) {
+  const values = Array.isArray(addressArray) ? addressArray : [];
+  const normalized = values.map((item) => String(item || '').trim()).filter(Boolean);
+  const selected = String(selectedAddress || '').trim();
+  if (selected && !normalized.includes(selected)) normalized.unshift(selected);
+  return Array.from(new Set(normalized));
+}
+
+function buildSchedulePayload(body = {}) {
+  const date = normalizeScheduleDate(body.date);
+  const time = normalizeScheduleTime(body.time) || '00:00';
+  const address = String(body.address || '').trim();
+  const addressArray = normalizeAddressArray(body.addressArray, address);
+  const stageId = String(body.stageId || getDefaultScheduleStageId()).trim();
+  const payload = {
+    dealId: normalizeDealId(body.dealId || body.id),
+    title: String(body.title || '').trim(),
+    date,
+    time,
+    phone: String(body.phone || '').trim(),
+    address,
+    addressArray,
+    notes: String(body.notes || ''),
+    cancel: String(body.cancel || ''),
+    datetime: String(body.datetime || (date ? `${date}T${time}:00` : '')).trim(),
+    stageId
+  };
+
+  const requiredFields = [
+    ['dealId', 'Не указан идентификатор заявки.'],
+    ['title', 'Укажите название услуги.'],
+    ['date', 'Укажите дату записи.'],
+    ['time', 'Укажите время записи.'],
+    ['phone', 'Укажите телефон для связи.'],
+    ['address', 'Укажите адрес проведения.'],
+    ['stageId', 'Не указан целевой статус записи.']
+  ];
+
+  for (const [field, message] of requiredFields) {
+    if (!payload[field]) {
+      const error = new Error(`Schedule payload field is missing: ${field}`);
+      error.statusCode = 400;
+      error.publicMessage = message;
+      throw error;
+    }
+  }
+
+  if (payload.addressArray.length === 0) payload.addressArray = [payload.address];
+  return payload;
+}
+
+function mapChangedCertificate(raw = {}) {
+  const serviceDateTime = raw.UF_CRM_1654155455356 || raw.serviceDateTime || null;
+  return {
+    id: String(raw.ID || raw.id || raw.VALUE_ID || ''),
+    externalId: raw.ID || raw.id || raw.VALUE_ID || null,
+    certificateNumber: String(raw.UF_CRM_1653569678 || raw.NUMBER || raw.number || raw.ID || raw.id || '—'),
+    title: raw.UF_CRM_1654152270753 || raw.TITLE || raw.title || 'Сертификат',
+    description: raw.UF_CRM_1655304753465 || raw.ADDITIONAL_INFO || raw.additionalInfo || null,
+    amountCents: parseOpportunity(raw.OPPORTUNITY || raw.UF_CRM_1654155963380 || raw.opportunity),
+    status: raw.STAGE_ID || raw.stageId || null,
+    stageId: raw.STAGE_ID || raw.stageId || null,
+    serviceDate: formatServiceDate(serviceDateTime),
+    serviceTime: formatServiceTime(serviceDateTime),
+    customerFullName: raw.UF_CRM_1749636338014 || raw.NAME || raw.name || '—',
+    customerPhone: raw.UF_CRM_1748509255109 || raw.UF_CRM_1749635241862 || raw.PHONE || raw.phone || null,
+    address: raw.UF_CRM_1692301312085 || raw.ADDRESS || raw.address || null,
+    raw
+  };
+}
+
+async function changePartnerCertificateStage({ session, body = {} }) {
+  const requestPayload = buildSchedulePayload(body);
+
+  try {
+    const { payload } = await postJsonToPartnerService(session, getChangeStageUrl(), requestPayload, '/certificates');
+    const result = getPayloadResult(payload) || {};
+    return {
+      item: mapChangedCertificate(result),
+      raw: result,
+      source: 'wowlife',
+      request: {
+        dealId: requestPayload.dealId,
+        stageId: requestPayload.stageId,
+        date: requestPayload.date,
+        time: requestPayload.time
+      }
+    };
+  } catch (error) {
+    if (!error.publicMessage || error.publicMessage === 'Не удалось выполнить запрос в сервис WOWlife.') {
+      error.publicMessage = 'Не удалось записать сертификат в сервисе WOWlife.';
+    }
+    throw error;
+  }
+}
+
 module.exports = {
   fetchPartnerCertificates,
   fetchPartnerCertificateById,
+  changePartnerCertificateStage,
   DEFAULT_GROUP_IDS
 };
