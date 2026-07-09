@@ -203,6 +203,16 @@ function mapStageToStatus(stage = {}) {
   return 'REDEEMED';
 }
 
+function normalizeStageTitle(title) {
+  const value = String(title || '').trim();
+  if (!value) return null;
+  const normalized = value.toLowerCase();
+  if (normalized === 'ожидает сверки' || normalized === 'ожидание сверки') {
+    return 'Ожидает оплаты';
+  }
+  return value;
+}
+
 function mapCertificate(raw = {}) {
   const stage = raw.STAGE || raw.stage || {};
   const contacts = raw.CONTACTS || raw.contacts || {};
@@ -221,7 +231,7 @@ function mapCertificate(raw = {}) {
     serviceDurationMinutes: null,
     imageUrl: null,
     status: mapStageToStatus(stage),
-    statusLabel: stage.group_title || stage.groupTitle || null,
+    statusLabel: normalizeStageTitle(stage.group_title || stage.groupTitle),
     stageGroupId: stage.group_id || stage.groupId || null,
     stageId: stage.id || null,
     serviceDate: formatServiceDate(activationDate || scheduleTime),

@@ -886,9 +886,19 @@ document.addEventListener('click', async (event) => {
 });
 
 
+function normalizeStatusLabel(label) {
+  const value = String(label || '').trim();
+  if (!value) return value;
+  const normalized = value.toLowerCase();
+  if (normalized === 'ожидает сверки' || normalized === 'ожидание сверки') {
+    return 'Ожидает оплаты';
+  }
+  return value;
+}
+
 function statusHtml(statusMap, status, labelOverride = null) {
   const meta = statusMap[status] || { label: status || '—', className: '' };
-  const label = labelOverride || meta.label;
+  const label = normalizeStatusLabel(labelOverride || meta.label);
   return `<span class="status ${meta.className}">${escapeHtml(label)}</span>`;
 }
 
