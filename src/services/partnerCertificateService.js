@@ -1,6 +1,7 @@
 const DEFAULT_AUTH_BASE_URL = 'https://partner-wowlife.ru';
 const DEFAULT_CERTIFICATES_PATH = '/restapi/certificate.getPartnerCertificates';
 const DEFAULT_CHANGE_STAGE_PATH = '/restapi/certificate.changeCertificateStage';
+const DEFAULT_REDEEM_INFO_PATH = '/restapi/certificate.getCertificateForRedeem';
 
 const DEFAULT_GROUP_IDS = [
   'new',
@@ -44,6 +45,14 @@ function getChangeStageUrl() {
     process.env.CERTIFICATE_STAGE_CHANGE_URL || process.env.CERTIFICATE_CHANGE_STAGE_URL,
     process.env.CERTIFICATE_STAGE_CHANGE_PATH || process.env.CERTIFICATE_CHANGE_STAGE_PATH,
     DEFAULT_CHANGE_STAGE_PATH
+  );
+}
+
+function getRedeemInfoUrl() {
+  return resolveUrl(
+    process.env.CERTIFICATE_REDEEM_INFO_URL || process.env.CERTIFICATE_INFO_FOR_REDEEM_URL,
+    process.env.CERTIFICATE_REDEEM_INFO_PATH || process.env.CERTIFICATE_INFO_FOR_REDEEM_PATH,
+    DEFAULT_REDEEM_INFO_PATH
   );
 }
 
@@ -145,6 +154,17 @@ function parseOpportunity(value) {
   if (value === null || value === undefined || value === '') return 0;
   const amount = Number(String(value).split('|')[0].replace(',', '.'));
   return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+}
+
+function formatOpportunityLabel(value) {
+  if (value === null || value === undefined || value === '') return '—';
+  const [amountRaw, currencyRaw] = String(value).split('|');
+  const amount = Number(String(amountRaw || '').replace(',', '.'));
+  const amountText = Number.isFinite(amount)
+    ? new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(amount)
+    : String(amountRaw || '').trim();
+  const currency = String(currencyRaw || 'RUB').trim() || 'RUB';
+  return `${amountText} ${currency}`.trim();
 }
 
 function formatServiceTime(value) {
@@ -447,6 +467,89 @@ function mapChangedCertificate(raw = {}) {
   };
 }
 
+
+function normalizeCertificateNumber(value) {
+  return String(value || '').trim();
+}
+
+function mapRedeemCertificate(raw = {}) {
+  const contacts = raw.CONTACTS || raw.contacts || {};
+  const phones = Array.isArray(contacts.PHONES) ? contacts.PHONES : [];
+  const emails = Array.isArray(contacts.EMAILS) ? contacts.EMAILS : [];
+  const scheduleTime = raw.SCHEDULE_TIME || raw.scheduleTime || null;
+  const opportunity = raw.OPPORTUNITY || raw.opportunity || '';
+
+  return {
+    id: String(raw.ID || raw.id || raw.NUMBER || raw.number || ''),
+    externalId: raw.ID || raw.id || null,
+    certificateNumber: String(raw.NUMBER || raw.number || ''),
+    secretCode: raw.CODE || raw.code || null,
+    title: raw.TITLE || raw.title || raw.SERVICE || raw.service || raw.OPTIONS || raw.options || 'Сертификат',
+    service: raw.SERVICE || raw.service || raw.OPTIONS || raw.options || raw.TITLE || raw.title || '—',
+    options: raw.OPTIONS || raw.options || null,
+    amountCents: parseOpportunity(opportunity),
+    amountLabel: formatOpportunityLabel(opportunity),
+    stageId: raw.STAGE_ID || raw.stageId || null,
+    status: raw.STAGE_ID || raw.stageId || null,
+    serviceDate: formatServiceDate(scheduleTime),
+    serviceTime: formatServiceTime(scheduleTime),
+    scheduleTime,
+    customerFullName: raw.NAME || raw.name || '—',
+    customerEmail: emails[0] || null,
+    customerPhone: phones[0] || null,
+    customerEmails: emails,
+    customerPhones: phones,
+    raw
+  };
+}
+
+async function fetchPartnerCertificateForRedeem({ session, body = {} }) {
+  const allIds = getSessionAllIds(session);
+  if (allIds.length === 0) {
+    const error = new Error('No partner identifiers in session');
+    error.statusCode = 401;
+    error.publicMessage = 'В сессии не найден идентификатор партнёра. Войдите в приложение заново.';
+    throw error;
+  }
+
+  const number = normalizeCertificateNumber(body.number || body.certificateNumber);
+  const code = String(body.code || body.secretCode || '').trim();
+
+  if (!number || !code) {
+    const error = new Error('Certificate number and code are required');
+    error.statusCode = 400;
+    error.publicMessage = 'Укажите номер сертификата и секретный код.';
+    throw error;
+  }
+
+  const requestPayload = { number, code, allIds };
+
+  try {
+    const { payload } = await postJsonToPartnerService(session, getRedeemInfoUrl(), requestPayload, '/redeem');
+    const result = getPayloadResult(payload) || {};
+    if (!result || Object.keys(result).length === 0) {
+      const error = new Error('Empty certificate info response');
+      error.statusCode = 404;
+      error.publicMessage = 'Информация по сертификату не найдена.';
+      throw error;
+    }
+
+    return {
+      item: mapRedeemCertificate(result),
+      source: 'wowlife',
+      request: {
+        number: requestPayload.number,
+        allIds: requestPayload.allIds
+      }
+    };
+  } catch (error) {
+    if (!error.publicMessage || error.publicMessage === 'Не удалось выполнить запрос в сервис WOWlife.') {
+      error.publicMessage = 'Не удалось получить данные сертификата из сервиса WOWlife.';
+    }
+    throw error;
+  }
+}
+
 async function changePartnerCertificateStage({ session, body = {} }) {
   const requestPayload = buildSchedulePayload(body);
 
@@ -475,6 +578,7 @@ async function changePartnerCertificateStage({ session, body = {} }) {
 module.exports = {
   fetchPartnerCertificates,
   fetchPartnerCertificateById,
+  fetchPartnerCertificateForRedeem,
   changePartnerCertificateStage,
   DEFAULT_GROUP_IDS
 };

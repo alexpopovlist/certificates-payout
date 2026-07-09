@@ -510,3 +510,23 @@ Payload формируется в формате:
 CERTIFICATE_STAGE_CHANGE_URL=https://partner-wowlife.ru/restapi/certificate.changeCertificateStage
 CERTIFICATE_SCHEDULE_STAGE_ID=C2:UC_4Q05NY
 ```
+
+### Просмотр данных сертификата перед погашением
+
+На странице `/redeem` кнопка **«Показать информацию»** вызывает WOWlife-сервис:
+
+```env
+CERTIFICATE_REDEEM_INFO_URL=https://partner-wowlife.ru/restapi/certificate.getCertificateForRedeem
+```
+
+Backend формирует payload из номера сертификата, секретного кода и `allIds` текущей авторизованной сессии, например:
+
+```json
+{
+  "number": "F3",
+  "code": "3",
+  "allIds": ["485"]
+}
+```
+
+В ответе отображаются номер сертификата, имя получателя, услуга, сумма, дата, email и телефон.

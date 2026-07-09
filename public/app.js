@@ -1224,6 +1224,125 @@ function paymentCard(paymentRequest) {
   `;
 }
 
+
+function redeemInfoValue(value, fallback = '—') {
+  const text = String(value ?? '').trim();
+  return text ? escapeHtml(text) : escapeHtml(fallback);
+}
+
+function redeemInfoRow(label, value) {
+  return `
+    <div class="redeem-info-row">
+      <span>${escapeHtml(label)}</span>
+      <strong>${redeemInfoValue(value)}</strong>
+    </div>
+  `;
+}
+
+function getRedeemInfoEmail(item = {}) {
+  if (item.customerEmail) return item.customerEmail;
+  if (Array.isArray(item.customerEmails) && item.customerEmails.length > 0) return item.customerEmails[0];
+  const rawEmails = item?.raw?.CONTACTS?.EMAILS;
+  return Array.isArray(rawEmails) && rawEmails.length > 0 ? rawEmails[0] : '';
+}
+
+function getRedeemInfoPhone(item = {}) {
+  if (item.customerPhone) return item.customerPhone;
+  if (Array.isArray(item.customerPhones) && item.customerPhones.length > 0) return item.customerPhones[0];
+  const rawPhones = item?.raw?.CONTACTS?.PHONES;
+  return Array.isArray(rawPhones) && rawPhones.length > 0 ? rawPhones[0] : '';
+}
+
+function certificateRedeemInfoDialogHtml(item = {}) {
+  const amount = item.amountLabel || formatMoney(item.amountCents);
+  return `
+    <div id="redeemInfoModal" class="schedule-modal redeem-info-modal" role="dialog" aria-modal="true" aria-labelledby="redeemInfoTitle">
+      <button class="schedule-modal-backdrop" type="button" data-close-redeem-info aria-label="Закрыть"></button>
+      <section class="schedule-panel redeem-info-panel">
+        <header class="schedule-header">
+          <h2 id="redeemInfoTitle">Данные сертификата</h2>
+          <button class="icon-button schedule-close" type="button" data-close-redeem-info aria-label="Закрыть">×</button>
+        </header>
+        <div class="redeem-info-body">
+          <div class="redeem-info-list">
+            ${redeemInfoRow('Номер сертификата:', item.certificateNumber)}
+            ${redeemInfoRow('Имя получателя:', item.customerFullName)}
+            ${redeemInfoRow('Услуга:', item.service || item.title)}
+            ${redeemInfoRow('Сумма:', amount)}
+            ${redeemInfoRow('Дата:', formatDate(item.serviceDate || item.scheduleTime))}
+            ${redeemInfoRow('Email:', getRedeemInfoEmail(item))}
+            ${redeemInfoRow('Телефон:', getRedeemInfoPhone(item))}
+          </div>
+          <div id="redeemInfoNotice" class="hidden"></div>
+          <div class="schedule-actions redeem-info-actions">
+            <button class="button secondary" type="button" data-close-redeem-info>Закрыть</button>
+            <button id="redeemInfoRedeemButton" class="button" type="button">Погасить сертификат</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function closeRedeemInfoDialog() {
+  document.querySelector('#redeemInfoModal')?.remove();
+}
+
+function openRedeemInfoDialog(item = {}, form) {
+  closeRedeemInfoDialog();
+  document.body.insertAdjacentHTML('beforeend', certificateRedeemInfoDialogHtml(item));
+  document.querySelectorAll('[data-close-redeem-info]').forEach((button) => {
+    button.addEventListener('click', closeRedeemInfoDialog);
+  });
+  document.querySelector('#redeemInfoRedeemButton')?.addEventListener('click', () => {
+    closeRedeemInfoDialog();
+    if (form?.requestSubmit) form.requestSubmit();
+    else form?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+  });
+}
+
+async function handleShowRedeemInfo(form, notice, button) {
+  const formData = new FormData(form);
+  const certificateNumber = String(formData.get('certificateNumber') || '').trim();
+  const secretCode = String(formData.get('secretCode') || '').trim();
+
+  if (notice) {
+    notice.className = 'notice hidden';
+    notice.textContent = '';
+  }
+
+  if (!certificateNumber || !secretCode) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = 'Укажите номер сертификата и секретный код.';
+    }
+    return;
+  }
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Загрузка...';
+  }
+
+  try {
+    const { item } = await api('/api/certificates/redeem/info', {
+      method: 'POST',
+      body: JSON.stringify({ certificateNumber, secretCode })
+    });
+    openRedeemInfoDialog(item, form);
+  } catch (error) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = error.message;
+    }
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Показать информацию';
+    }
+  }
+}
+
 function declension(count, words) {
   const abs = Math.abs(Number(count)) % 100;
   const last = abs % 10;
@@ -1278,7 +1397,8 @@ async function renderRedeem() {
               <input id="secretCode" name="secretCode" placeholder="000000" autocomplete="off" required />
             </div>
           </div>
-          <div class="actions">
+          <div class="actions redeem-actions">
+            <button id="showRedeemInfo" class="button secondary" type="button">Показать информацию</button>
             <button class="button" type="submit">Погасить сертификат</button>
           </div>
           <div id="redeemNotice" class="hidden"></div>
@@ -1290,8 +1410,10 @@ async function renderRedeem() {
   const form = document.querySelector('#redeemForm');
   const notice = document.querySelector('#redeemNotice');
   const scannerButton = document.querySelector('#openQrScanner');
+  const showInfoButton = document.querySelector('#showRedeemInfo');
 
   scannerButton?.addEventListener('click', openQrScanner);
+  showInfoButton?.addEventListener('click', () => handleShowRedeemInfo(form, notice, showInfoButton));
   document.querySelectorAll('[data-close-qr]').forEach((button) => {
     button.addEventListener('click', () => stopQrScanner());
   });
@@ -1482,9 +1604,25 @@ async function loadFilteredCertificates(page = 1, emptyText = 'По выбран
 const CERTIFICATE_SCHEDULE_STAGE_ID = 'C2:UC_4Q05NY';
 
 function isNewCertificateStatus(item = {}) {
-  const values = [item.status, item.stageGroupId, item.statusLabel, item?.raw?.STAGE?.group_id, item?.raw?.STAGE?.group_title]
-    .map((value) => String(value || '').trim().toLowerCase());
-  return values.some((value) => value === 'new' || value === 'новая заявка');
+  const values = [
+    item.status,
+    item.stageGroupId,
+    item.statusLabel,
+    item.stageId,
+    item?.raw?.STAGE?.id,
+    item?.raw?.STAGE?.group_id,
+    item?.raw?.STAGE?.group_title,
+    item?.raw?.STAGE_ID,
+    item?.raw?.IS_NEW
+  ].map((value) => String(value || '').trim().toLowerCase());
+
+  return values.some((value) => {
+    if (!value) return false;
+    if (value === 'new' || value === 'новый' || value === 'новая заявка') return true;
+    if (/(:|^)new$/.test(value)) return true;
+    if (value === 'y') return true;
+    return false;
+  });
 }
 
 function decodeHtmlEntities(value) {

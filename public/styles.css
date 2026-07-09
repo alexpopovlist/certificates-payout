@@ -3002,3 +3002,71 @@ body:not(.is-login) .schedule-field label {
     width: 100%;
   }
 }
+
+/* Redeem certificate preview dialog. */
+.redeem-actions {
+  justify-content: flex-end;
+}
+
+.redeem-info-panel {
+  width: min(100%, 760px);
+}
+
+.redeem-info-body {
+  display: grid;
+  gap: 24px;
+  padding: 28px;
+}
+
+.redeem-info-list {
+  display: grid;
+  gap: 18px;
+}
+
+.redeem-info-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+  color: #334155;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.redeem-info-row span {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.redeem-info-row strong {
+  color: #0f172a;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.redeem-info-actions {
+  padding-top: 4px;
+}
+
+@media (max-width: 680px) {
+  .redeem-actions,
+  .redeem-info-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .redeem-actions .button,
+  .redeem-info-actions .button {
+    width: 100%;
+  }
+
+  .redeem-info-body {
+    padding: 20px;
+  }
+
+  .redeem-info-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    font-size: 15px;
+  }
+}

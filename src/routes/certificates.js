@@ -4,6 +4,7 @@ const { broadcastPush } = require('../services/pushService');
 const {
   fetchPartnerCertificates,
   fetchPartnerCertificateById,
+  fetchPartnerCertificateForRedeem,
   changePartnerCertificateStage
 } = require('../services/partnerCertificateService');
 
@@ -207,6 +208,19 @@ router.get('/redeemed', async (request, response, next) => {
 
 router.get('/redeem', (_request, response) => {
   response.status(405).json({ error: 'Use POST /api/certificates/redeem' });
+});
+
+router.post('/redeem/info', async (request, response, next) => {
+  try {
+    const data = await fetchPartnerCertificateForRedeem({
+      session: request.auth,
+      body: request.body
+    });
+
+    return response.json(data);
+  } catch (error) {
+    next(error);
+  }
 });
 
 router.post('/redeem', async (request, response, next) => {
