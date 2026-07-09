@@ -2743,7 +2743,7 @@ async function renderPaymentDetail(id) {
     const canMarkPaid = item.status === 'PROCESSING' && data.source !== 'wowlife';
 
     app.innerHTML = `
-      <div class="stack">
+      <div class="stack payment-detail-page">
         <section class="card summary-card">
           <div>
             <div class="summary-label">${escapeHtml(item.requestNumber)}</div>

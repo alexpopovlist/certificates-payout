@@ -3428,3 +3428,44 @@ body:not(.is-login) .services-name-cell {
   min-width: 116px;
   padding-inline: 18px;
 }
+
+/* Mobile table panels: make table headers and rows separate cards, like /payments. */
+@media (max-width: 920px) {
+  body:not(.is-login) .certificates-table-card,
+  body:not(.is-login) .services-table-card,
+  body:not(.is-login) .reconciliations-page #reconciliationsTable,
+  body:not(.is-login) .payment-detail-page .table-card {
+    display: grid;
+    gap: 16px;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  body:not(.is-login) .certificates-table-card > .table-header,
+  body:not(.is-login) .services-table-card > .table-header,
+  body:not(.is-login) .reconciliations-page #reconciliationsTable > .table-header,
+  body:not(.is-login) .payment-detail-page .table-card > .table-header {
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  body:not(.is-login) .certificates-table-card > .mobile-cards,
+  body:not(.is-login) .services-table-card > .mobile-cards,
+  body:not(.is-login) .reconciliations-page #reconciliationsTable > .mobile-cards,
+  body:not(.is-login) .payment-detail-page .table-card > .mobile-cards {
+    padding: 0;
+    gap: 16px;
+  }
+
+  body:not(.is-login) .certificates-table-card > .empty-state,
+  body:not(.is-login) .services-table-card > .empty-state,
+  body:not(.is-login) .reconciliations-page #reconciliationsTable > .empty-state,
+  body:not(.is-login) .payment-detail-page .table-card > .empty-state {
+    margin: 0;
+  }
+}
