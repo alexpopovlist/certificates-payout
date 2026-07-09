@@ -483,6 +483,104 @@ function normalizePhoneContact(value) {
   return `+${digits.slice(0, 15)}`;
 }
 
+
+function getAuthorizationContactIdFromSession(session) {
+  return (
+    session?.upstream?.contactId ||
+    session?.upstream?.allIds?.[0] ||
+    session?.user?.id ||
+    null
+  );
+}
+
+function getAuthorizationTokenFromSession(session) {
+  return (
+    session?.upstream?.token ||
+    session?.upstream?.authToken ||
+    session?.upstream?.accessToken ||
+    null
+  );
+}
+
+function mergeAuthCookies(existingCookies = [], nextCookies = []) {
+  const cookieMap = new Map();
+
+  [...existingCookies, ...nextCookies]
+    .map((cookie) => String(cookie || '').trim())
+    .filter(Boolean)
+    .forEach((cookie) => {
+      const key = cookie.split(';')[0].split('=')[0];
+      if (key) cookieMap.set(key, cookie);
+    });
+
+  return Array.from(cookieMap.values());
+}
+
+async function refreshAuthorizationSession({ session }) {
+  const contactId = getAuthorizationContactIdFromSession(session);
+  const token = getAuthorizationTokenFromSession(session);
+
+  if (!contactId || !token) {
+    const error = new Error('No contactId/token in session for authorization refresh');
+    error.statusCode = 401;
+    error.publicMessage = 'В сессии не найден contactId/token для повторной авторизации WOWlife.';
+    throw error;
+  }
+
+  const authorizationUrl = getAuthorizationUrl();
+  let authorizationResult;
+
+  try {
+    authorizationResult = await requestJsonPost(
+      authorizationUrl,
+      buildAuthorizationBody({ contactId, token }),
+      { cookies: session?.upstream?.cookies || [] }
+    );
+  } catch (error) {
+    const serviceError = new Error(`WOWlife authorization refresh request failed: ${error.message}`);
+    serviceError.statusCode = 502;
+    serviceError.publicMessage = 'Не удалось повторно выполнить авторизацию WOWlife auth.authorization.';
+    throw serviceError;
+  }
+
+  if (!authorizationResult.ok) {
+    throwAuthRejected(authorizationResult, 'Не удалось повторно выполнить авторизацию WOWlife');
+  }
+
+  const refreshedContactId = extractContactId(authorizationResult.payload) || String(contactId);
+  const refreshedToken = extractToken(authorizationResult.payload) || token;
+  const refreshedAllIds = extractAllIds(authorizationResult.payload, null);
+  const existingAllIds = Array.isArray(session?.upstream?.allIds)
+    ? session.upstream.allIds.map((id) => String(id)).filter(Boolean)
+    : [];
+  const allIds = refreshedAllIds.length > 0
+    ? refreshedAllIds
+    : (existingAllIds.length > 0 ? existingAllIds : [String(refreshedContactId)]);
+  const refreshedUser = session?.user || pickUser(authorizationResult.payload, String(refreshedContactId), { contactId: refreshedContactId });
+
+  return {
+    session: {
+      ...session,
+      user: refreshedUser,
+      upstream: {
+        ...(session?.upstream || {}),
+        token: refreshedToken,
+        refreshToken: extractRefreshToken(authorizationResult.payload) || session?.upstream?.refreshToken || null,
+        authUrl: authorizationUrl,
+        contactId: refreshedContactId,
+        allIds,
+        cookies: mergeAuthCookies(session?.upstream?.cookies || [], authorizationResult.cookies)
+      }
+    },
+    payload: authorizationResult.payload,
+    request: {
+      domain: getAuthDomain(),
+      cabinet: getAuthCabinet(),
+      contactId: String(contactId)
+    }
+  };
+}
+
 async function requestSmsCode({ contact }) {
   const normalizedContact = normalizePhoneContact(contact);
   if (!normalizedContact) {
@@ -696,5 +794,6 @@ module.exports = {
   signInWithPartner,
   requestSmsCode,
   signInWithSmsCode,
+  refreshAuthorizationSession,
   buildSession
 };

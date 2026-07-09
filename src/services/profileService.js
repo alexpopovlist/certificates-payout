@@ -1,3 +1,5 @@
+const { refreshAuthorizationSession } = require('./authService');
+
 const DEFAULT_AUTH_BASE_URL = 'https://partner-wowlife.ru';
 const DEFAULT_PROFILE_PATH = '/restapi/profile.getProfile';
 
@@ -310,7 +312,7 @@ async function postToProfileService(session, body) {
   return { payload, cookies: getSetCookieHeaders(response.headers) };
 }
 
-async function fetchPartnerProfile({ session }) {
+function buildProfileRequestPayload(session) {
   const contactId = getSessionContactId(session);
   const token = getSessionToken(session);
 
@@ -331,31 +333,76 @@ async function fetchPartnerProfile({ session }) {
     requestPayload.domain = getAuthDomain();
   }
 
+  return { requestPayload, contactId, token };
+}
+
+async function loadProfilePayload(session, options = {}) {
+  const { requestPayload, contactId, token } = buildProfileRequestPayload(session);
   const cacheKey = getProfileCacheKey(contactId, token);
-  const cachedResult = getCachedProfile(cacheKey);
-  const payload = cachedResult || (await postToProfileService(session, requestPayload)).payload;
-  if (!cachedResult) {
-    setCachedProfile(cacheKey, payload);
+  const cachedResult = options.skipCache ? null : getCachedProfile(cacheKey);
+
+  if (cachedResult) {
+    return { payload: cachedResult, requestPayload, cacheKey, fromCache: true };
   }
 
-  const result = getPayloadResult(payload);
+  const { payload, cookies } = await postToProfileService(session, requestPayload);
+  return { payload, cookies, requestPayload, cacheKey, fromCache: false };
+}
+
+function createEmptyProfileError(payload) {
+  console.warn('WOWlife profile payload does not contain partner profile fields', sanitizeProfilePayload(payload));
+  const error = new Error('WOWlife profile response is empty');
+  error.statusCode = 502;
+  error.publicMessage = 'Сервис WOWlife profile.getProfile вернул пустой профиль. Проверьте, что текущая сессия содержит актуальные contactId/token, и войдите заново.';
+  error.upstreamPayload = sanitizeProfilePayload(payload);
+  return error;
+}
+
+async function fetchPartnerProfile({ session }) {
+  let currentSession = session;
+  let authorizationRefreshed = false;
+  let profileResponse = await loadProfilePayload(currentSession);
+  let result = getPayloadResult(profileResponse.payload);
 
   if (!hasProfileIdentity(result)) {
-    console.warn('WOWlife profile payload does not contain partner profile fields', sanitizeProfilePayload(payload));
-    const error = new Error('WOWlife profile response is empty');
-    error.statusCode = 502;
-    error.publicMessage = 'Сервис WOWlife profile.getProfile вернул пустой профиль. Проверьте, что текущая сессия содержит актуальные contactId/token, и войдите заново.';
-    error.upstreamPayload = sanitizeProfilePayload(payload);
-    throw error;
+    if (profileResponse.cacheKey) {
+      profileResponseCache.delete(profileResponse.cacheKey);
+    }
+
+    let refreshResult;
+    try {
+      refreshResult = await refreshAuthorizationSession({ session: currentSession });
+    } catch (error) {
+      console.warn('WOWlife auth.authorization retry before profile retry failed', error.publicMessage || error.message);
+      throw createEmptyProfileError(profileResponse.payload);
+    }
+
+    currentSession = refreshResult.session;
+    authorizationRefreshed = true;
+    profileResponse = await loadProfilePayload(currentSession, { skipCache: true });
+    result = getPayloadResult(profileResponse.payload);
+  }
+
+  if (!hasProfileIdentity(result)) {
+    if (profileResponse.cacheKey) {
+      profileResponseCache.delete(profileResponse.cacheKey);
+    }
+    throw createEmptyProfileError(profileResponse.payload);
+  }
+
+  if (!profileResponse.fromCache && profileResponse.cacheKey) {
+    setCachedProfile(profileResponse.cacheKey, profileResponse.payload);
   }
 
   return {
     item: normalizeProfile(result),
     source: 'wowlife',
     request: {
-      cabinet: requestPayload.cabinet,
-      contactId: requestPayload.contactId
-    }
+      cabinet: profileResponse.requestPayload.cabinet,
+      contactId: profileResponse.requestPayload.contactId,
+      authorizationRefreshed
+    },
+    session: authorizationRefreshed ? currentSession : undefined
   };
 }
 
