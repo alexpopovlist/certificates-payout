@@ -3070,3 +3070,35 @@ body:not(.is-login) .schedule-field label {
     font-size: 15px;
   }
 }
+
+/* Certificate list actions: mirror detail action visibility on /certificates. */
+.certificate-card-clickable {
+  cursor: pointer;
+}
+
+.certificate-card-clickable:focus-visible {
+  outline: 3px solid rgba(47, 126, 231, 0.28);
+  outline-offset: 3px;
+}
+
+.certificate-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.certificate-list-action {
+  min-width: 132px;
+  padding-inline: 22px;
+}
+
+@media (max-width: 720px) {
+  .certificate-card-actions {
+    justify-content: stretch;
+  }
+
+  .certificate-list-action {
+    width: 100%;
+  }
+}

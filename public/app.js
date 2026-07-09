@@ -75,7 +75,8 @@ const createRequestState = {
 
 const certificatesListState = {
   page: 1,
-  limit: 20
+  limit: 20,
+  itemsById: new Map()
 };
 
 const certificateStatus = {
@@ -1192,8 +1193,10 @@ async function openQrScanner() {
 
 
 function certificateCard(certificate) {
+  const showScheduleButton = isNewCertificateStatus(certificate);
+
   return `
-    <a class="card certificate-card" href="/certificates/${certificate.id}">
+    <article class="card certificate-card certificate-card-clickable" data-certificate-link="/certificates/${certificate.id}" role="link" tabindex="0">
       <div class="card-topline">
         <div class="card-title">${escapeHtml(certificate.certificateNumber)}</div>
         <div class="money">${formatPlainMoney(certificate.amountCents)}</div>
@@ -1204,7 +1207,12 @@ function certificateCard(certificate) {
         <span>${formatDate(certificate.serviceDate)} · ${formatTime(certificate.serviceTime)}</span>
         ${statusHtml(certificateStatus, certificate.status, certificate.statusLabel)}
       </div>
-    </a>
+      ${showScheduleButton ? `
+        <div class="certificate-card-actions">
+          <button class="button certificate-list-action" type="button" data-certificate-schedule-id="${escapeHtml(certificate.id)}">Записать</button>
+        </div>
+      ` : ''}
+    </article>
   `;
 }
 
@@ -1472,14 +1480,51 @@ function certificatesPaginationHtml(pagination) {
   `;
 }
 
+function bindCertificateListActions(list) {
+  list.querySelectorAll('[data-certificate-link]').forEach((card) => {
+    const openCard = () => navigate(card.dataset.certificateLink);
+
+    card.addEventListener('click', (event) => {
+      if (event.target.closest('button, a, input, select, textarea')) return;
+      openCard();
+    });
+
+    card.addEventListener('keydown', (event) => {
+      if (event.target.closest('button, a, input, select, textarea')) return;
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openCard();
+      }
+    });
+  });
+
+  list.querySelectorAll('[data-certificate-schedule-id]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const item = certificatesListState.itemsById.get(String(button.dataset.certificateScheduleId));
+      if (item) {
+        openCertificateScheduleDialog(item, {
+          onSuccess: () => loadFilteredCertificates(certificatesListState.page)
+        });
+      }
+    });
+  });
+}
+
 function renderCertificatesResult(data, emptyText = 'Погашенных сертификатов пока нет.') {
   const list = document.querySelector('#certificatesList');
   const pagination = document.querySelector('#certificatesPagination');
   if (!list) return;
 
+  certificatesListState.itemsById = new Map((data.items || []).map((item) => [String(item.id), item]));
+
   list.innerHTML = data.items?.length
     ? data.items.map(certificateCard).join('')
     : `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
+
+  bindCertificateListActions(list);
 
   if (pagination) {
     pagination.innerHTML = certificatesPaginationHtml(data.pagination);
@@ -1751,7 +1796,7 @@ function closeCertificateScheduleDialog() {
   document.querySelector('#certificateScheduleModal')?.remove();
 }
 
-async function openCertificateScheduleDialog(item = {}) {
+async function openCertificateScheduleDialog(item = {}, options = {}) {
   closeCertificateScheduleDialog();
   document.body.insertAdjacentHTML('beforeend', `
     <div id="certificateScheduleModal" class="schedule-modal" role="dialog" aria-modal="true" aria-labelledby="certificateScheduleTitle">
@@ -1786,11 +1831,11 @@ async function openCertificateScheduleDialog(item = {}) {
   });
 
   document.querySelector('#certificateScheduleForm')?.addEventListener('submit', (event) => {
-    handleCertificateScheduleSubmit(event, item, getCertificateAddressArray(item, profile || {}));
+    handleCertificateScheduleSubmit(event, item, getCertificateAddressArray(item, profile || {}), options);
   });
 }
 
-async function handleCertificateScheduleSubmit(event, item = {}, addressArray = []) {
+async function handleCertificateScheduleSubmit(event, item = {}, addressArray = [], options = {}) {
   event.preventDefault();
   const form = event.currentTarget;
   const notice = form.querySelector('#certificateScheduleNotice');
@@ -1828,7 +1873,11 @@ async function handleCertificateScheduleSubmit(event, item = {}, addressArray = 
       body: JSON.stringify(payload)
     });
     closeCertificateScheduleDialog();
-    await renderCertificateDetail(item.id);
+    if (typeof options.onSuccess === 'function') {
+      await options.onSuccess();
+    } else {
+      await renderCertificateDetail(item.id);
+    }
   } catch (error) {
     if (notice) {
       notice.className = 'notice error';
