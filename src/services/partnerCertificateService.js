@@ -121,9 +121,105 @@ function parseIdList(value) {
     .filter(Boolean);
 }
 
-function getProductPartnerIds() {
-  const configuredIds = parseIdList(process.env.PRODUCTS_ALL_IDS || process.env.PRODUCT_PARTNER_IDS || process.env.PARTNER_PRODUCT_IDS);
-  return configuredIds.length > 0 ? configuredIds : ['301'];
+function uniqNonEmpty(values = []) {
+  return Array.from(new Set(values.map((value) => String(value || '').trim()).filter(Boolean)));
+}
+
+function toIdArray(value) {
+  if (Array.isArray(value)) {
+    return uniqNonEmpty(value.flatMap((item) => toIdArray(item)));
+  }
+
+  if (value === null || value === undefined || value === '') return [];
+
+  if (typeof value === 'number' || typeof value === 'bigint') {
+    return [String(value)];
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === 'object') {
+    const idValues = [
+      value.ID,
+      value.id,
+      value.VALUE,
+      value.value,
+      value.PARTNER_ID,
+      value.partnerId,
+      value.COMPANY_ID,
+      value.companyId
+    ];
+    return uniqNonEmpty(idValues.flatMap((item) => toIdArray(item)));
+  }
+
+  return [];
+}
+
+function normalizeProfileKey(key) {
+  return String(key || '').toLowerCase().replace(/[^a-zа-я0-9]/g, '');
+}
+
+function isProductPartnerProfileKey(key) {
+  const normalized = normalizeProfileKey(key);
+  const knownKeys = [
+    'productsallids',
+    'productallids',
+    'productpartnerids',
+    'productpartnerid',
+    'partnerproductids',
+    'partnerproductid',
+    'partnerproductsids',
+    'partnerproductsid',
+    'partnerids',
+    'partnerid',
+    'partner',
+    'companyid',
+    'company'
+  ];
+
+  return knownKeys.includes(normalized) || (
+    normalized.includes('partner') &&
+    (normalized.includes('product') || normalized.includes('service') || normalized.includes('id'))
+  );
+}
+
+function extractProductPartnerIdsFromProfile(profile = {}) {
+  const candidates = [];
+  const sources = [profile, profile.raw, profile.item, profile.item?.raw].filter(Boolean);
+
+  sources.forEach((source) => {
+    if (!source || typeof source !== 'object') return;
+
+    Object.entries(source).forEach(([key, value]) => {
+      if (isProductPartnerProfileKey(key)) {
+        candidates.push(...toIdArray(value));
+      }
+    });
+  });
+
+  if (candidates.length > 0) return uniqNonEmpty(candidates);
+
+  // Последний fallback тоже берётся из профиля, но не из env и не из хардкода.
+  return uniqNonEmpty([profile.partnerId, profile.raw?.PARTNER, profile.raw?.PARTNER_ID, profile.raw?.COMPANY_ID, profile.id]);
+}
+
+async function getProductPartnerIdsFromProfile(session) {
+  const { item: profile } = await fetchPartnerProfile({ session });
+  const profileIds = extractProductPartnerIdsFromProfile(profile);
+
+  if (profileIds.length === 0) {
+    const error = new Error('No product partner identifiers in profile');
+    error.statusCode = 400;
+    error.publicMessage = 'В профиле партнёра не найдены идентификаторы для загрузки услуг.';
+    throw error;
+  }
+
+  return profileIds;
 }
 
 function getUpstreamCookies(session) {
@@ -336,14 +432,7 @@ function mapPartnerProduct(raw = {}) {
 }
 
 async function fetchPartnerProducts({ session }) {
-  const allIds = getProductPartnerIds();
-
-  if (allIds.length === 0) {
-    const error = new Error('No product partner identifiers configured');
-    error.statusCode = 400;
-    error.publicMessage = 'Не настроены идентификаторы партнёра для загрузки услуг.';
-    throw error;
-  }
+  const allIds = await getProductPartnerIdsFromProfile(session);
 
   const requestPayload = { allIds };
 

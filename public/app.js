@@ -1381,17 +1381,19 @@ function productsTable(items = []) {
   `).join('');
 
   const mobileCards = items.map((item) => `
-    <article class="mobile-check-card services-mobile-card">
-      <div></div>
-      <div>
-        <strong>${escapeHtml(item.name)}</strong>
-        <p>Цена: ${formatMoney(item.priceCents)}</p>
-        <p>Открытая цена: ${escapeHtml(String(item.openPriceLabel ?? '0'))}</p>
-        <p>Дата начала: ${String(formatProductDateTime(item.activeFrom)).replace('<br />', ' ')}</p>
-        <p>Сайт: ${productLinkHtml(item.productLink)}</p>
-        <div class="services-mobile-actions">
-          <button class="button services-edit-button" type="button" data-service-edit-id="${escapeHtml(item.id)}">Изменить</button>
-        </div>
+    <article class="card certificate-card services-mobile-card">
+      <div class="card-topline">
+        <div class="card-title services-mobile-title">${escapeHtml(item.name)}</div>
+        <div class="money">${formatPlainMoney(item.priceCents)}</div>
+      </div>
+      <div class="dashed-line"></div>
+      <div class="services-mobile-meta">
+        <div class="profile-line"><span>Открытая цена</span><strong>${escapeHtml(String(item.openPriceLabel ?? '0'))}</strong></div>
+        <div class="profile-line"><span>Дата начала</span><strong>${String(formatProductDateTime(item.activeFrom)).replace('<br />', ' ')}</strong></div>
+        <div class="profile-line"><span>Сайт</span><strong>${productLinkHtml(item.productLink)}</strong></div>
+      </div>
+      <div class="services-mobile-actions">
+        <button class="button services-edit-button" type="button" data-service-edit-id="${escapeHtml(item.id)}">Изменить</button>
       </div>
     </article>
   `).join('');
@@ -2949,6 +2951,26 @@ function certificatesTable(certificates, options = {}) {
     const checkbox = selectable
       ? `<input data-certificate-checkbox type="checkbox" value="${escapeHtml(certificate.id)}" checked />`
       : '';
+
+    if (!selectable) {
+      return `
+        <article class="card certificate-card certificate-table-mobile-card">
+          <div class="card-topline">
+            <div class="card-title">${certificateNumberMarkup(certificate)}</div>
+            <div class="money">${formatPlainMoney(certificate.amountCents)}</div>
+          </div>
+          <div class="dashed-line"></div>
+          <div class="card-subtitle">${escapeHtml(certificate.title)}</div>
+          <div class="status-row">
+            <span>${formatDate(certificate.serviceDate)} · ${formatTime(certificate.serviceTime)}</span>
+            ${statusHtml(certificateStatus, certificate.status, certificate.statusLabel)}
+          </div>
+          <div class="status-row certificate-table-mobile-client">
+            <span>Клиент: ${escapeHtml(certificate.customerFullName || '—')}</span>
+          </div>
+        </article>
+      `;
+    }
 
     return `
       <div class="mobile-check-card">

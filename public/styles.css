@@ -3307,3 +3307,67 @@ body:not(.is-login) .services-name-cell {
     font-size: 12px;
   }
 }
+
+/* Mobile table representation: use the same card language as /certificates. */
+@media (max-width: 920px) {
+  body:not(.is-login) .table-wrapper {
+    display: none;
+  }
+
+  body:not(.is-login) .mobile-cards {
+    display: grid;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  body:not(.is-login) .mobile-check-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: #ffffff;
+  }
+
+  body:not(.is-login) .certificate-table-mobile-card,
+  body:not(.is-login) .services-mobile-card {
+    border-radius: 26px;
+    padding: 24px;
+  }
+
+  body:not(.is-login) .certificate-table-mobile-card .card-title,
+  body:not(.is-login) .services-mobile-card .card-title {
+    min-width: 0;
+  }
+
+  body:not(.is-login) .certificate-table-mobile-card .card-title a,
+  body:not(.is-login) .services-mobile-title {
+    overflow-wrap: anywhere;
+  }
+
+  body:not(.is-login) .certificate-table-mobile-client {
+    margin-top: 8px;
+    justify-content: flex-start;
+  }
+
+  body:not(.is-login) .services-mobile-meta {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  body:not(.is-login) .services-mobile-meta .profile-line {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  body:not(.is-login) .services-mobile-actions {
+    margin-top: 16px;
+  }
+
+  body:not(.is-login) .services-mobile-actions .button {
+    width: 100%;
+  }
+}

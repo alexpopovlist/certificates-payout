@@ -597,10 +597,10 @@ Added `/services` — **Услуги**. The page loads partner services from WOW
 POST https://partner-wowlife.ru/restapi/product.getPartnerProducts
 ```
 
-Payload is built from `PRODUCTS_ALL_IDS`:
+Payload `allIds` формируется из данных профиля партнёра, полученных через `profile.getProfile`:
 
 ```json
-{"allIds":["301"]}
+{"allIds":["<id партнёра из профиля>"]}
 ```
 
 Displayed columns:
@@ -615,5 +615,6 @@ Configuration:
 
 ```env
 PRODUCTS_SERVICE_URL=https://partner-wowlife.ru/restapi/product.getPartnerProducts
-PRODUCTS_ALL_IDS=301
 ```
+
+`PRODUCTS_ALL_IDS` больше не используется: идентификаторы для `product.getPartnerProducts` берутся из профиля партнёра.
