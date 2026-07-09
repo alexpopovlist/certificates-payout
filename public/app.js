@@ -20,6 +20,35 @@ const SIGN_IN_PATH = '/authentication/sign-in';
 const DEFAULT_APP_PATH = '/redeem';
 const APP_ROUTES = new Set(['redeem', 'certificates', 'payments', 'profile']);
 
+const MOBILE_DIALOG_QUERY = '(max-width: 680px)';
+
+const redeemInfoScreenState = {
+  item: null,
+  payload: null
+};
+
+function isMobileViewport() {
+  if (typeof window === 'undefined') return false;
+  if (window.matchMedia) return window.matchMedia(MOBILE_DIALOG_QUERY).matches;
+  return window.innerWidth <= 680;
+}
+
+function shouldUseDialogScreen() {
+  return isMobileViewport();
+}
+
+function scheduleScreenPath(id, nextPath = '') {
+  const normalizedId = encodeURIComponent(String(id || ''));
+  const fallback = `/certificates/${normalizedId}`;
+  const next = safeNextPath(nextPath || fallback);
+  return `/certificates/${normalizedId}/schedule?next=${encodeURIComponent(next)}`;
+}
+
+function scheduleBackPath(id) {
+  const params = new URLSearchParams(window.location.search);
+  return safeNextPath(params.get('next') || `/certificates/${encodeURIComponent(String(id || ''))}`);
+}
+
 function getCurrentAppUrl() {
   return `${window.location.pathname}${window.location.search}`;
 }
@@ -1303,7 +1332,14 @@ function closeRedeemInfoDialog() {
   document.querySelector('#redeemInfoModal')?.remove();
 }
 
-function openRedeemInfoDialog(item = {}, form) {
+function openRedeemInfoDialog(item = {}, form, payload = null) {
+  if (shouldUseDialogScreen()) {
+    redeemInfoScreenState.item = item;
+    redeemInfoScreenState.payload = payload;
+    navigate('/redeem/info');
+    return;
+  }
+
   closeRedeemInfoDialog();
   document.body.insertAdjacentHTML('beforeend', certificateRedeemInfoDialogHtml(item));
   document.querySelectorAll('[data-close-redeem-info]').forEach((button) => {
@@ -1344,7 +1380,7 @@ async function handleShowRedeemInfo(form, notice, button) {
       method: 'POST',
       body: JSON.stringify({ certificateNumber, secretCode })
     });
-    openRedeemInfoDialog(item, form);
+    openRedeemInfoDialog(item, form, { certificateNumber, secretCode });
   } catch (error) {
     if (notice) {
       notice.className = 'notice error';
@@ -1365,6 +1401,91 @@ function declension(count, words) {
   if (last > 1 && last < 5) return words[1];
   if (last === 1) return words[0];
   return words[2];
+}
+
+
+function redeemInfoScreenHtml(item = {}) {
+  const amount = item.amountLabel || formatMoney(item.amountCents);
+  return `
+    <section class="card schedule-screen-card redeem-info-screen-card">
+      <header class="schedule-header schedule-screen-header">
+        <h2>Данные сертификата</h2>
+      </header>
+      <div class="schedule-form redeem-info-form">
+        ${redeemInfoField('Номер сертификата', item.certificateNumber)}
+        ${redeemInfoField('Имя получателя', item.customerFullName)}
+        ${redeemInfoField('Услуга', item.service || item.title)}
+        <div class="schedule-grid-2 redeem-info-grid">
+          ${redeemInfoField('Сумма', amount, { full: false })}
+          ${redeemInfoField('Дата', formatDate(item.serviceDate || item.scheduleTime), { full: false })}
+        </div>
+        <div class="schedule-grid-2 redeem-info-grid">
+          ${redeemInfoField('Email', getRedeemInfoEmail(item), { full: false })}
+          ${redeemInfoField('Телефон', getRedeemInfoPhone(item), { full: false })}
+        </div>
+        <div id="redeemInfoScreenNotice" class="hidden"></div>
+        <div class="schedule-actions redeem-info-actions">
+          <button id="redeemInfoScreenRedeemButton" class="button schedule-submit" type="button">Погасить сертификат</button>
+          <button id="redeemInfoScreenCloseButton" class="button secondary schedule-cancel" type="button">Закрыть</button>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderRedeemInfoScreen() {
+  setHeader('Данные сертификата', { backTo: '/redeem' });
+  setActiveNavigation('redeem');
+
+  const item = redeemInfoScreenState.item;
+  const payload = redeemInfoScreenState.payload;
+
+  if (!item || !payload) {
+    app.innerHTML = `
+      <section class="card pad form-card">
+        <h2>Информация не загружена</h2>
+        <p class="muted-text">Вернитесь на экран погашения и нажмите «Показать информацию» ещё раз.</p>
+        <div class="actions">
+          <button id="backToRedeem" class="button" type="button">Вернуться</button>
+        </div>
+      </section>
+    `;
+    document.querySelector('#backToRedeem')?.addEventListener('click', () => navigate('/redeem'));
+    return;
+  }
+
+  app.innerHTML = redeemInfoScreenHtml(item);
+
+  document.querySelector('#redeemInfoScreenCloseButton')?.addEventListener('click', () => navigate('/redeem'));
+  document.querySelector('#redeemInfoScreenRedeemButton')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    const notice = document.querySelector('#redeemInfoScreenNotice');
+
+    if (notice) {
+      notice.className = 'notice hidden';
+      notice.textContent = '';
+    }
+
+    button.disabled = true;
+    button.textContent = 'Погашаем...';
+
+    try {
+      const result = await api('/api/certificates/redeem', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      redeemInfoScreenState.item = null;
+      redeemInfoScreenState.payload = null;
+      navigate(`/certificates/${result.item.id}`);
+    } catch (error) {
+      if (notice) {
+        notice.className = 'notice error';
+        notice.textContent = error.message;
+      }
+      button.disabled = false;
+      button.textContent = 'Погасить сертификат';
+    }
+  });
 }
 
 async function renderRedeem() {
@@ -1513,6 +1634,7 @@ function bindCertificateListActions(list) {
       const item = certificatesListState.itemsById.get(String(button.dataset.certificateScheduleId));
       if (item) {
         openCertificateScheduleDialog(item, {
+          nextPath: '/certificates',
           onSuccess: () => loadFilteredCertificates(certificatesListState.page)
         });
       }
@@ -1733,7 +1855,7 @@ function getCertificateDefaultPhone(item = {}, profile = {}) {
   return item.customerPhone || phones[0] || profile.phone || '';
 }
 
-function certificateScheduleDialogHtml(item = {}, profile = {}) {
+function certificateScheduleFormHtml(item = {}, profile = {}) {
   const addressArray = getCertificateAddressArray(item, profile);
   const selectedAddress = item.address || item?.raw?.ADDRESS || addressArray[0] || '';
   const title = certificateScheduleTitle(item);
@@ -1748,6 +1870,50 @@ function certificateScheduleDialogHtml(item = {}, profile = {}) {
     : '<option value="">Адрес не найден</option>';
 
   return `
+    <form id="certificateScheduleForm" class="schedule-form">
+      <div class="schedule-field schedule-field-full">
+        <label for="scheduleTitle">Название услуги</label>
+        <input id="scheduleTitle" name="title" value="${escapeHtml(title)}" placeholder="Название услуги" required />
+      </div>
+
+      <div class="schedule-grid-2 schedule-date-time-grid">
+        <div class="schedule-field">
+          <label for="scheduleDate">Дата</label>
+          <input id="scheduleDate" name="date" type="date" value="${escapeHtml(date)}" required />
+        </div>
+        <div class="schedule-field">
+          <label for="scheduleTime">Время</label>
+          <input id="scheduleTime" name="time" type="time" value="${escapeHtml(time)}" required />
+        </div>
+      </div>
+
+      <div class="schedule-field schedule-field-full">
+        <label for="schedulePhone">Телефон для связи</label>
+        <input id="schedulePhone" name="phone" value="${escapeHtml(phone)}" placeholder="+7" required />
+      </div>
+
+      <div class="schedule-field schedule-field-full">
+        <label for="scheduleAddress">Адрес проведения</label>
+        <select id="scheduleAddress" name="address" required>${addressOptions}</select>
+      </div>
+
+      <div class="schedule-field schedule-field-full schedule-textarea-field">
+        <label for="scheduleNotes">Примечание</label>
+        <textarea id="scheduleNotes" name="notes" rows="4" placeholder="Примечание"></textarea>
+      </div>
+
+      <div id="certificateScheduleNotice" class="hidden"></div>
+
+      <div class="schedule-actions">
+        <button class="button schedule-submit" type="submit">Подтвердить</button>
+        <button class="button secondary schedule-cancel" type="button" data-close-schedule>Отмена</button>
+      </div>
+    </form>
+  `;
+}
+
+function certificateScheduleDialogHtml(item = {}, profile = {}) {
+  return `
     <div id="certificateScheduleModal" class="schedule-modal" role="dialog" aria-modal="true" aria-labelledby="certificateScheduleTitle">
       <button class="schedule-modal-backdrop" type="button" data-close-schedule aria-label="Закрыть"></button>
       <section class="schedule-panel">
@@ -1755,45 +1921,7 @@ function certificateScheduleDialogHtml(item = {}, profile = {}) {
           <h2 id="certificateScheduleTitle">Редактирование услуги</h2>
           <button class="icon-button schedule-close" type="button" data-close-schedule aria-label="Закрыть">×</button>
         </header>
-        <form id="certificateScheduleForm" class="schedule-form">
-          <div class="schedule-field schedule-field-full">
-            <label for="scheduleTitle">Название услуги</label>
-            <input id="scheduleTitle" name="title" value="${escapeHtml(title)}" placeholder="Название услуги" required />
-          </div>
-
-          <div class="schedule-grid-2">
-            <div class="schedule-field">
-              <label for="scheduleDate">Дата</label>
-              <input id="scheduleDate" name="date" type="date" value="${escapeHtml(date)}" required />
-            </div>
-            <div class="schedule-field">
-              <label for="scheduleTime">Время</label>
-              <input id="scheduleTime" name="time" type="time" value="${escapeHtml(time)}" required />
-            </div>
-          </div>
-
-          <div class="schedule-field schedule-field-full">
-            <label for="schedulePhone">Телефон для связи</label>
-            <input id="schedulePhone" name="phone" value="${escapeHtml(phone)}" placeholder="+7" required />
-          </div>
-
-          <div class="schedule-field schedule-field-full">
-            <label for="scheduleAddress">Адрес проведения</label>
-            <select id="scheduleAddress" name="address" required>${addressOptions}</select>
-          </div>
-
-          <div class="schedule-field schedule-field-full schedule-textarea-field">
-            <label for="scheduleNotes">Примечание</label>
-            <textarea id="scheduleNotes" name="notes" rows="4" placeholder="Примечание"></textarea>
-          </div>
-
-          <div id="certificateScheduleNotice" class="hidden"></div>
-
-          <div class="schedule-actions">
-            <button class="button schedule-submit" type="submit">Подтвердить</button>
-            <button class="button secondary schedule-cancel" type="button" data-close-schedule>Отмена</button>
-          </div>
-        </form>
+        ${certificateScheduleFormHtml(item, profile)}
       </section>
     </div>
   `;
@@ -1820,6 +1948,11 @@ async function getScheduleProfile() {
 }
 
 async function openCertificateScheduleDialog(item = {}, options = {}) {
+  if (options.useScreen !== false && shouldUseDialogScreen()) {
+    navigate(scheduleScreenPath(item.id, options.nextPath || `/certificates/${item.id}`));
+    return;
+  }
+
   closeCertificateScheduleDialog();
   document.body.insertAdjacentHTML('beforeend', `
     <div id="certificateScheduleModal" class="schedule-modal" role="dialog" aria-modal="true" aria-labelledby="certificateScheduleTitle">
@@ -1913,6 +2046,42 @@ async function handleCertificateScheduleSubmit(event, item = {}, addressArray = 
   }
 }
 
+async function renderCertificateScheduleScreen(id) {
+  const backTo = scheduleBackPath(id);
+  setHeader('Редактирование услуги', { backTo });
+  setActiveNavigation('certificates');
+  showLoading();
+
+  try {
+    const [{ item }, profile] = await Promise.all([
+      api(`/api/certificates/${encodeURIComponent(id)}`),
+      getScheduleProfile().catch(() => null)
+    ]);
+    const addressArray = getCertificateAddressArray(item, profile || {});
+
+    app.innerHTML = `
+      <section class="card schedule-screen-card">
+        <header class="schedule-header schedule-screen-header">
+          <h2>Редактирование услуги</h2>
+        </header>
+        ${certificateScheduleFormHtml(item, profile || {})}
+      </section>
+    `;
+
+    document.querySelectorAll('[data-close-schedule]').forEach((button) => {
+      button.addEventListener('click', () => navigate(backTo));
+    });
+
+    document.querySelector('#certificateScheduleForm')?.addEventListener('submit', (event) => {
+      handleCertificateScheduleSubmit(event, item, addressArray, {
+        onSuccess: () => navigate(backTo, { replace: true })
+      });
+    });
+  } catch (error) {
+    showError(error);
+  }
+}
+
 async function renderCertificateDetail(id) {
   setHeader('Информация о сертификате', { backTo: '/certificates' });
   setActiveNavigation('certificates');
@@ -1945,7 +2114,9 @@ async function renderCertificateDetail(id) {
       </section>
     `;
 
-    document.querySelector('#openScheduleDialog')?.addEventListener('click', () => openCertificateScheduleDialog(item));
+    document.querySelector('#openScheduleDialog')?.addEventListener('click', () => openCertificateScheduleDialog(item, {
+      nextPath: `/certificates/${item.id}`
+    }));
   } catch (error) {
     showError(error);
   }
@@ -2434,7 +2605,7 @@ function route() {
 
   const currentPath = window.location.pathname === '/' ? DEFAULT_APP_PATH : window.location.pathname;
   const parts = currentPath.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
-  const [root, id] = parts;
+  const [root, id, action] = parts;
 
   if (!root) {
     navigate(DEFAULT_APP_PATH, { replace: true });
@@ -2446,7 +2617,9 @@ function route() {
     return;
   }
 
+  if (root === 'redeem' && id === 'info') return renderRedeemInfoScreen();
   if (root === 'redeem') return renderRedeem();
+  if (root === 'certificates' && id && action === 'schedule') return renderCertificateScheduleScreen(id);
   if (root === 'certificates' && id) return renderCertificateDetail(id);
   if (root === 'certificates') return renderCertificates();
   if (root === 'profile') return renderProfile();
