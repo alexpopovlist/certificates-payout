@@ -3308,7 +3308,7 @@ body:not(.is-login) .services-name-cell {
   }
 }
 
-/* Mobile table representation: use the same card language as /certificates. */
+/* Mobile table representation: reuse the same card language as /payments. */
 @media (max-width: 920px) {
   body:not(.is-login) .table-wrapper {
     display: none;
@@ -3320,54 +3320,83 @@ body:not(.is-login) .services-name-cell {
     padding: 16px;
   }
 
+  body:not(.is-login) .table-mobile-card,
+  body:not(.is-login) .mobile-check-card {
+    padding: 20px;
+    border-radius: 16px;
+    border-color: #e2e8f0;
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  body:not(.is-login) .table-mobile-card:hover,
+  body:not(.is-login) .mobile-check-card:hover {
+    background: #ffffff;
+    box-shadow: none;
+    transform: none;
+    border-color: #cbd5e1;
+  }
+
   body:not(.is-login) .mobile-check-card {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     gap: 12px;
-    padding: 16px;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    background: #ffffff;
   }
 
-  body:not(.is-login) .certificate-table-mobile-card,
-  body:not(.is-login) .services-mobile-card {
-    border-radius: 26px;
-    padding: 24px;
+  body:not(.is-login) .table-mobile-card .card-topline,
+  body:not(.is-login) .mobile-check-card .card-topline {
+    align-items: flex-start;
   }
 
-  body:not(.is-login) .certificate-table-mobile-card .card-title,
-  body:not(.is-login) .services-mobile-card .card-title {
-    min-width: 0;
-  }
-
-  body:not(.is-login) .certificate-table-mobile-card .card-title a,
+  body:not(.is-login) .table-mobile-card .card-title,
+  body:not(.is-login) .mobile-check-card .card-title,
   body:not(.is-login) .services-mobile-title {
+    min-width: 0;
     overflow-wrap: anywhere;
   }
 
-  body:not(.is-login) .certificate-table-mobile-client {
-    margin-top: 8px;
-    justify-content: flex-start;
+  body:not(.is-login) .table-mobile-card .money,
+  body:not(.is-login) .mobile-check-card .money {
+    font-size: 20px;
   }
 
-  body:not(.is-login) .services-mobile-meta {
+  body:not(.is-login) .mobile-table-meta {
     display: grid;
     gap: 10px;
-    margin-top: 14px;
   }
 
-  body:not(.is-login) .services-mobile-meta .profile-line {
-    margin: 0;
-    padding: 0;
-    border: 0;
+  body:not(.is-login) .mobile-table-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    color: #64748b;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.35;
   }
 
-  body:not(.is-login) .services-mobile-actions {
-    margin-top: 16px;
+  body:not(.is-login) .mobile-table-row strong {
+    min-width: 0;
+    color: #0f172a;
+    font-weight: 700;
+    text-align: right;
+    overflow-wrap: anywhere;
   }
 
-  body:not(.is-login) .services-mobile-actions .button {
+  body:not(.is-login) .certificate-table-mobile-status span:first-child {
+    color: #64748b;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  body:not(.is-login) .services-mobile-actions,
+  body:not(.is-login) .certificate-card-actions {
+    margin-top: 2px;
+  }
+
+  body:not(.is-login) .services-mobile-actions .button,
+  body:not(.is-login) .certificate-card-actions .button {
     width: 100%;
   }
 }
