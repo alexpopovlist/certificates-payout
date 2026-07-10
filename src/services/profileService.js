@@ -226,13 +226,41 @@ function getProfileRequisiteRecords(profile) {
     .filter((record) => Object.keys(record).some((key) => String(key).toUpperCase().startsWith('RQ_')));
 }
 
-function getFirstCollectionRecord(value) {
-  return collectionToArray(value).find(isPlainObject) || {};
+function getRequisiteLegalName(record = {}) {
+  const explicitName = getRecordField(record, ['RQ_COMPANY_FULL_NAME', 'RQ_COMPANY_NAME', 'RQ_NAME']);
+  if (explicitName) return explicitName;
+
+  const entityName = cleanText(getRecordField(record, ['NAME']) || '');
+  const personName = [
+    getRecordField(record, ['RQ_LAST_NAME']),
+    getRecordField(record, ['RQ_FIRST_NAME']),
+    getRecordField(record, ['RQ_SECOND_NAME'])
+  ].map(cleanText).filter(Boolean).join(' ');
+
+  return [entityName, personName].filter(Boolean).join(' ') || null;
+}
+
+function getBankRequisiteRecords(profile) {
+  return collectionToArray(profile.BANK_REQUISITES || profile.bankRequisites)
+    .filter(isPlainObject)
+    .filter((record) => Object.keys(record).some((key) => String(key).toUpperCase().startsWith('RQ_')));
+}
+
+function findBankRequisiteForRecord(record = {}, bankRecords = [], totalRequisites = 0) {
+  const requisiteId = String(getRecordField(record, ['ID', 'id']) || '').trim();
+  if (requisiteId) {
+    const matched = bankRecords.find((bankRecord) => (
+      String(getRecordField(bankRecord, ['ENTITY_ID', 'entityId']) || '').trim() === requisiteId
+    ));
+    if (matched) return matched;
+  }
+
+  return bankRecords.length === 1 && totalRequisites <= 1 ? bankRecords[0] : {};
 }
 
 function normalizeRequisite(record = {}, bankRecord = {}) {
   return {
-    legalName: getRecordField(record, ['RQ_COMPANY_FULL_NAME', 'RQ_COMPANY_NAME', 'RQ_NAME']),
+    legalName: getRequisiteLegalName(record),
     inn: getRecordField(record, ['RQ_INN']),
     ogrnip: getRecordField(record, ['RQ_OGRNIP']),
     kpp: getRecordField(record, ['RQ_KPP']),
@@ -250,7 +278,7 @@ function getFirstRequisite(profile) {
 }
 
 function normalizeFiles(files) {
-  return asArray(files).map((file) => ({
+  return collectionToArray(files).map((file) => ({
     id: file.ID || file.id || file.fileId || null,
     name: file.originalName || file.name || file.NAME || 'Документ',
     url: file.downloadUrl || file.url || file.URL || file.showUrl || null
@@ -267,35 +295,49 @@ function normalizeContactValue(value) {
 }
 
 function firstContactValue(value) {
-  return asArray(value).map(normalizeContactValue).find(Boolean) || null;
+  return collectionToArray(value).map(normalizeContactValue).find(Boolean) || null;
 }
 
 function normalizeSites(profile) {
-  return asArray(profile.WEB || profile.web).map((item) => {
+  return collectionToArray(profile.WEB || profile.web).map((item) => {
     if (typeof item === 'string') return item;
     return item.VALUE || item.value || item.URL || item.url || '';
   }).filter(Boolean);
 }
 
-function hasIm(profile, predicate) {
-  return asArray(profile.IM || profile.im).some((item) => {
-    const type = String(item.VALUE_TYPE || item.valueType || '').toLowerCase();
-    const value = String(item.VALUE || item.value || '').toLowerCase();
-    return predicate({ type, value });
-  });
+function getDefaultNotificationChannels() {
+  return [
+    {
+      id: 'max',
+      title: 'Max',
+      enabled: false,
+      note: 'Чтобы оповещения заработали нужно подписаться WOWlife Max Bot'
+    },
+    {
+      id: 'tg',
+      title: 'TG',
+      enabled: false,
+      note: 'Чтобы оповещения заработали нужно подписаться WOWlife Bot'
+    },
+    { id: 'sms', title: 'SMS', enabled: false, note: '' },
+    { id: 'email', title: 'email', enabled: false, note: '' }
+  ];
 }
 
 function normalizeProfile(rawProfile) {
   const profile = getPayloadResult(rawProfile || {});
   const requisiteRecords = getProfileRequisiteRecords(profile);
   const requisite = getFirstRequisite(profile);
-  const bankRequisite = getFirstCollectionRecord(profile.BANK_REQUISITES || profile.bankRequisites);
-  const normalizedRequisites = requisiteRecords.map((record) => normalizeRequisite(record, bankRequisite));
-  const primaryRequisite = normalizedRequisites[0] || normalizeRequisite(requisite, bankRequisite);
+  const bankRequisites = getBankRequisiteRecords(profile);
+  const normalizedRequisites = requisiteRecords.map((record) => (
+    normalizeRequisite(record, findBankRequisiteForRecord(record, bankRequisites, requisiteRecords.length))
+  ));
+  const primaryRequisite = normalizedRequisites[0] || normalizeRequisite(
+    requisite,
+    findBankRequisiteForRecord(requisite, bankRequisites, requisiteRecords.length)
+  );
   const addresses = asArray(profile.UF_CRM_1692176867840).map(normalizeAddress).filter(Boolean);
   const documents = normalizeFiles(profile.UF_CRM_1692620240676);
-  const hasMax = hasIm(profile, ({ value }) => value.includes('|max|') || value.includes('wz_max'));
-  const hasTelegram = hasIm(profile, ({ type, value }) => type.includes('telegram') || value.includes('telegram'));
 
   return {
     id: String(profile.ID || profile.id || ''),
@@ -309,27 +351,11 @@ function normalizeProfile(rawProfile) {
     openLineContact: profile.OPEN_LINE_CONTACT || profile.UF_CRM_1689949947876 || null,
     openLineEmail: profile.OPEN_LINE_EMAIL || null,
     openLinePhone: profile.OPEN_LINE_PHONE || null,
-    notificationChannels: [
-      {
-        id: 'max',
-        title: 'Max',
-        enabled: hasMax,
-        note: 'Чтобы оповещения заработали нужно подписаться WOWlife Max Bot'
-      },
-      {
-        id: 'tg',
-        title: 'TG',
-        enabled: false,
-        note: 'Чтобы оповещения заработали нужно подписаться WOWlife Bot',
-        detected: hasTelegram
-      },
-      { id: 'sms', title: 'SMS', enabled: false, note: '' },
-      { id: 'email', title: 'email', enabled: false, note: '' }
-    ],
+    notificationChannels: getDefaultNotificationChannels(),
     work: {
       addresses,
-      schedule: profile.UF_CRM_1684102212641 || null,
-      cancellationPolicy: profile.UF_CRM_1684102224410 || null
+      schedule: profile.WORK_TIME || profile.WORK_SCHEDULE || profile.SCHEDULE || null,
+      cancellationPolicy: profile.UF_CRM_1744724008473 || profile.UF_CRM_1684102224410 || null
     },
     documents,
     requisites: {
