@@ -22,11 +22,38 @@ function getProfileUrl() {
   );
 }
 
+function uniqStrings(values = []) {
+  return Array.from(new Set(
+    values
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+  ));
+}
+
 function getAuthCabinet() {
-  // profile.getProfile должен вызываться в том же кабинете, что и авторизация.
-  // partnerLow возвращает урезанный профиль у части партнёров: телефон/адрес есть,
-  // но TITLE, WEB, EMAIL, REQUISITES и дополнительные поля остаются пустыми.
-  return process.env.PROFILE_CABINET || process.env.AUTH_PROFILE_CABINET || process.env.AUTH_CABINET || 'partner';
+  return process.env.AUTH_CABINET || 'partner';
+}
+
+function getProfileCabinetCandidates() {
+  // Для /profile важен полный ответ profile.getProfile. На части окружений
+  // PROFILE_CABINET=partnerLow остаётся в .env со старых версий и даёт
+  // урезанную карточку: телефон/адрес есть, но TITLE/WEB/EMAIL/REQUISITES
+  // отсутствуют. Поэтому сначала пробуем кабинет текущей авторизации, а
+  // профильный override оставляем как fallback, а не как единственный вариант.
+  return uniqStrings([
+    process.env.AUTH_PROFILE_CABINET,
+    process.env.AUTH_CABINET,
+    'partner',
+    process.env.PROFILE_CABINET,
+    'partnerLow'
+  ]);
+}
+
+function getProfileIncludeDomainCandidates() {
+  const configured = String(process.env.PROFILE_INCLUDE_DOMAIN || '').toLowerCase();
+  if (configured === 'false') return [false, true];
+  if (configured === 'true') return [true, false];
+  return [false, true];
 }
 
 function getAuthDomain() {
@@ -84,8 +111,15 @@ function getSetCookieHeaders(headers) {
 const profileResponseCache = new Map();
 const PROFILE_CACHE_TTL_MS = Number.parseInt(process.env.PROFILE_CACHE_TTL_MS || '300000', 10);
 
-function getProfileCacheKey(contactId, token) {
-  return [getProfileUrl(), getAuthCabinet(), String(contactId || ''), String(token || '').slice(-12)].join('|');
+function getProfileCacheKey(requestPayload = {}) {
+  return [
+    getProfileUrl(),
+    requestPayload.cabinet || '',
+    requestPayload.domain ? `domain:${requestPayload.domain}` : 'no-domain',
+    requestPayload.contactId || '',
+    Array.isArray(requestPayload.allIds) ? requestPayload.allIds.join(',') : '',
+    String(requestPayload.token || '').slice(-12)
+  ].join('|');
 }
 
 function getCachedProfile(cacheKey) {
@@ -530,7 +564,7 @@ async function postToProfileService(session, body) {
   return { payload, cookies: getSetCookieHeaders(response.headers) };
 }
 
-function buildProfileRequestPayload(session) {
+function getProfileRequestCredentials(session) {
   const contactId = getSessionContactId(session);
   const token = getSessionToken(session);
 
@@ -541,39 +575,143 @@ function buildProfileRequestPayload(session) {
     throw error;
   }
 
-  const requestPayload = {
-    domain: getAuthDomain(),
-    cabinet: getAuthCabinet(),
-    contactId: String(contactId),
-    token
-  };
-
   const allIds = Array.isArray(session?.upstream?.allIds)
     ? session.upstream.allIds.map((id) => String(id || '').trim()).filter(Boolean)
     : [];
 
-  if (allIds.length > 0) {
-    requestPayload.allIds = allIds;
-  }
-
-  if (process.env.PROFILE_INCLUDE_DOMAIN === 'false') {
-    delete requestPayload.domain;
-  }
-
-  return { requestPayload, contactId, token };
+  return { contactId: String(contactId), token, allIds };
 }
 
-async function loadProfilePayload(session, options = {}) {
-  const { requestPayload, contactId, token } = buildProfileRequestPayload(session);
-  const cacheKey = getProfileCacheKey(contactId, token);
+function buildProfileRequestPayloads(session) {
+  const { contactId, token, allIds } = getProfileRequestCredentials(session);
+  const payloads = [];
+
+  const allIdsVariants = allIds.length > 0 ? [[], allIds] : [[]];
+
+  getProfileCabinetCandidates().forEach((cabinet) => {
+    getProfileIncludeDomainCandidates().forEach((includeDomain) => {
+      allIdsVariants.forEach((allIdsVariant) => {
+        const requestPayload = {
+          cabinet,
+          contactId,
+          token
+        };
+
+        if (includeDomain) {
+          requestPayload.domain = getAuthDomain();
+        }
+
+        if (allIdsVariant.length > 0) {
+          requestPayload.allIds = allIdsVariant;
+        }
+
+        payloads.push(requestPayload);
+      });
+    });
+  });
+
+  const seen = new Set();
+  return payloads.filter((payload) => {
+    const key = JSON.stringify(payload);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getProfileDisplayScore(profile) {
+  const normalized = normalizeProfile(profile);
+  let score = 0;
+
+  if (normalized.id) score += 5;
+  if (normalized.title && normalized.title !== 'Профиль партнёра') score += 40;
+  if (normalized.phone) score += 10;
+  if (normalized.email) score += 25;
+  if (Array.isArray(normalized.sites) && normalized.sites.length > 0) score += 25;
+  if (Array.isArray(normalized.work?.addresses) && normalized.work.addresses.length > 0) score += 10;
+  if (normalized.requisites?.legalName) score += 30;
+  if (normalized.requisites?.inn) score += 20;
+  if (normalized.requisites?.ogrnip || normalized.requisites?.ogrn) score += 10;
+  if (normalized.requisites?.bankName || normalized.requisites?.accountNumber) score += 10;
+  if (normalized.additionalInfo) score += 25;
+  if (Array.isArray(normalized.documents) && normalized.documents.length > 0) score += 5;
+
+  return score;
+}
+
+async function requestProfilePayload(session, requestPayload, options = {}) {
+  const cacheKey = getProfileCacheKey(requestPayload);
   const cachedResult = options.skipCache ? null : getCachedProfile(cacheKey);
 
   if (cachedResult) {
-    return { payload: cachedResult, requestPayload, cacheKey, fromCache: true };
+    return {
+      payload: cachedResult,
+      requestPayload,
+      cacheKey,
+      fromCache: true,
+      score: getProfileDisplayScore(getPayloadResult(cachedResult))
+    };
   }
 
   const { payload, cookies } = await postToProfileService(session, requestPayload);
-  return { payload, cookies, requestPayload, cacheKey, fromCache: false };
+  return {
+    payload,
+    cookies,
+    requestPayload,
+    cacheKey,
+    fromCache: false,
+    score: getProfileDisplayScore(getPayloadResult(payload))
+  };
+}
+
+async function loadProfilePayload(session, options = {}) {
+  const requestPayloads = buildProfileRequestPayloads(session);
+  let bestResponse = null;
+  let firstError = null;
+
+  for (const requestPayload of requestPayloads) {
+    let profileResponse;
+    try {
+      profileResponse = await requestProfilePayload(session, requestPayload, options);
+    } catch (error) {
+      if (!firstError) firstError = error;
+      console.warn(
+        'WOWlife profile.getProfile variant failed',
+        {
+          cabinet: requestPayload.cabinet,
+          includeDomain: Boolean(requestPayload.domain),
+          message: error.publicMessage || error.message
+        }
+      );
+      continue;
+    }
+
+    const result = getPayloadResult(profileResponse.payload);
+    const hasDisplayData = hasProfileDisplayData(result);
+
+    if (hasDisplayData) {
+      return profileResponse;
+    }
+
+    if (!bestResponse || profileResponse.score > bestResponse.score) {
+      bestResponse = profileResponse;
+    }
+  }
+
+  if (bestResponse) {
+    console.warn(
+      'WOWlife profile.getProfile returned only partial display data after all variants',
+      {
+        cabinet: bestResponse.requestPayload.cabinet,
+        includeDomain: Boolean(bestResponse.requestPayload.domain),
+        score: bestResponse.score,
+        payload: sanitizeProfilePayload(bestResponse.payload)
+      }
+    );
+    return bestResponse;
+  }
+
+  throw firstError || createEmptyProfileError({});
 }
 
 function hasProfileDisplayData(profile) {
