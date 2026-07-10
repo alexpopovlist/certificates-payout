@@ -40,23 +40,28 @@ function parseJsonSafe(text) {
 }
 
 function getSessionContactId(session) {
-  return (
-    session?.upstream?.contactId ||
-    session?.upstream?.allIds?.[0] ||
-    session?.user?.id ||
-    process.env.PROFILE_CONTACT_ID ||
-    null
-  );
+  const candidates = [
+    session?.upstream?.contactId,
+    session?.upstream?.profileContactId,
+    session?.user?.id,
+    session?.upstream?.allIds?.[0]
+  ];
+
+  return candidates
+    .map((value) => String(value || '').trim())
+    .find(Boolean) || null;
 }
 
 function getSessionToken(session) {
-  return (
-    session?.upstream?.token ||
-    session?.upstream?.authToken ||
-    session?.upstream?.accessToken ||
-    process.env.PROFILE_TOKEN ||
-    null
-  );
+  const candidates = [
+    session?.upstream?.token,
+    session?.upstream?.authToken,
+    session?.upstream?.accessToken
+  ];
+
+  return candidates
+    .map((value) => String(value || '').trim())
+    .find(Boolean) || null;
 }
 
 function getUpstreamCookies(session) {
