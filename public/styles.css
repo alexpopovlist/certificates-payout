@@ -3421,7 +3421,7 @@ body:not(.is-login) .services-name-cell {
 
 .table-actions-cell {
   min-width: 144px;
-  text-align: right;
+  text-align: left;
 }
 
 .table-action-button {
