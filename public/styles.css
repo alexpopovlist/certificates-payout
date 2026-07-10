@@ -3406,6 +3406,15 @@ body:not(.is-login) .services-name-cell {
   min-width: 980px;
 }
 
+.certificates-table-card .table-wrapper tbody tr {
+  height: 65px;
+}
+
+.certificates-table-card .table-wrapper td {
+  height: 65px;
+  vertical-align: middle;
+}
+
 .certificate-table-row {
   cursor: pointer;
 }
@@ -3422,11 +3431,20 @@ body:not(.is-login) .services-name-cell {
 .table-actions-cell {
   min-width: 144px;
   text-align: left;
+  white-space: nowrap;
 }
 
 .table-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  min-height: 40px;
+  max-height: 40px;
   min-width: 116px;
   padding-inline: 18px;
+  white-space: nowrap;
+  line-height: 1;
 }
 
 /* Mobile table panels: make table headers and rows separate cards, like /payments. */
