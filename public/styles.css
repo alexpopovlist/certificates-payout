@@ -3239,19 +3239,10 @@ body:not(.is-login) .reconciliations-page .summary-amount {
 }
 
 .services-open-price {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: #0f172a;
-  font-weight: 700;
-}
-
-.services-price-edit {
-  width: 30px;
-  height: 30px;
-  color: #334155;
-  font-size: 18px;
-  line-height: 1;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
 }
 
 .services-edit-button {
@@ -3279,9 +3270,14 @@ body:not(.is-login) .services-table {
   min-width: 980px;
 }
 
+body:not(.is-login) .services-table th,
+body:not(.is-login) .services-table td {
+  font-size: 14px;
+}
+
 body:not(.is-login) .services-name-cell {
-  color: #64748b;
-  font-size: 16px;
+  color: #0f172a;
+  font-size: inherit;
   font-weight: 500;
 }
 

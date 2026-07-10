@@ -1351,12 +1351,7 @@ function productLinkHtml(value) {
 
 function productOpenPriceHtml(item = {}) {
   const label = String(item.openPriceLabel ?? '0').trim() || '0';
-  return `
-    <span class="services-open-price">
-      <span>${escapeHtml(label)}</span>
-      <button class="icon-button services-price-edit" type="button" data-service-price-id="${escapeHtml(item.id)}" aria-label="Изменить открытую цену">✎</button>
-    </span>
-  `;
+  return `<span class="services-open-price">${escapeHtml(label)}</span>`;
 }
 
 function mobileTableRow(label, value) {
@@ -1430,7 +1425,7 @@ function bindProductsActions() {
     notice.textContent = message;
   };
 
-  document.querySelectorAll('[data-service-edit-id], [data-service-price-id]').forEach((button) => {
+  document.querySelectorAll('[data-service-edit-id]').forEach((button) => {
     button.addEventListener('click', () => {
       showNotice('Редактирование услуги будет подключено после описания запроса.');
     });
