@@ -84,6 +84,24 @@ router.get('/subscriptions/summary', requirePushAdmin, async (_request, response
   }
 });
 
+router.post('/profile-broadcast', async (_request, response, next) => {
+  try {
+    const result = await broadcastPush(
+      {
+        title: 'WowLife',
+        body: 'WowLife на связи!',
+        url: '/profile',
+        tag: 'wowlife-profile-broadcast'
+      },
+      { installedOnly: true }
+    );
+
+    response.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/broadcast', requirePushAdmin, async (request, response, next) => {
   try {
     const { title, body, url, installedOnly } = request.body || {};

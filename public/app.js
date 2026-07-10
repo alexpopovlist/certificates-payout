@@ -741,6 +741,15 @@ async function signOut() {
 let pushRegistration = null;
 let pushPublicKeyPayload = null;
 
+const PROFILE_BROADCAST_NOTIFICATION = {
+  title: 'WowLife',
+  body: 'WowLife на связи!',
+  url: '/profile',
+  icon: '/assets/pwa-icon-192.png',
+  badge: '/assets/pwa-badge-96.png',
+  tag: 'wowlife-profile-broadcast'
+};
+
 function isStandaloneApp() {
   return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 }
@@ -842,6 +851,95 @@ async function ensurePushSubscription(options = {}) {
   return true;
 }
 
+async function ensureProfileNotificationPermission() {
+  if (!isPushSupported()) {
+    renderPushPrompt('PUSH не поддерживаются на этом устройстве или страница открыта не по HTTPS.', 'error');
+    return false;
+  }
+
+  if (!isStandaloneApp() && isMobileViewport()) {
+    renderPushPrompt('PUSH доступны после запуска приложения из ярлыка.', 'error');
+    return false;
+  }
+
+  if (Notification.permission === 'default') {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      renderPushPrompt('Разрешение на PUSH не выдано. Уведомления приходить не будут.', 'error');
+      return false;
+    }
+  }
+
+  if (Notification.permission !== 'granted') {
+    renderPushPrompt('PUSH уведомления запрещены в настройках браузера или телефона.', 'error');
+    return false;
+  }
+
+  return true;
+}
+
+async function showProfileLocalNotification() {
+  const registration = await getServiceWorkerRegistration();
+  const notificationOptions = {
+    body: PROFILE_BROADCAST_NOTIFICATION.body,
+    icon: PROFILE_BROADCAST_NOTIFICATION.icon,
+    badge: PROFILE_BROADCAST_NOTIFICATION.badge,
+    tag: PROFILE_BROADCAST_NOTIFICATION.tag,
+    renotify: true,
+    data: {
+      url: PROFILE_BROADCAST_NOTIFICATION.url
+    }
+  };
+
+  if (typeof registration.showNotification === 'function') {
+    await registration.showNotification(PROFILE_BROADCAST_NOTIFICATION.title, notificationOptions);
+    return;
+  }
+
+  new Notification(PROFILE_BROADCAST_NOTIFICATION.title, notificationOptions);
+}
+
+async function sendProfileBroadcastNotification() {
+  let serverPushError = null;
+
+  if (isStandaloneApp() && isPushSupported()) {
+    const permissionGranted = await ensureProfileNotificationPermission();
+    if (permissionGranted) {
+      try {
+        await ensurePushSubscription({ requestPermission: false });
+      } catch (error) {
+        serverPushError = error;
+      }
+    }
+  }
+
+  try {
+    const result = await api('/api/push/profile-broadcast', {
+      method: 'POST',
+      body: JSON.stringify({})
+    });
+
+    if (Number(result.sent || 0) > 0) {
+      renderPushPrompt(`PUSH рассылка отправлена. Получателей: ${result.sent}.`, 'success');
+      return true;
+    }
+  } catch (error) {
+    serverPushError = error;
+  }
+
+  const permissionGranted = await ensureProfileNotificationPermission();
+  if (!permissionGranted) return false;
+
+  await showProfileLocalNotification();
+  renderPushPrompt(
+    serverPushError
+      ? 'Серверная рассылка недоступна. Уведомление отправлено на это устройство.'
+      : 'PUSH уведомление отправлено на это устройство.',
+    'success'
+  );
+  return true;
+}
+
 function renderPushPrompt(message, type = '') {
   if (!pushPrompt) return;
 
@@ -940,6 +1038,24 @@ document.addEventListener('click', async (event) => {
     await ensurePushSubscription({ requestPermission: true });
   } catch (_error) {
     renderPushPrompt('Не удалось включить PUSH уведомления.', 'error');
+  }
+});
+
+document.addEventListener('click', async (event) => {
+  const button = event.target.closest('#profileBroadcastButton');
+  if (!button) return;
+
+  const initialText = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Отправляю...';
+
+  try {
+    await sendProfileBroadcastNotification();
+  } catch (error) {
+    renderPushPrompt(error.message || 'Не удалось отправить PUSH уведомление.', 'error');
+  } finally {
+    button.disabled = false;
+    button.textContent = initialText;
   }
 });
 
@@ -2513,6 +2629,7 @@ async function renderProfile() {
             </div>
           </div>
           <div class="profile-actions">
+            <button id="profileBroadcastButton" class="button secondary" type="button">Рассылка</button>
             <button class="button secondary" type="button" disabled>Заявка на модерацию</button>
             <button class="button secondary" type="button" disabled>Пароль</button>
           </div>
