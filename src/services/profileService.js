@@ -277,12 +277,40 @@ function getFirstRequisite(profile) {
   return getProfileRequisiteRecords(profile)[0] || {};
 }
 
+function firstProfileField(profile, fieldNames) {
+  return getRecordField(profile, fieldNames);
+}
+
+function normalizeFileUrl(file) {
+  if (!file) return null;
+  if (typeof file === 'string') return file;
+  if (!isPlainObject(file)) return null;
+
+  return file.downloadUrl || file.downloadURL || file.url || file.URL || file.showUrl || file.SHOW_URL || null;
+}
+
 function normalizeFiles(files) {
-  return collectionToArray(files).map((file) => ({
-    id: file.ID || file.id || file.fileId || null,
-    name: file.originalName || file.name || file.NAME || 'Документ',
-    url: file.downloadUrl || file.url || file.URL || file.showUrl || null
-  }));
+  return collectionToArray(files).map((file) => {
+    if (typeof file === 'string' || typeof file === 'number') {
+      return { id: String(file), name: `Документ ${file}`, url: typeof file === 'string' ? file : null };
+    }
+
+    return {
+      id: file.ID || file.id || file.fileId || null,
+      name: file.originalName || file.name || file.NAME || file.title || file.TITLE || 'Документ',
+      url: normalizeFileUrl(file)
+    };
+  });
+}
+
+function normalizeProfilePhoto(value) {
+  return normalizeFileUrl(value);
+}
+
+function firstCleanText(profile, fieldNames) {
+  const value = firstProfileField(profile, fieldNames);
+  const text = cleanText(value || '');
+  return text || null;
 }
 
 function normalizeContactValue(value) {
@@ -299,10 +327,16 @@ function firstContactValue(value) {
 }
 
 function normalizeSites(profile) {
-  return collectionToArray(profile.WEB || profile.web).map((item) => {
+  return collectionToArray(firstProfileField(profile, ['WEB', 'web', 'SITES', 'sites'])).map((item) => {
     if (typeof item === 'string') return item;
     return item.VALUE || item.value || item.URL || item.url || '';
   }).filter(Boolean);
+}
+
+function normalizeProfileAddresses(profile) {
+  return asArray(firstProfileField(profile, ['UF_CRM_1692176867840', 'SERVICE_ADDRESSES', 'serviceAddresses']))
+    .map(normalizeAddress)
+    .filter(Boolean);
 }
 
 function getDefaultNotificationChannels() {
@@ -336,35 +370,35 @@ function normalizeProfile(rawProfile) {
     requisite,
     findBankRequisiteForRecord(requisite, bankRequisites, requisiteRecords.length)
   );
-  const addresses = asArray(profile.UF_CRM_1692176867840).map(normalizeAddress).filter(Boolean);
-  const documents = normalizeFiles(profile.UF_CRM_1692620240676);
+  const addresses = normalizeProfileAddresses(profile);
+  const documents = normalizeFiles(firstProfileField(profile, ['UF_CRM_1692620240676', 'DOCUMENTS', 'documents']));
 
   return {
-    id: String(profile.ID || profile.id || ''),
-    title: profile.TITLE || profile.title || 'Профиль партнёра',
-    description: profile.DESCRIPTION || profile.description || profile.UF_CRM_1684102058711 || '',
-    industry: profile.INDUSTRY || profile.industry || null,
-    phone: firstContactValue(profile.PHONE || profile.phone),
-    email: firstContactValue(profile.EMAIL || profile.email),
+    id: String(firstProfileField(profile, ['ID', 'id']) || ''),
+    title: firstProfileField(profile, ['TITLE', 'title']) || 'Профиль партнёра',
+    description: firstCleanText(profile, ['UF_CRM_1684102058711', 'DESCRIPTION', 'description']) || '',
+    industry: firstProfileField(profile, ['INDUSTRY', 'industry']) || null,
+    phone: firstContactValue(firstProfileField(profile, ['PHONE', 'phone'])),
+    email: firstContactValue(firstProfileField(profile, ['EMAIL', 'email'])),
     sites: normalizeSites(profile),
-    location: profile.UF_CRM_1684102866982 || profile.ADDRESS_CITY || profile.ADDRESS || null,
-    openLineContact: profile.OPEN_LINE_CONTACT || profile.UF_CRM_1689949947876 || null,
-    openLineEmail: profile.OPEN_LINE_EMAIL || null,
-    openLinePhone: profile.OPEN_LINE_PHONE || null,
+    location: firstCleanText(profile, ['UF_CRM_1684102866982', 'LK_ADDRESS', 'ADDRESS_CITY', 'ADDRESS', 'location']),
+    openLineContact: firstCleanText(profile, ['OPEN_LINE_CONTACT', 'UF_CRM_1689949947876']),
+    openLineEmail: firstContactValue(firstProfileField(profile, ['OPEN_LINE_EMAIL', 'openLineEmail'])),
+    openLinePhone: firstContactValue(firstProfileField(profile, ['OPEN_LINE_PHONE', 'openLinePhone'])),
     notificationChannels: getDefaultNotificationChannels(),
     work: {
       addresses,
-      schedule: profile.WORK_TIME || profile.WORK_SCHEDULE || profile.SCHEDULE || null,
-      cancellationPolicy: profile.UF_CRM_1744724008473 || profile.UF_CRM_1684102224410 || null
+      schedule: firstCleanText(profile, ['WORK_TIME', 'WORK_SCHEDULE', 'SCHEDULE', 'workTime', 'workSchedule']),
+      cancellationPolicy: firstCleanText(profile, ['UF_CRM_1744724008473', 'UF_CRM_1684102224410', 'CANCELLATION_POLICY', 'cancellationPolicy'])
     },
     documents,
     requisites: {
       ...primaryRequisite,
       items: normalizedRequisites
     },
-    additionalInfo: profile.UF_CRM_1684102959619 || profile.ADDITIONAL_INFO || profile.COMMENTS || null,
-    profilePhotoUrl: typeof profile.PROFILE_PHOTO === 'string' ? profile.PROFILE_PHOTO : profile.PROFILE_PHOTO?.url || null,
-    modifiedAt: profile.DATE_MODIFY || null,
+    additionalInfo: firstCleanText(profile, ['UF_CRM_1684102959619', 'ADDITIONAL_INFO', 'COMMENTS', 'additionalInfo']),
+    profilePhotoUrl: normalizeProfilePhoto(firstProfileField(profile, ['PROFILE_PHOTO', 'profilePhoto', 'profilePhotoUrl'])),
+    modifiedAt: firstProfileField(profile, ['DATE_MODIFY', 'modifiedAt']) || null,
     raw: profile
   };
 }
