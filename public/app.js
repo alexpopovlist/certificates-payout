@@ -289,8 +289,10 @@ function showError(error) {
 async function api(path, options = {}) {
   const response = await fetch(path, {
     credentials: 'same-origin',
+    cache: options.cache || 'no-store',
     headers: {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
       ...(options.headers || {})
     },
     ...options
@@ -2586,7 +2588,7 @@ async function renderProfile() {
   showLoading();
 
   try {
-    const { item } = await api('/api/profile');
+    const { item } = await api('/api/profile?refresh=1');
     const profile = item || {};
     const requisites = profile.requisites || {};
     const work = profile.work || {};

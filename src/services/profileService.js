@@ -23,7 +23,10 @@ function getProfileUrl() {
 }
 
 function getAuthCabinet() {
-  return process.env.PROFILE_CABINET || process.env.AUTH_PROFILE_CABINET || 'partnerLow';
+  // profile.getProfile должен вызываться в том же кабинете, что и авторизация.
+  // partnerLow возвращает урезанный профиль у части партнёров: телефон/адрес есть,
+  // но TITLE, WEB, EMAIL, REQUISITES и дополнительные поля остаются пустыми.
+  return process.env.PROFILE_CABINET || process.env.AUTH_PROFILE_CABINET || process.env.AUTH_CABINET || 'partner';
 }
 
 function getAuthDomain() {
@@ -539,13 +542,22 @@ function buildProfileRequestPayload(session) {
   }
 
   const requestPayload = {
+    domain: getAuthDomain(),
     cabinet: getAuthCabinet(),
     contactId: String(contactId),
     token
   };
 
-  if (process.env.PROFILE_INCLUDE_DOMAIN === 'true') {
-    requestPayload.domain = getAuthDomain();
+  const allIds = Array.isArray(session?.upstream?.allIds)
+    ? session.upstream.allIds.map((id) => String(id || '').trim()).filter(Boolean)
+    : [];
+
+  if (allIds.length > 0) {
+    requestPayload.allIds = allIds;
+  }
+
+  if (process.env.PROFILE_INCLUDE_DOMAIN === 'false') {
+    delete requestPayload.domain;
   }
 
   return { requestPayload, contactId, token };
@@ -564,6 +576,18 @@ async function loadProfilePayload(session, options = {}) {
   return { payload, cookies, requestPayload, cacheKey, fromCache: false };
 }
 
+function hasProfileDisplayData(profile) {
+  const normalized = normalizeProfile(profile);
+  return Boolean(
+    normalized.title && normalized.title !== 'Профиль партнёра' &&
+    normalized.email &&
+    Array.isArray(normalized.sites) && normalized.sites.length > 0 &&
+    normalized.requisites?.legalName &&
+    normalized.requisites?.inn &&
+    normalized.additionalInfo
+  );
+}
+
 function createEmptyProfileError(payload) {
   console.warn('WOWlife profile payload does not contain partner profile fields', sanitizeProfilePayload(payload));
   const error = new Error('WOWlife profile response is empty');
@@ -573,10 +597,10 @@ function createEmptyProfileError(payload) {
   return error;
 }
 
-async function fetchPartnerProfile({ session }) {
+async function fetchPartnerProfile({ session, skipCache = false } = {}) {
   let currentSession = session;
   let authorizationRefreshed = false;
-  let profileResponse = await loadProfilePayload(currentSession);
+  let profileResponse = await loadProfilePayload(currentSession, { skipCache });
   let result = getPayloadResult(profileResponse.payload);
 
   if (!hasProfileIdentity(result)) {
@@ -605,7 +629,28 @@ async function fetchPartnerProfile({ session }) {
     throw createEmptyProfileError(profileResponse.payload);
   }
 
-  if (!profileResponse.fromCache && profileResponse.cacheKey) {
+  // Иногда profile.getProfile при старой/урезанной авторизации отвечает только
+  // частью карточки партнёра: телефон и адрес уже есть, но TITLE/WEB/EMAIL/
+  // REQUISITES/дополнительная информация пустые. Такой ответ нельзя считать
+  // достаточным для экрана /profile — один раз принудительно обновляем
+  // авторизацию и перечитываем профиль без cache.
+  if (!authorizationRefreshed && !hasProfileDisplayData(result)) {
+    if (profileResponse.cacheKey) {
+      profileResponseCache.delete(profileResponse.cacheKey);
+    }
+
+    try {
+      const refreshResult = await refreshAuthorizationSession({ session: currentSession });
+      currentSession = refreshResult.session;
+      authorizationRefreshed = true;
+      profileResponse = await loadProfilePayload(currentSession, { skipCache: true });
+      result = getPayloadResult(profileResponse.payload);
+    } catch (error) {
+      console.warn('WOWlife profile full-data retry failed', error.publicMessage || error.message);
+    }
+  }
+
+  if (!profileResponse.fromCache && profileResponse.cacheKey && hasProfileDisplayData(result)) {
     setCachedProfile(profileResponse.cacheKey, profileResponse.payload);
   }
 
