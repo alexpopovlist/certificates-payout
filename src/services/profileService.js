@@ -127,11 +127,7 @@ function getPayloadResult(payload) {
 }
 
 function hasProfileIdentity(profile) {
-  return Boolean(
-    profile &&
-    typeof profile === 'object' &&
-    (profile.ID || profile.id || profile.TITLE || profile.title || profile.PHONE || profile.EMAIL || profile.REQUISITES)
-  );
+  return scoreProfileCandidate(getBestProfileCandidate(profile)) > 0;
 }
 
 function sanitizeProfilePayload(value, depth = 0, seen = new Set()) {
@@ -198,6 +194,88 @@ function collectionToArray(value) {
   return [value];
 }
 
+function collectPlainObjects(value, depth = 0, seen = new Set()) {
+  if (!value || typeof value !== 'object' || depth > 7 || seen.has(value)) return [];
+  seen.add(value);
+
+  const objects = [];
+  if (isPlainObject(value)) objects.push(value);
+
+  const children = Array.isArray(value) ? value : Object.values(value);
+  children.forEach((child) => {
+    if (child && typeof child === 'object') {
+      objects.push(...collectPlainObjects(child, depth + 1, seen));
+    }
+  });
+
+  return objects;
+}
+
+function normalizeFieldKey(value) {
+  return String(value || '').toLowerCase().replace(/[^a-zа-я0-9]/gi, '');
+}
+
+function hasOwnFieldCaseInsensitive(record, fieldName) {
+  if (!isPlainObject(record)) return false;
+  const normalizedFieldName = normalizeFieldKey(fieldName);
+  return Object.keys(record).some((key) => normalizeFieldKey(key) === normalizedFieldName);
+}
+
+function scoreProfileCandidate(candidate = {}) {
+  if (!isPlainObject(candidate)) return 0;
+
+  let score = 0;
+  const weightedFields = [
+    ['TITLE', 40],
+    ['WEB', 35],
+    ['EMAIL', 35],
+    ['PHONE', 30],
+    ['REQUISITES', 60],
+    ['BANK_REQUISITES', 45],
+    ['UF_CRM_1692176867840', 30],
+    ['UF_CRM_1684102959619', 30],
+    ['UF_CRM_1692620240676', 20],
+    ['PROFILE_PHOTO', 20],
+    ['DATE_MODIFY', 10],
+    ['COMPANY_TYPE', 10],
+    ['ID', 8]
+  ];
+
+  weightedFields.forEach(([fieldName, weight]) => {
+    if (hasOwnFieldCaseInsensitive(candidate, fieldName)) score += weight;
+  });
+
+  const rqFieldCount = Object.keys(candidate).filter((key) => String(key).toUpperCase().startsWith('RQ_')).length;
+  if (rqFieldCount > 0) score += Math.min(rqFieldCount, 20);
+
+  return score;
+}
+
+function getProfileCandidateRecords(value) {
+  return collectPlainObjects(value)
+    .map((record, index) => ({ record, index, score: scoreProfileCandidate(record) }))
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => (right.score - left.score) || (left.index - right.index))
+    .map((entry) => entry.record);
+}
+
+function getBestProfileCandidate(value) {
+  return getProfileCandidateRecords(value)[0] || (isPlainObject(value) ? value : {});
+}
+
+function getFirstProfileCollection(profile, fieldNames) {
+  const candidates = getProfileCandidateRecords(profile);
+  const searchRecords = candidates.length > 0 ? candidates : [profile].filter(isPlainObject);
+
+  for (const record of searchRecords) {
+    const value = getRecordField(record, fieldNames);
+    const items = collectionToArray(value);
+    if (items.length > 0) return items;
+  }
+
+  return [];
+}
+
 function getRecordField(record, fieldNames) {
   if (!isPlainObject(record)) return null;
 
@@ -222,7 +300,7 @@ function getRecordField(record, fieldNames) {
 }
 
 function getProfileRequisiteRecords(profile) {
-  return collectionToArray(profile.REQUISITES || profile.requisites)
+  return getFirstProfileCollection(profile, ['REQUISITES', 'requisites'])
     .filter(isPlainObject)
     .filter((record) => Object.keys(record).some((key) => String(key).toUpperCase().startsWith('RQ_')));
 }
@@ -242,7 +320,7 @@ function getRequisiteLegalName(record = {}) {
 }
 
 function getBankRequisiteRecords(profile) {
-  return collectionToArray(profile.BANK_REQUISITES || profile.bankRequisites)
+  return getFirstProfileCollection(profile, ['BANK_REQUISITES', 'bankRequisites'])
     .filter(isPlainObject)
     .filter((record) => Object.keys(record).some((key) => String(key).toUpperCase().startsWith('RQ_')));
 }
@@ -279,7 +357,15 @@ function getFirstRequisite(profile) {
 }
 
 function firstProfileField(profile, fieldNames) {
-  return getRecordField(profile, fieldNames);
+  const candidates = getProfileCandidateRecords(profile);
+  const searchRecords = candidates.length > 0 ? candidates : [profile].filter(isPlainObject);
+
+  for (const record of searchRecords) {
+    const value = getRecordField(record, fieldNames);
+    if (value !== null && value !== undefined && String(value).trim() !== '') return value;
+  }
+
+  return null;
 }
 
 function normalizeFileUrl(file) {
@@ -360,10 +446,12 @@ function getDefaultNotificationChannels() {
 }
 
 function normalizeProfile(rawProfile) {
-  const profile = getPayloadResult(rawProfile || {});
-  const requisiteRecords = getProfileRequisiteRecords(profile);
-  const requisite = getFirstRequisite(profile);
-  const bankRequisites = getBankRequisiteRecords(profile);
+  const payloadProfile = getPayloadResult(rawProfile || {});
+  const profile = getBestProfileCandidate(payloadProfile);
+  const profileSearchRoot = isPlainObject(payloadProfile) ? payloadProfile : profile;
+  const requisiteRecords = getProfileRequisiteRecords(profileSearchRoot);
+  const requisite = requisiteRecords[0] || {};
+  const bankRequisites = getBankRequisiteRecords(profileSearchRoot);
   const normalizedRequisites = requisiteRecords.map((record) => (
     normalizeRequisite(record, findBankRequisiteForRecord(record, bankRequisites, requisiteRecords.length))
   ));
@@ -371,36 +459,37 @@ function normalizeProfile(rawProfile) {
     requisite,
     findBankRequisiteForRecord(requisite, bankRequisites, requisiteRecords.length)
   );
-  const addresses = normalizeProfileAddresses(profile);
-  const documents = normalizeFiles(firstProfileField(profile, ['UF_CRM_1692620240676', 'DOCUMENTS', 'documents']));
+  const addresses = normalizeProfileAddresses(profileSearchRoot);
+  const documents = normalizeFiles(firstProfileField(profileSearchRoot, ['UF_CRM_1692620240676', 'DOCUMENTS', 'documents']));
 
   return {
-    id: String(firstProfileField(profile, ['ID', 'id']) || ''),
-    title: firstProfileField(profile, ['TITLE', 'title']) || 'Профиль партнёра',
-    description: firstCleanText(profile, ['UF_CRM_1684102058711', 'DESCRIPTION', 'description']) || '',
-    industry: firstProfileField(profile, ['INDUSTRY', 'industry']) || null,
-    phone: firstContactValue(firstProfileField(profile, ['PHONE', 'phone'])),
-    email: firstContactValue(firstProfileField(profile, ['EMAIL', 'email'])),
-    sites: normalizeSites(profile),
-    location: firstCleanText(profile, ['UF_CRM_1684102866982', 'LK_ADDRESS', 'ADDRESS_CITY', 'ADDRESS', 'location']),
-    openLineContact: firstCleanText(profile, ['OPEN_LINE_CONTACT', 'UF_CRM_1689949947876']),
-    openLineEmail: firstContactValue(firstProfileField(profile, ['OPEN_LINE_EMAIL', 'openLineEmail'])),
-    openLinePhone: firstContactValue(firstProfileField(profile, ['OPEN_LINE_PHONE', 'openLinePhone'])),
+    id: String(firstProfileField(profileSearchRoot, ['ID', 'id']) || ''),
+    title: firstProfileField(profileSearchRoot, ['TITLE', 'title']) || 'Профиль партнёра',
+    description: firstCleanText(profileSearchRoot, ['UF_CRM_1684102058711', 'DESCRIPTION', 'description']) || '',
+    industry: firstProfileField(profileSearchRoot, ['INDUSTRY', 'industry']) || null,
+    phone: firstContactValue(firstProfileField(profileSearchRoot, ['PHONE', 'phone'])),
+    email: firstContactValue(firstProfileField(profileSearchRoot, ['EMAIL', 'email'])),
+    sites: normalizeSites(profileSearchRoot),
+    location: firstCleanText(profileSearchRoot, ['UF_CRM_1684102866982', 'LK_ADDRESS', 'ADDRESS_CITY', 'ADDRESS', 'location']),
+    openLineContact: firstCleanText(profileSearchRoot, ['OPEN_LINE_CONTACT', 'UF_CRM_1689949947876']),
+    openLineEmail: firstContactValue(firstProfileField(profileSearchRoot, ['OPEN_LINE_EMAIL', 'openLineEmail'])),
+    openLinePhone: firstContactValue(firstProfileField(profileSearchRoot, ['OPEN_LINE_PHONE', 'openLinePhone'])),
     notificationChannels: getDefaultNotificationChannels(),
     work: {
       addresses,
-      schedule: firstCleanText(profile, ['WORK_TIME', 'WORK_SCHEDULE', 'SCHEDULE', 'workTime', 'workSchedule']),
-      cancellationPolicy: firstCleanText(profile, ['UF_CRM_1744724008473', 'UF_CRM_1684102224410', 'CANCELLATION_POLICY', 'cancellationPolicy'])
+      schedule: firstCleanText(profileSearchRoot, ['WORK_TIME', 'WORK_SCHEDULE', 'SCHEDULE', 'workTime', 'workSchedule']),
+      cancellationPolicy: firstCleanText(profileSearchRoot, ['UF_CRM_1744724008473', 'UF_CRM_1684102224410', 'CANCELLATION_POLICY', 'cancellationPolicy'])
     },
     documents,
     requisites: {
       ...primaryRequisite,
       items: normalizedRequisites
     },
-    additionalInfo: firstCleanText(profile, ['UF_CRM_1684102959619', 'ADDITIONAL_INFO', 'COMMENTS', 'additionalInfo']),
-    profilePhotoUrl: normalizeProfilePhoto(firstProfileField(profile, ['PROFILE_PHOTO', 'profilePhoto', 'profilePhotoUrl'])),
-    modifiedAt: firstProfileField(profile, ['DATE_MODIFY', 'modifiedAt']) || null,
-    raw: profile
+    additionalInfo: firstCleanText(profileSearchRoot, ['UF_CRM_1684102959619', 'ADDITIONAL_INFO', 'COMMENTS', 'additionalInfo']),
+    profilePhotoUrl: normalizeProfilePhoto(firstProfileField(profileSearchRoot, ['PROFILE_PHOTO', 'profilePhoto', 'profilePhotoUrl'])),
+    modifiedAt: firstProfileField(profileSearchRoot, ['DATE_MODIFY', 'modifiedAt']) || null,
+    raw: profileSearchRoot,
+    resolvedProfile: profile
   };
 }
 
