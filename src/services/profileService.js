@@ -174,9 +174,10 @@ function cleanText(value) {
 }
 
 function normalizeAddress(value) {
-  const text = cleanText(value);
-  if (!text) return '';
-  return text.split('|')[0].trim();
+  // profile.getProfile returns the address in the same display format that the
+  // existing partner cabinet shows, including any Bitrix geo suffix after `|`.
+  // Keep it as-is for the /profile screen so the field is rendered one-to-one.
+  return cleanText(value);
 }
 
 function collectionToArray(value) {
