@@ -2411,6 +2411,36 @@ function profileDocumentsHtml(documents = []) {
   }).join('')}</ul>`;
 }
 
+function profileRequisiteItemHtml(requisite = {}, index = 0, showTitle = false) {
+  const rows = [
+    profileField('Название юридического лица', requisite.legalName),
+    profileField('ИНН', requisite.inn),
+    profileField('ОГРНИП', requisite.ogrnip),
+    profileField('КПП', requisite.kpp),
+    profileField('ОГРН', requisite.ogrn),
+    requisite.bankName ? profileField('Банк', requisite.bankName) : '',
+    requisite.accountNumber ? profileField('Расчетный счет', requisite.accountNumber) : '',
+    requisite.bik ? profileField('БИК', requisite.bik) : ''
+  ].filter(Boolean).join('');
+
+  return `
+    <div class="profile-requisite-item">
+      ${showTitle ? `<div class="profile-block-label">Реквизиты ${index + 1}</div>` : ''}
+      ${rows}
+    </div>
+  `;
+}
+
+function profileRequisitesHtml(requisites = {}) {
+  const items = Array.isArray(requisites.items) && requisites.items.length > 0
+    ? requisites.items
+    : [requisites];
+
+  return items.map((item, index) => (
+    profileRequisiteItemHtml(item, index, items.length > 1)
+  )).join('') || profileEmpty('Реквизиты не указаны');
+}
+
 function profileNotificationChannelsHtml(channels = []) {
   const items = Array.isArray(channels) ? channels : [];
   if (items.length === 0) return profileEmpty('Каналы не настроены');
@@ -2473,16 +2503,7 @@ async function renderProfile() {
       <div class="profile-block-label">Прикрепленный договор (PDF, DOCX)</div>
       ${profileDocumentsHtml(profile.documents)}
     `;
-    const requisitesBody = `
-      ${profileField('Название юридического лица', requisites.legalName)}
-      ${profileField('ИНН', requisites.inn)}
-      ${profileField('ОГРНИП', requisites.ogrnip)}
-      ${profileField('КПП', requisites.kpp)}
-      ${profileField('ОГРН', requisites.ogrn)}
-      ${requisites.bankName ? profileField('Банк', requisites.bankName) : ''}
-      ${requisites.accountNumber ? profileField('Расчетный счет', requisites.accountNumber) : ''}
-      ${requisites.bik ? profileField('БИК', requisites.bik) : ''}
-    `;
+    const requisitesBody = profileRequisitesHtml(requisites);
 
     app.innerHTML = `
       <div class="profile-page">

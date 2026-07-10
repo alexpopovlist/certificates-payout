@@ -179,9 +179,74 @@ function normalizeAddress(value) {
   return text.split('|')[0].trim();
 }
 
+function collectionToArray(value) {
+  if (Array.isArray(value)) return value.filter((item) => item !== null && item !== undefined);
+  if (!isPlainObject(value)) return asArray(value);
+
+  const numericEntries = Object.entries(value)
+    .filter(([key, item]) => /^\d+$/.test(String(key)) && item !== null && item !== undefined)
+    .sort(([left], [right]) => Number(left) - Number(right))
+    .map(([, item]) => item);
+
+  if (numericEntries.length > 0) return numericEntries;
+
+  const objectValues = Object.values(value)
+    .filter((item) => isPlainObject(item) && Object.keys(item).some((key) => String(key).toUpperCase().startsWith('RQ_')));
+
+  if (objectValues.length > 0) return objectValues;
+  return [value];
+}
+
+function getRecordField(record, fieldNames) {
+  if (!isPlainObject(record)) return null;
+
+  for (const fieldName of fieldNames) {
+    const value = record[fieldName];
+    if (value !== null && value !== undefined && String(value).trim() !== '') return value;
+  }
+
+  const entries = Object.entries(record);
+  for (const fieldName of fieldNames) {
+    const normalizedFieldName = String(fieldName).toLowerCase();
+    const match = entries.find(([key, value]) => (
+      String(key).toLowerCase() === normalizedFieldName &&
+      value !== null &&
+      value !== undefined &&
+      String(value).trim() !== ''
+    ));
+    if (match) return match[1];
+  }
+
+  return null;
+}
+
+function getProfileRequisiteRecords(profile) {
+  return collectionToArray(profile.REQUISITES || profile.requisites)
+    .filter(isPlainObject)
+    .filter((record) => Object.keys(record).some((key) => String(key).toUpperCase().startsWith('RQ_')));
+}
+
+function getFirstCollectionRecord(value) {
+  return collectionToArray(value).find(isPlainObject) || {};
+}
+
+function normalizeRequisite(record = {}, bankRecord = {}) {
+  return {
+    legalName: getRecordField(record, ['RQ_COMPANY_FULL_NAME', 'RQ_COMPANY_NAME', 'RQ_NAME']),
+    inn: getRecordField(record, ['RQ_INN']),
+    ogrnip: getRecordField(record, ['RQ_OGRNIP']),
+    kpp: getRecordField(record, ['RQ_KPP']),
+    ogrn: getRecordField(record, ['RQ_OGRN']),
+    okpo: getRecordField(record, ['RQ_OKPO']),
+    bankName: getRecordField(record, ['RQ_BANK_NAME']) || getRecordField(bankRecord, ['RQ_BANK_NAME']),
+    accountNumber: getRecordField(record, ['RQ_ACC_NUM']) || getRecordField(bankRecord, ['RQ_ACC_NUM']),
+    correspondentAccount: getRecordField(record, ['RQ_COR_ACC_NUM']) || getRecordField(bankRecord, ['RQ_COR_ACC_NUM']),
+    bik: getRecordField(record, ['RQ_BIK']) || getRecordField(bankRecord, ['RQ_BIK'])
+  };
+}
+
 function getFirstRequisite(profile) {
-  const requisites = asArray(profile.REQUISITES || profile.requisites);
-  return requisites[0] || {};
+  return getProfileRequisiteRecords(profile)[0] || {};
 }
 
 function normalizeFiles(files) {
@@ -222,8 +287,11 @@ function hasIm(profile, predicate) {
 
 function normalizeProfile(rawProfile) {
   const profile = getPayloadResult(rawProfile || {});
+  const requisiteRecords = getProfileRequisiteRecords(profile);
   const requisite = getFirstRequisite(profile);
-  const bankRequisite = profile.BANK_REQUISITES || profile.bankRequisites || {};
+  const bankRequisite = getFirstCollectionRecord(profile.BANK_REQUISITES || profile.bankRequisites);
+  const normalizedRequisites = requisiteRecords.map((record) => normalizeRequisite(record, bankRequisite));
+  const primaryRequisite = normalizedRequisites[0] || normalizeRequisite(requisite, bankRequisite);
   const addresses = asArray(profile.UF_CRM_1692176867840).map(normalizeAddress).filter(Boolean);
   const documents = normalizeFiles(profile.UF_CRM_1692620240676);
   const hasMax = hasIm(profile, ({ value }) => value.includes('|max|') || value.includes('wz_max'));
@@ -265,16 +333,8 @@ function normalizeProfile(rawProfile) {
     },
     documents,
     requisites: {
-      legalName: requisite.RQ_COMPANY_FULL_NAME || requisite.RQ_COMPANY_NAME || requisite.RQ_NAME || null,
-      inn: requisite.RQ_INN || null,
-      ogrnip: requisite.RQ_OGRNIP || null,
-      kpp: requisite.RQ_KPP || null,
-      ogrn: requisite.RQ_OGRN || null,
-      okpo: requisite.RQ_OKPO || null,
-      bankName: bankRequisite.RQ_BANK_NAME || null,
-      accountNumber: bankRequisite.RQ_ACC_NUM || null,
-      correspondentAccount: bankRequisite.RQ_COR_ACC_NUM || null,
-      bik: bankRequisite.RQ_BIK || null
+      ...primaryRequisite,
+      items: normalizedRequisites
     },
     additionalInfo: profile.UF_CRM_1684102959619 || profile.ADDITIONAL_INFO || profile.COMMENTS || null,
     profilePhotoUrl: typeof profile.PROFILE_PHOTO === 'string' ? profile.PROFILE_PHOTO : profile.PROFILE_PHOTO?.url || null,
