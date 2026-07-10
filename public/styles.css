@@ -3403,16 +3403,25 @@ body:not(.is-login) .services-name-cell {
   }
 }
 
-/* Desktop certificates table: use the same table language as reconciliations. */
-.certificates-table-card .table-wrapper table {
+/* Desktop table width sync: use /certificates as the baseline. */
+.certificates-table-card .table-wrapper table,
+.services-table-card .table-wrapper table,
+.reconciliations-page #reconciliationsTable .table-wrapper table,
+.payment-detail-page .table-card .table-wrapper table {
   min-width: 980px;
 }
 
-.certificates-table-card .table-wrapper tbody tr {
+.certificates-table-card .table-wrapper tbody tr,
+.services-table-card .table-wrapper tbody tr,
+.reconciliations-page #reconciliationsTable .table-wrapper tbody tr,
+.payment-detail-page .table-card .table-wrapper tbody tr {
   height: 65px;
 }
 
-.certificates-table-card .table-wrapper td {
+.certificates-table-card .table-wrapper td,
+.services-table-card .table-wrapper td,
+.reconciliations-page #reconciliationsTable .table-wrapper td,
+.payment-detail-page .table-card .table-wrapper td {
   height: 65px;
   vertical-align: middle;
 }
