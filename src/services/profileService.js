@@ -2,6 +2,7 @@ const { refreshAuthorizationSession } = require('./authService');
 
 const DEFAULT_AUTH_BASE_URL = 'https://partner-wowlife.ru';
 const DEFAULT_PROFILE_PATH = '/restapi/profile.getProfile';
+const DEFAULT_NOTIFICATION_CHANNELS_PATH = '/restapi/profile.getNotificationChannels';
 
 function normalizeBaseUrl() {
   return String(process.env.AUTH_BASE_URL || DEFAULT_AUTH_BASE_URL).replace(/\/+$/, '');
@@ -19,6 +20,14 @@ function getProfileUrl() {
     process.env.PROFILE_SERVICE_URL || process.env.AUTH_PROFILE_URL,
     process.env.PROFILE_SERVICE_PATH || process.env.AUTH_PROFILE_PATH,
     DEFAULT_PROFILE_PATH
+  );
+}
+
+function getNotificationChannelsUrl() {
+  return resolveUrl(
+    process.env.PROFILE_NOTIFICATION_CHANNELS_URL || process.env.NOTIFICATION_CHANNELS_SERVICE_URL,
+    process.env.PROFILE_NOTIFICATION_CHANNELS_PATH || process.env.NOTIFICATION_CHANNELS_SERVICE_PATH,
+    DEFAULT_NOTIFICATION_CHANNELS_PATH
   );
 }
 
@@ -482,6 +491,66 @@ function getDefaultNotificationChannels() {
   ];
 }
 
+function normalizeNotificationChannelKey(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return '';
+  if (['telegram', 'телеграм', 'тг'].includes(normalized)) return 'tg';
+  if (['mail', 'e-mail', 'email', 'почта'].includes(normalized)) return 'email';
+  if (normalized === 'max' || normalized === 'макс') return 'max';
+  if (normalized === 'sms' || normalized === 'смс') return 'sms';
+  return normalized.replace(/[^a-zа-я0-9]/gi, '');
+}
+
+function normalizeNotificationChannelItems(payload) {
+  const result = payload?.result || payload?.data || payload?.response || payload || {};
+  const channels = result.channels || result.CHANNELS || result.notificationChannels || result.items || [];
+
+  return collectionToArray(channels)
+    .map((channel) => {
+      if (typeof channel === 'string' || typeof channel === 'number') {
+        return { id: null, name: String(channel) };
+      }
+
+      if (!isPlainObject(channel)) return null;
+
+      return {
+        id: channel.id || channel.ID || channel.channelId || channel.CHANNEL_ID || null,
+        name: channel.name || channel.NAME || channel.title || channel.TITLE || channel.code || channel.CODE || ''
+      };
+    })
+    .filter((channel) => channel && normalizeNotificationChannelKey(channel.name || channel.id));
+}
+
+function mergeNotificationChannels(serviceChannels = []) {
+  const activeByKey = new Map();
+
+  serviceChannels.forEach((channel) => {
+    const keys = [
+      normalizeNotificationChannelKey(channel.name),
+      normalizeNotificationChannelKey(channel.id)
+    ].filter(Boolean);
+
+    keys.forEach((key) => {
+      if (!activeByKey.has(key)) {
+        activeByKey.set(key, channel);
+      }
+    });
+  });
+
+  return getDefaultNotificationChannels().map((channel) => {
+    const matched = [
+      normalizeNotificationChannelKey(channel.id),
+      normalizeNotificationChannelKey(channel.title)
+    ].map((key) => activeByKey.get(key)).find(Boolean);
+
+    return {
+      ...channel,
+      enabled: Boolean(matched),
+      upstreamId: matched?.id || null
+    };
+  });
+}
+
 function normalizeProfile(rawProfile) {
   const payloadProfile = getPayloadResult(rawProfile || {});
   const profile = getBestProfileCandidate(payloadProfile);
@@ -530,8 +599,7 @@ function normalizeProfile(rawProfile) {
   };
 }
 
-async function postToProfileService(session, body) {
-  const url = getProfileUrl();
+async function postToProfileEndpoint(session, body, url, publicMessage = 'Не удалось получить профиль из сервиса WOWlife.') {
   const headers = {
     'Content-Type': 'application/json',
     'Accept': 'application/json, text/plain, */*',
@@ -556,12 +624,25 @@ async function postToProfileService(session, body) {
   if (!response.ok || payload?.result === false || payload?.result === 'error' || payload?.error) {
     const error = new Error(`WOWlife profile request failed: ${response.status}`);
     error.statusCode = response.status >= 400 ? response.status : 502;
-    error.publicMessage = getServiceErrorMessage(payload) || 'Не удалось получить профиль из сервиса WOWlife.';
+    error.publicMessage = getServiceErrorMessage(payload) || publicMessage;
     error.upstreamPayload = payload;
     throw error;
   }
 
   return { payload, cookies: getSetCookieHeaders(response.headers) };
+}
+
+function postToProfileService(session, body) {
+  return postToProfileEndpoint(session, body, getProfileUrl(), 'Не удалось получить профиль из сервиса WOWlife.');
+}
+
+function postToNotificationChannelsService(session, body) {
+  return postToProfileEndpoint(
+    session,
+    body,
+    getNotificationChannelsUrl(),
+    'Не удалось получить каналы уведомлений из сервиса WOWlife.'
+  );
 }
 
 function getProfileRequestCredentials(session) {
@@ -735,6 +816,23 @@ function createEmptyProfileError(payload) {
   return error;
 }
 
+async function fetchProfileNotificationChannels({ session, contactId: explicitContactId } = {}) {
+  const credentials = getProfileRequestCredentials(session);
+  const contactId = String(explicitContactId || credentials.contactId || '').trim();
+  if (!contactId) {
+    const error = new Error('No contactId for notification channels');
+    error.statusCode = 401;
+    error.publicMessage = 'Не найден contactId партнёра для получения каналов уведомлений.';
+    throw error;
+  }
+
+  const { payload } = await postToNotificationChannelsService(session, {
+    contactId,
+    token: credentials.token
+  });
+  return mergeNotificationChannels(normalizeNotificationChannelItems(payload));
+}
+
 async function fetchPartnerProfile({ session, skipCache = false } = {}) {
   let currentSession = session;
   let authorizationRefreshed = false;
@@ -792,8 +890,19 @@ async function fetchPartnerProfile({ session, skipCache = false } = {}) {
     setCachedProfile(profileResponse.cacheKey, profileResponse.payload);
   }
 
+  const item = normalizeProfile(result);
+  try {
+    item.notificationChannels = await fetchProfileNotificationChannels({
+      session: currentSession,
+      contactId: item.id || profileResponse.requestPayload.contactId
+    });
+  } catch (error) {
+    console.warn('WOWlife profile.getNotificationChannels failed', error.publicMessage || error.message);
+    item.notificationChannels = getDefaultNotificationChannels();
+  }
+
   return {
-    item: normalizeProfile(result),
+    item,
     source: 'wowlife',
     request: {
       cabinet: profileResponse.requestPayload.cabinet,
@@ -806,5 +915,6 @@ async function fetchPartnerProfile({ session, skipCache = false } = {}) {
 
 module.exports = {
   fetchPartnerProfile,
+  fetchProfileNotificationChannels,
   normalizeProfile
 };
