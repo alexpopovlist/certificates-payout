@@ -3553,3 +3553,63 @@ body:not(.is-login) .services-name-cell {
     width: 100%;
   }
 }
+
+/* Services create/edit dialogs: keep the same product form language as redeem/schedule. */
+.services-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.services-create-button {
+  min-height: 42px;
+  padding: 0 20px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.service-create-panel {
+  width: min(100%, 640px);
+}
+
+.service-create-form,
+.service-dialog-screen-card .schedule-form {
+  gap: 18px;
+}
+
+.service-create-form textarea {
+  min-height: 142px;
+}
+
+.service-create-submit {
+  min-width: 190px;
+}
+
+.service-dialog-screen-card {
+  overflow: hidden;
+}
+
+@media (max-width: 920px) {
+  body:not(.is-login) .services-table-header {
+    grid-template-columns: 1fr;
+  }
+
+  body:not(.is-login) .services-header-actions,
+  body:not(.is-login) .services-create-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 680px) {
+  .service-create-actions,
+  .service-description-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .service-create-actions .button,
+  .service-description-actions .button {
+    width: 100%;
+  }
+}

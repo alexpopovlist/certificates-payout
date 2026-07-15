@@ -21,6 +21,7 @@ const DEFAULT_APP_PATH = '/redeem';
 const APP_ROUTES = new Set(['redeem', 'services', 'certificates', 'reconciliations', 'payments', 'profile']);
 
 const MOBILE_DIALOG_QUERY = '(max-width: 680px)';
+const MOBILE_SERVICES_DIALOG_QUERY = '(max-width: 920px)';
 
 const redeemInfoScreenState = {
   item: null,
@@ -37,6 +38,12 @@ function shouldUseDialogScreen() {
   return isMobileViewport();
 }
 
+function shouldUseServicesDialogScreen() {
+  if (typeof window === 'undefined') return false;
+  if (window.matchMedia) return window.matchMedia(MOBILE_SERVICES_DIALOG_QUERY).matches;
+  return window.innerWidth <= 920;
+}
+
 function scheduleScreenPath(id, nextPath = '') {
   const normalizedId = encodeURIComponent(String(id || ''));
   const fallback = `/certificates/${normalizedId}`;
@@ -47,6 +54,22 @@ function scheduleScreenPath(id, nextPath = '') {
 function scheduleBackPath(id) {
   const params = new URLSearchParams(window.location.search);
   return safeNextPath(params.get('next') || `/certificates/${encodeURIComponent(String(id || ''))}`);
+}
+
+function serviceDescriptionScreenPath(id, nextPath = '') {
+  const normalizedId = encodeURIComponent(String(id || ''));
+  const next = safeNextPath(nextPath || '/services');
+  return `/services/${normalizedId}/description?next=${encodeURIComponent(next)}`;
+}
+
+function serviceCreateScreenPath(nextPath = '') {
+  const next = safeNextPath(nextPath || '/services');
+  return `/services/create?next=${encodeURIComponent(next)}`;
+}
+
+function serviceScreenBackPath() {
+  const params = new URLSearchParams(window.location.search);
+  return safeNextPath(params.get('next') || '/services');
 }
 
 function getCurrentAppUrl() {
@@ -1539,6 +1562,23 @@ function productsTable(items = []) {
   `;
 }
 
+function serviceDescriptionFormHtml(item = {}, { noticeId = 'serviceDescriptionNotice', formId = 'serviceDescriptionForm' } = {}) {
+  return `
+    <form id="${escapeHtml(formId)}" class="schedule-form service-description-form" novalidate>
+      <div class="schedule-field schedule-field-full">
+        <label for="serviceDescriptionText">Описание для заявки</label>
+        <textarea id="serviceDescriptionText" name="description" rows="5" placeholder="Введите описание"></textarea>
+        <p class="service-description-helper">При сохранении к описанию автоматически добавится название услуги.</p>
+      </div>
+      <div id="${escapeHtml(noticeId)}" class="hidden"></div>
+      <div class="schedule-actions service-description-actions">
+        <button class="button secondary schedule-cancel" type="button" data-close-service-description>Отмена</button>
+        <button class="button schedule-submit" type="submit">Сохранить</button>
+      </div>
+    </form>
+  `;
+}
+
 function serviceDescriptionDialogHtml(item = {}) {
   const serviceName = String(item.name || 'Услуга').trim() || 'Услуга';
   return `
@@ -1552,18 +1592,46 @@ function serviceDescriptionDialogHtml(item = {}) {
           </div>
           <button class="icon-button schedule-close" type="button" data-close-service-description aria-label="Закрыть">×</button>
         </header>
-        <form id="serviceDescriptionForm" class="schedule-form service-description-form" novalidate>
-          <div class="schedule-field schedule-field-full">
-            <label for="serviceDescriptionText">Описание для заявки</label>
-            <textarea id="serviceDescriptionText" name="description" rows="5" placeholder="Введите описание"></textarea>
-            <p class="service-description-helper">При сохранении к описанию автоматически добавится название услуги.</p>
-          </div>
-          <div id="serviceDescriptionNotice" class="hidden"></div>
-          <div class="schedule-actions service-description-actions">
-            <button class="button secondary schedule-cancel" type="button" data-close-service-description>Отмена</button>
-            <button class="button schedule-submit" type="submit">Сохранить</button>
-          </div>
-        </form>
+        ${serviceDescriptionFormHtml(item)}
+      </section>
+    </div>
+  `;
+}
+
+function serviceCreateFormHtml({ noticeId = 'serviceCreateNotice', formId = 'serviceCreateForm' } = {}) {
+  return `
+    <form id="${escapeHtml(formId)}" class="schedule-form service-create-form" novalidate>
+      <div class="schedule-field schedule-field-full">
+        <label for="serviceCreateName">Название товара</label>
+        <input id="serviceCreateName" name="productName" placeholder="Название товара" autocomplete="off" required />
+      </div>
+      <div class="schedule-field schedule-field-full">
+        <label for="serviceCreatePrice">Цена</label>
+        <input id="serviceCreatePrice" name="price" inputmode="decimal" placeholder="Цена" autocomplete="off" required />
+      </div>
+      <div class="schedule-field schedule-field-full">
+        <label for="serviceCreateDescription">Описание</label>
+        <textarea id="serviceCreateDescription" name="description" rows="5" placeholder="Описание" required></textarea>
+      </div>
+      <div id="${escapeHtml(noticeId)}" class="hidden"></div>
+      <div class="schedule-actions service-create-actions">
+        <button class="button secondary schedule-cancel" type="button" data-close-service-create>Отмена</button>
+        <button class="button schedule-submit service-create-submit" type="submit">Отправить заявку</button>
+      </div>
+    </form>
+  `;
+}
+
+function serviceCreateDialogHtml() {
+  return `
+    <div id="serviceCreateModal" class="schedule-modal service-create-modal" role="dialog" aria-modal="true" aria-labelledby="serviceCreateTitle">
+      <button class="schedule-modal-backdrop" type="button" data-close-service-create aria-label="Закрыть"></button>
+      <section class="schedule-panel service-create-panel">
+        <header class="schedule-header">
+          <h2 id="serviceCreateTitle">Заявка на новый товар</h2>
+          <button class="icon-button schedule-close" type="button" data-close-service-create aria-label="Закрыть">×</button>
+        </header>
+        ${serviceCreateFormHtml()}
       </section>
     </div>
   `;
@@ -1571,6 +1639,10 @@ function serviceDescriptionDialogHtml(item = {}) {
 
 function closeServiceDescriptionDialog() {
   document.querySelector('#serviceDescriptionModal')?.remove();
+}
+
+function closeServiceCreateDialog() {
+  document.querySelector('#serviceCreateModal')?.remove();
 }
 
 function showServicesNotice(message, type = 'info') {
@@ -1581,6 +1653,11 @@ function showServicesNotice(message, type = 'info') {
 }
 
 function openServiceDescriptionDialog(item = {}) {
+  if (shouldUseServicesDialogScreen()) {
+    navigate(serviceDescriptionScreenPath(item.id, '/services'));
+    return;
+  }
+
   closeServiceDescriptionDialog();
   document.body.insertAdjacentHTML('beforeend', serviceDescriptionDialogHtml(item));
 
@@ -1596,10 +1673,29 @@ function openServiceDescriptionDialog(item = {}) {
   });
 }
 
-async function handleServiceDescriptionSubmit(event, item = {}) {
+function openServiceCreateDialog() {
+  if (shouldUseServicesDialogScreen()) {
+    navigate(serviceCreateScreenPath('/services'));
+    return;
+  }
+
+  closeServiceCreateDialog();
+  document.body.insertAdjacentHTML('beforeend', serviceCreateDialogHtml());
+
+  document.querySelectorAll('[data-close-service-create]').forEach((button) => {
+    button.addEventListener('click', closeServiceCreateDialog);
+  });
+
+  const input = document.querySelector('#serviceCreateName');
+  if (input) input.focus();
+
+  document.querySelector('#serviceCreateForm')?.addEventListener('submit', handleServiceCreateSubmit);
+}
+
+async function handleServiceDescriptionSubmit(event, item = {}, options = {}) {
   event.preventDefault();
   const form = event.currentTarget;
-  const notice = form.querySelector('#serviceDescriptionNotice');
+  const notice = form.querySelector('#serviceDescriptionNotice, #serviceDescriptionScreenNotice');
   const textarea = form.querySelector('#serviceDescriptionText');
   const submit = form.querySelector('[type="submit"]');
   const description = String(textarea?.value || '').trim();
@@ -1629,7 +1725,11 @@ async function handleServiceDescriptionSubmit(event, item = {}) {
       })
     });
     closeServiceDescriptionDialog();
-    showServicesNotice('Заявка на модерацию товара отправлена.');
+    if (typeof options.onSuccess === 'function') {
+      await options.onSuccess();
+    } else {
+      showServicesNotice('Заявка на модерацию товара отправлена.');
+    }
   } catch (error) {
     if (notice) {
       notice.className = 'notice error';
@@ -1643,8 +1743,64 @@ async function handleServiceDescriptionSubmit(event, item = {}) {
   }
 }
 
+async function handleServiceCreateSubmit(event, options = {}) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const notice = form.querySelector('#serviceCreateNotice, #serviceCreateScreenNotice');
+  const submit = form.querySelector('[type="submit"]');
+  const formData = new FormData(form);
+  const productName = String(formData.get('productName') || '').trim();
+  const price = String(formData.get('price') || '').trim();
+  const description = String(formData.get('description') || '').trim();
+
+  if (notice) {
+    notice.className = 'hidden';
+    notice.textContent = '';
+  }
+
+  if (!productName || !price || !description) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = 'Заполните название товара, цену и описание.';
+    }
+    const firstEmpty = !productName ? '#serviceCreateName' : !price ? '#serviceCreatePrice' : '#serviceCreateDescription';
+    form.querySelector(firstEmpty)?.focus();
+    return;
+  }
+
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = 'Отправляем...';
+  }
+
+  try {
+    await api('/api/services/create', {
+      method: 'POST',
+      body: JSON.stringify({ productName, price, description })
+    });
+    closeServiceCreateDialog();
+    if (typeof options.onSuccess === 'function') {
+      await options.onSuccess();
+    } else {
+      showServicesNotice('Заявка на новый товар отправлена.');
+    }
+  } catch (error) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = error.message || 'Не удалось отправить заявку на новый товар.';
+    }
+  } finally {
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = 'Отправить заявку';
+    }
+  }
+}
+
 function bindProductsActions(items = []) {
   const itemsById = new Map(items.map((item) => [String(item.id), item]));
+
+  document.querySelector('#createServiceButton')?.addEventListener('click', openServiceCreateDialog);
 
   document.querySelectorAll('[data-service-edit-id]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -1659,6 +1815,86 @@ function bindProductsActions(items = []) {
   });
 }
 
+async function getServiceItemById(id) {
+  const { items = [] } = await api('/api/services');
+  return items.find((item) => String(item.id) === String(id)) || null;
+}
+
+async function renderServiceDescriptionScreen(id) {
+  const backTo = serviceScreenBackPath();
+  setHeader('Редактирование описания', { backTo });
+  setActiveNavigation('services');
+  showLoading();
+
+  try {
+    const item = await getServiceItemById(id);
+    if (!item) {
+      app.innerHTML = `
+        <section class="card pad form-card">
+          <h2>Услуга не найдена</h2>
+          <p class="muted-text">Вернитесь к списку услуг и попробуйте открыть редактирование ещё раз.</p>
+          <div class="actions">
+            <button id="backToServices" class="button" type="button">Вернуться</button>
+          </div>
+        </section>
+      `;
+      document.querySelector('#backToServices')?.addEventListener('click', () => navigate(backTo));
+      return;
+    }
+
+    app.innerHTML = `
+      <section class="card schedule-screen-card service-dialog-screen-card">
+        <header class="schedule-header schedule-screen-header">
+          <div>
+            <h2>Редактирование описания</h2>
+            <p class="service-description-subtitle">${escapeHtml(item.name || 'Услуга')}</p>
+          </div>
+        </header>
+        ${serviceDescriptionFormHtml(item, { noticeId: 'serviceDescriptionScreenNotice' })}
+      </section>
+    `;
+
+    document.querySelectorAll('[data-close-service-description]').forEach((button) => {
+      button.addEventListener('click', () => navigate(backTo));
+    });
+
+    document.querySelector('#serviceDescriptionForm')?.addEventListener('submit', (event) => {
+      handleServiceDescriptionSubmit(event, item, {
+        onSuccess: () => navigate(backTo, { replace: true })
+      });
+    });
+  } catch (error) {
+    showError(error);
+  }
+}
+
+function renderServiceCreateScreen() {
+  const backTo = serviceScreenBackPath();
+  setHeader('Заявка на новый товар', { backTo });
+  setActiveNavigation('services');
+
+  app.innerHTML = `
+    <section class="card schedule-screen-card service-dialog-screen-card service-create-screen-card">
+      <header class="schedule-header schedule-screen-header">
+        <h2>Заявка на новый товар</h2>
+      </header>
+      ${serviceCreateFormHtml({ noticeId: 'serviceCreateScreenNotice' })}
+    </section>
+  `;
+
+  document.querySelectorAll('[data-close-service-create]').forEach((button) => {
+    button.addEventListener('click', () => navigate(backTo));
+  });
+
+  document.querySelector('#serviceCreateForm')?.addEventListener('submit', (event) => {
+    handleServiceCreateSubmit(event, {
+      onSuccess: () => navigate(backTo, { replace: true })
+    });
+  });
+
+  document.querySelector('#serviceCreateName')?.focus();
+}
+
 async function renderServices() {
   setHeader('Услуги');
   setActiveNavigation('services');
@@ -1670,10 +1906,13 @@ async function renderServices() {
       <div class="stack services-page">
         <div id="servicesNotice" class="notice hidden"></div>
         <section class="card table-card services-table-card">
-          <div class="table-header">
+          <div class="table-header services-table-header">
             <div>
               <h2>Услуги</h2>
               <p>${items.length} ${declension(items.length, ['услуга', 'услуги', 'услуг'])}</p>
+            </div>
+            <div class="services-header-actions">
+              <button id="createServiceButton" class="button services-create-button" type="button">Создать услугу</button>
             </div>
           </div>
           ${productsTable(items)}
@@ -3332,6 +3571,8 @@ function route() {
   if (root === 'certificates' && id && action === 'schedule') return renderCertificateScheduleScreen(id);
   if (root === 'certificates' && id) return renderCertificateDetail(id);
   if (root === 'certificates') return renderCertificates();
+  if (root === 'services' && id === 'create') return renderServiceCreateScreen();
+  if (root === 'services' && id && action === 'description') return renderServiceDescriptionScreen(id);
   if (root === 'services') return renderServices();
   if (root === 'reconciliations') return renderReconciliations();
   if (root === 'profile') return renderProfile();

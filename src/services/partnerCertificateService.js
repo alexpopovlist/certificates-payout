@@ -7,6 +7,7 @@ const DEFAULT_LAST_VERIFICATION_DATE_PATH = '/restapi/certificate.getLastVerific
 const DEFAULT_CREATE_VERIFICATION_PATH = '/restapi/certificate.createVerification';
 const DEFAULT_PRODUCTS_PATH = '/restapi/product.getPartnerProducts';
 const DEFAULT_CHANGE_PARTNER_PRODUCT_PATH = '/restapi/product.changePartnerProduct';
+const DEFAULT_ADD_PARTNER_PRODUCT_PATH = '/restapi/product.addPartnerProduct';
 const DEFAULT_SCHEDULE_TIME_ZONE = 'Europe/Moscow';
 
 const { fetchPartnerProfile } = require('./profileService');
@@ -103,6 +104,16 @@ function getChangePartnerProductUrl() {
       || process.env.CHANGE_PARTNER_PRODUCT_URL,
     process.env.PRODUCT_CHANGE_SERVICE_PATH || process.env.CHANGE_PARTNER_PRODUCT_PATH,
     DEFAULT_CHANGE_PARTNER_PRODUCT_PATH
+  );
+}
+
+function getAddPartnerProductUrl() {
+  return resolveUrl(
+    process.env.PRODUCT_ADD_PARTNER_PRODUCT_URL
+      || process.env.PRODUCT_ADD_SERVICE_URL
+      || process.env.ADD_PARTNER_PRODUCT_URL,
+    process.env.PRODUCT_ADD_SERVICE_PATH || process.env.ADD_PARTNER_PRODUCT_PATH,
+    DEFAULT_ADD_PARTNER_PRODUCT_PATH
   );
 }
 
@@ -1154,6 +1165,70 @@ async function redeemPartnerCertificate({ session, body = {} }) {
   };
 }
 
+async function addPartnerProduct({ session, body = {} }) {
+  const productName = normalizePlainText(body.productName || body.name || body.title);
+  const price = normalizePlainText(body.price || body.productPrice);
+  const description = normalizePlainText(body.description || body.productDescription);
+
+  if (!productName) {
+    const error = new Error('Product name is required');
+    error.statusCode = 400;
+    error.publicMessage = 'Введите название товара.';
+    throw error;
+  }
+
+  if (!price) {
+    const error = new Error('Product price is required');
+    error.statusCode = 400;
+    error.publicMessage = 'Введите цену товара.';
+    throw error;
+  }
+
+  if (!description) {
+    const error = new Error('Product description is required');
+    error.statusCode = 400;
+    error.publicMessage = 'Введите описание товара.';
+    throw error;
+  }
+
+  const contactId = await resolveProductChangeContactId(session, body);
+  if (!contactId) {
+    const error = new Error('Contact id is required');
+    error.statusCode = 400;
+    error.publicMessage = 'Не удалось определить партнёра для заявки на новый товар.';
+    throw error;
+  }
+
+  const requestPayload = {
+    partnerData: {
+      name: '',
+      productInfo: [
+        `Название товара: ${escapeProductInfoPart(productName)}`,
+        `Цена: ${escapeProductInfoPart(price)}`,
+        `Описание: ${escapeProductInfoPart(description)}`
+      ].join('<br>')
+    },
+    contactId
+  };
+
+  try {
+    const { payload } = await postJsonToPartnerService(session, getAddPartnerProductUrl(), requestPayload, '/services');
+    const result = getPayloadResult(payload) || {};
+    return {
+      item: result,
+      raw: payload,
+      source: 'wowlife',
+      request: requestPayload
+    };
+  } catch (error) {
+    if (!error.publicMessage || error.publicMessage === 'Не удалось выполнить запрос в сервис WOWlife.') {
+      error.publicMessage = 'Не удалось отправить заявку на новый товар.';
+    }
+    throw error;
+  }
+}
+
+
 async function changePartnerCertificateStage({ session, body = {} }) {
   const requestPayload = buildSchedulePayload(body);
 
@@ -1183,6 +1258,7 @@ module.exports = {
   fetchPartnerCertificates,
   fetchPartnerProducts,
   changePartnerProduct,
+  addPartnerProduct,
   fetchPartnerVisitedCertificatesForReconciliation,
   fetchPartnerLastVerificationDateForReconciliation,
   createPartnerVerificationForReconciliation,

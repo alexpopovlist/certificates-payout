@@ -1,5 +1,5 @@
 const express = require('express');
-const { fetchPartnerProducts, changePartnerProduct } = require('../services/partnerCertificateService');
+const { fetchPartnerProducts, changePartnerProduct, addPartnerProduct } = require('../services/partnerCertificateService');
 
 const router = express.Router();
 
@@ -7,6 +7,19 @@ router.get('/', async (request, response, next) => {
   try {
     const data = await fetchPartnerProducts({ session: request.auth });
     response.json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+router.post('/create', async (request, response, next) => {
+  try {
+    const result = await addPartnerProduct({
+      session: request.auth,
+      body: request.body
+    });
+    response.json(result);
   } catch (error) {
     next(error);
   }
