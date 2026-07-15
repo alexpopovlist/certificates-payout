@@ -179,7 +179,7 @@ const certificateStatus = {
   PAID: { label: 'Оплачен', className: 'paid' },
   new: { label: 'Новая заявка', className: '' },
   waiting: { label: 'Согласование', className: 'processing' },
-  confirmed: { label: 'Записан', className: 'processing' },
+  confirmed: { label: 'Посетил', className: 'processing' },
   visited: { label: 'Посетил', className: 'redeemed' },
   verification: { label: 'Ожидание оплаты', className: 'processing' },
   paid: { label: 'Оплачен', className: 'paid' },
@@ -1068,6 +1068,10 @@ function normalizeStatusLabel(label) {
   const normalized = value.toLowerCase();
   if (normalized === 'ожидает сверки' || normalized === 'ожидание сверки') {
     return 'Ожидает оплаты';
+  }
+  const normalizedForCompare = normalized.replace(/ё/g, 'е');
+  if (['подтвержден', 'подтержден', 'подтверждено', 'подтерждено'].includes(normalizedForCompare)) {
+    return 'Посетил';
   }
   return value;
 }
@@ -2024,9 +2028,9 @@ async function renderCertificates() {
                   <span>Записан</span>
                 </label>
                 <label class="multiselect-option" role="option" aria-selected="false">
-                  <input type="checkbox" value="visited" data-label="Посетил" />
+                  <input type="checkbox" value="visited" data-label="Посетил / Погашен" />
                   <span class="multiselect-check" aria-hidden="true">✓</span>
-                  <span>Посетил</span>
+                  <span>Посетил / Погашен</span>
                 </label>
                 <label class="multiselect-option" role="option" aria-selected="false">
                   <input type="checkbox" value="verification" data-label="Ожидание оплаты" />

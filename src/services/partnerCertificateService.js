@@ -345,6 +345,10 @@ function normalizeStageTitle(title) {
   if (normalized === 'ожидает сверки' || normalized === 'ожидание сверки') {
     return 'Ожидает оплаты';
   }
+  const normalizedForCompare = normalized.replace(/ё/g, 'е');
+  if (['подтвержден', 'подтержден', 'подтверждено', 'подтерждено'].includes(normalizedForCompare)) {
+    return 'Посетил';
+  }
   return value;
 }
 
