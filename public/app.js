@@ -2902,6 +2902,21 @@ function profileRequisitesHtml(requisites = {}) {
   )).join('') || profileEmpty('Реквизиты не указаны');
 }
 
+function profileNotificationChannelNoteHtml(channel = {}) {
+  const note = String(channel.note || '');
+  if (!note) return '';
+
+  const channelKey = String(channel.id || channel.title || '').trim().toLowerCase();
+  if (channelKey !== 'tg' || !note.includes('WOWlife Bot')) {
+    return escapeHtml(note);
+  }
+
+  const [before, ...afterParts] = note.split('WOWlife Bot');
+  const after = afterParts.join('WOWlife Bot');
+
+  return `${escapeHtml(before)}<a href="https://t.me/wowlifepartner_bot" target="_blank" rel="noopener noreferrer">WOWlife Bot</a>${escapeHtml(after)}`;
+}
+
 function profileNotificationChannelsHtml(channels = []) {
   const items = Array.isArray(channels) ? channels : [];
   if (items.length === 0) return profileEmpty('Каналы не настроены');
@@ -2913,7 +2928,7 @@ function profileNotificationChannelsHtml(channels = []) {
           <span class="profile-checkbox" aria-hidden="true">${channel.enabled ? '✓' : ''}</span>
           <span class="profile-channel-body">
             <strong>${escapeHtml(channel.title || '')}</strong>
-            ${channel.note ? `<small>${escapeHtml(channel.note)}</small>` : ''}
+            ${channel.note ? `<small>${profileNotificationChannelNoteHtml(channel)}</small>` : ''}
           </span>
         </label>
       `).join('')}
