@@ -2427,7 +2427,7 @@ async function renderCertificateDetail(id) {
     const showScheduleButton = isNewCertificateStatus(item);
 
     app.innerHTML = `
-      <section class="card detail-card">
+      <section class="card detail-card certificate-detail-card">
         <img class="hero-image" src="${certificateDetailHeroImage}" alt="${escapeHtml(item.title)}" />
         <div class="detail-body">
           <h2 class="detail-title">${escapeHtml(item.title)}</h2>

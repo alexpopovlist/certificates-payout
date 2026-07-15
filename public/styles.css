@@ -2241,6 +2241,17 @@ body:not(.is-login) .detail-row strong {
   font-weight: 600;
 }
 
+@media (min-width: 921px) {
+  body:not(.is-login) .certificate-detail-card {
+    width: 100%;
+    max-width: none;
+  }
+
+  body:not(.is-login) .certificate-detail-card .detail-table {
+    width: 100%;
+  }
+}
+
 body:not(.is-login) .multiselect-menu {
   border: 1px solid #e2e8f0;
   border-radius: 16px;
