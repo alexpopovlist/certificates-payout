@@ -3590,6 +3590,18 @@ body:not(.is-login) .services-name-cell {
   overflow: hidden;
 }
 
+/* Services actions alignment: keep the create button on the same vertical guide as row actions. */
+@media (min-width: 921px) {
+  body:not(.is-login) .services-table th:last-child,
+  body:not(.is-login) .services-table td:last-child {
+    text-align: right;
+  }
+
+  body:not(.is-login) .services-table td:last-child {
+    white-space: nowrap;
+  }
+}
+
 @media (max-width: 920px) {
   body:not(.is-login) .services-table-header {
     grid-template-columns: 1fr;
