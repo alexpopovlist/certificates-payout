@@ -615,6 +615,8 @@ Configuration:
 
 ```env
 PRODUCTS_SERVICE_URL=https://partner-wowlife.ru/restapi/product.getPartnerProducts
+PRODUCT_CHANGE_PARTNER_PRODUCT_URL=https://partner-wowlife.ru/restapi/product.changePartnerProduct
 ```
 
 `PRODUCTS_ALL_IDS` больше не используется: идентификаторы для `product.getPartnerProducts` берутся из профиля партнёра.
+`PRODUCT_CHANGE_PARTNER_PRODUCT_URL` используется для отправки заявки на модерацию товара из диалога редактирования описания услуги.

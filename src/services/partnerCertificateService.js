@@ -98,7 +98,9 @@ function getPartnerProductsUrl() {
 
 function getChangePartnerProductUrl() {
   return resolveUrl(
-    process.env.PRODUCT_CHANGE_SERVICE_URL || process.env.CHANGE_PARTNER_PRODUCT_URL,
+    process.env.PRODUCT_CHANGE_PARTNER_PRODUCT_URL
+      || process.env.PRODUCT_CHANGE_SERVICE_URL
+      || process.env.CHANGE_PARTNER_PRODUCT_URL,
     process.env.PRODUCT_CHANGE_SERVICE_PATH || process.env.CHANGE_PARTNER_PRODUCT_PATH,
     DEFAULT_CHANGE_PARTNER_PRODUCT_PATH
   );
