@@ -6,6 +6,7 @@ const DEFAULT_REDEEM_CERTIFICATE_PATH = '/restapi/certificate.redeemCertificate'
 const DEFAULT_LAST_VERIFICATION_DATE_PATH = '/restapi/certificate.getLastVerificationDate';
 const DEFAULT_CREATE_VERIFICATION_PATH = '/restapi/certificate.createVerification';
 const DEFAULT_PRODUCTS_PATH = '/restapi/product.getPartnerProducts';
+const DEFAULT_CHANGE_PARTNER_PRODUCT_PATH = '/restapi/product.changePartnerProduct';
 const DEFAULT_SCHEDULE_TIME_ZONE = 'Europe/Moscow';
 
 const { fetchPartnerProfile } = require('./profileService');
@@ -92,6 +93,14 @@ function getPartnerProductsUrl() {
     process.env.PRODUCTS_SERVICE_URL || process.env.PARTNER_PRODUCTS_URL,
     process.env.PRODUCTS_SERVICE_PATH || process.env.PARTNER_PRODUCTS_PATH,
     DEFAULT_PRODUCTS_PATH
+  );
+}
+
+function getChangePartnerProductUrl() {
+  return resolveUrl(
+    process.env.PRODUCT_CHANGE_SERVICE_URL || process.env.CHANGE_PARTNER_PRODUCT_URL,
+    process.env.PRODUCT_CHANGE_SERVICE_PATH || process.env.CHANGE_PARTNER_PRODUCT_PATH,
+    DEFAULT_CHANGE_PARTNER_PRODUCT_PATH
   );
 }
 
@@ -453,6 +462,87 @@ async function fetchPartnerProducts({ session }) {
   } catch (error) {
     if (!error.publicMessage || error.publicMessage === 'Не удалось выполнить запрос в сервис WOWlife.') {
       error.publicMessage = 'Не удалось получить список услуг из сервиса WOWlife.';
+    }
+    throw error;
+  }
+}
+
+function normalizePlainText(value) {
+  return String(value ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim();
+}
+
+function escapeProductInfoPart(value) {
+  return normalizePlainText(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>');
+}
+
+async function resolveProductChangeContactId(session, body = {}) {
+  const directContactId = String(body.contactId || body.partnerId || '').trim();
+  if (directContactId) return directContactId;
+
+  try {
+    const { item: profile } = await fetchPartnerProfile({ session });
+    const profileId = String(profile?.id || profile?.raw?.ID || '').trim();
+    if (profileId) return profileId;
+  } catch (_error) {
+    // Fallback to session identifiers below.
+  }
+
+  return String(session?.upstream?.contactId || session?.user?.id || '').trim();
+}
+
+async function changePartnerProduct({ session, body = {} }) {
+  const description = normalizePlainText(body.description);
+  const productName = normalizePlainText(body.productName || body.serviceName || body.name);
+
+  if (!description) {
+    const error = new Error('Product description is required');
+    error.statusCode = 400;
+    error.publicMessage = 'Введите описание для заявки на модерацию.';
+    throw error;
+  }
+
+  if (!productName) {
+    const error = new Error('Product name is required');
+    error.statusCode = 400;
+    error.publicMessage = 'Не удалось определить название услуги.';
+    throw error;
+  }
+
+  const contactId = await resolveProductChangeContactId(session, body);
+  if (!contactId) {
+    const error = new Error('Contact id is required');
+    error.statusCode = 400;
+    error.publicMessage = 'Не удалось определить партнёра для заявки на модерацию.';
+    throw error;
+  }
+
+  const requestPayload = {
+    partnerData: {
+      name: 'Заявка на модерацию товара',
+      productInfo: `${escapeProductInfoPart(description)}<br>${escapeProductInfoPart(productName)}`
+    },
+    contactId
+  };
+
+  try {
+    const { payload } = await postJsonToPartnerService(session, getChangePartnerProductUrl(), requestPayload, '/services');
+    const result = getPayloadResult(payload) || {};
+    return {
+      item: result,
+      raw: payload,
+      source: 'wowlife',
+      request: requestPayload
+    };
+  } catch (error) {
+    if (!error.publicMessage || error.publicMessage === 'Не удалось выполнить запрос в сервис WOWlife.') {
+      error.publicMessage = 'Не удалось отправить заявку на модерацию услуги.';
     }
     throw error;
   }
@@ -1090,6 +1180,7 @@ async function changePartnerCertificateStage({ session, body = {} }) {
 module.exports = {
   fetchPartnerCertificates,
   fetchPartnerProducts,
+  changePartnerProduct,
   fetchPartnerVisitedCertificatesForReconciliation,
   fetchPartnerLastVerificationDateForReconciliation,
   createPartnerVerificationForReconciliation,

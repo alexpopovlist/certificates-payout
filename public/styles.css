@@ -3509,3 +3509,47 @@ body:not(.is-login) .services-name-cell {
     margin: 0;
   }
 }
+
+/* Services description dialog: reuse the redeem/schedule modal design language. */
+.service-description-panel {
+  width: min(100%, 640px);
+}
+
+.service-description-subtitle {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.service-description-form {
+  gap: 18px;
+}
+
+.service-description-form textarea {
+  min-height: 150px;
+}
+
+.service-description-helper {
+  margin: -2px 0 0;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.service-description-actions {
+  padding-top: 6px;
+}
+
+@media (max-width: 680px) {
+  .service-description-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .service-description-actions .button {
+    width: 100%;
+  }
+}

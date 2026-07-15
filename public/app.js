@@ -1497,7 +1497,7 @@ function productsTable(items = []) {
       <td>${productOpenPriceHtml(item)}</td>
       <td>${formatProductDateTime(item.activeFrom)}</td>
       <td>${productLinkHtml(item.productLink)}</td>
-      <td><button class="button services-edit-button" type="button" data-service-edit-id="${escapeHtml(item.id)}">Изменить</button></td>
+      <td><button class="button services-edit-button" type="button" data-service-edit-id="${escapeHtml(item.id)}" data-service-name="${escapeHtml(item.name)}" data-service-contact-id="${escapeHtml(item.partnerId || '')}">Изменить</button></td>
     </tr>
   `).join('');
 
@@ -1514,7 +1514,7 @@ function productsTable(items = []) {
         ${mobileTableRow('Сайт', productLinkHtml(item.productLink))}
       </div>
       <div class="services-mobile-actions">
-        <button class="button services-edit-button" type="button" data-service-edit-id="${escapeHtml(item.id)}">Изменить</button>
+        <button class="button services-edit-button" type="button" data-service-edit-id="${escapeHtml(item.id)}" data-service-name="${escapeHtml(item.name)}" data-service-contact-id="${escapeHtml(item.partnerId || '')}">Изменить</button>
       </div>
     </article>
   `).join('');
@@ -1539,17 +1539,122 @@ function productsTable(items = []) {
   `;
 }
 
-function bindProductsActions() {
+function serviceDescriptionDialogHtml(item = {}) {
+  const serviceName = String(item.name || 'Услуга').trim() || 'Услуга';
+  return `
+    <div id="serviceDescriptionModal" class="schedule-modal service-description-modal" role="dialog" aria-modal="true" aria-labelledby="serviceDescriptionTitle">
+      <button class="schedule-modal-backdrop" type="button" data-close-service-description aria-label="Закрыть"></button>
+      <section class="schedule-panel service-description-panel">
+        <header class="schedule-header">
+          <div>
+            <h2 id="serviceDescriptionTitle">Редактирование описания</h2>
+            <p class="service-description-subtitle">${escapeHtml(serviceName)}</p>
+          </div>
+          <button class="icon-button schedule-close" type="button" data-close-service-description aria-label="Закрыть">×</button>
+        </header>
+        <form id="serviceDescriptionForm" class="schedule-form service-description-form" novalidate>
+          <div class="schedule-field schedule-field-full">
+            <label for="serviceDescriptionText">Описание для заявки</label>
+            <textarea id="serviceDescriptionText" name="description" rows="5" placeholder="Введите описание"></textarea>
+            <p class="service-description-helper">При сохранении к описанию автоматически добавится название услуги.</p>
+          </div>
+          <div id="serviceDescriptionNotice" class="hidden"></div>
+          <div class="schedule-actions service-description-actions">
+            <button class="button secondary schedule-cancel" type="button" data-close-service-description>Отмена</button>
+            <button class="button schedule-submit" type="submit">Сохранить</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+}
+
+function closeServiceDescriptionDialog() {
+  document.querySelector('#serviceDescriptionModal')?.remove();
+}
+
+function showServicesNotice(message, type = 'info') {
   const notice = document.querySelector('#servicesNotice');
-  const showNotice = (message) => {
-    if (!notice) return;
-    notice.className = 'notice';
-    notice.textContent = message;
-  };
+  if (!notice) return;
+  notice.className = type === 'error' ? 'notice error' : 'notice';
+  notice.textContent = message;
+}
+
+function openServiceDescriptionDialog(item = {}) {
+  closeServiceDescriptionDialog();
+  document.body.insertAdjacentHTML('beforeend', serviceDescriptionDialogHtml(item));
+
+  document.querySelectorAll('[data-close-service-description]').forEach((button) => {
+    button.addEventListener('click', closeServiceDescriptionDialog);
+  });
+
+  const textarea = document.querySelector('#serviceDescriptionText');
+  if (textarea) textarea.focus();
+
+  document.querySelector('#serviceDescriptionForm')?.addEventListener('submit', (event) => {
+    handleServiceDescriptionSubmit(event, item);
+  });
+}
+
+async function handleServiceDescriptionSubmit(event, item = {}) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const notice = form.querySelector('#serviceDescriptionNotice');
+  const textarea = form.querySelector('#serviceDescriptionText');
+  const submit = form.querySelector('[type="submit"]');
+  const description = String(textarea?.value || '').trim();
+
+  if (!description) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = 'Введите описание для заявки на модерацию.';
+    }
+    textarea?.focus();
+    return;
+  }
+
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = 'Сохраняем...';
+  }
+
+  try {
+    await api(`/api/services/${encodeURIComponent(item.id)}/description`, {
+      method: 'POST',
+      body: JSON.stringify({
+        description,
+        productName: item.name,
+        partnerId: item.partnerId,
+        contactId: item.partnerId
+      })
+    });
+    closeServiceDescriptionDialog();
+    showServicesNotice('Заявка на модерацию товара отправлена.');
+  } catch (error) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = error.message || 'Не удалось сохранить описание.';
+    }
+  } finally {
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = 'Сохранить';
+    }
+  }
+}
+
+function bindProductsActions(items = []) {
+  const itemsById = new Map(items.map((item) => [String(item.id), item]));
 
   document.querySelectorAll('[data-service-edit-id]').forEach((button) => {
     button.addEventListener('click', () => {
-      showNotice('Редактирование услуги будет подключено после описания запроса.');
+      const itemId = String(button.dataset.serviceEditId || '');
+      const item = itemsById.get(itemId) || {
+        id: itemId,
+        name: button.dataset.serviceName || 'Услуга',
+        partnerId: button.dataset.serviceContactId || ''
+      };
+      openServiceDescriptionDialog(item);
     });
   });
 }
@@ -1575,7 +1680,7 @@ async function renderServices() {
         </section>
       </div>
     `;
-    bindProductsActions();
+    bindProductsActions(items);
   } catch (error) {
     showError(error);
   }
