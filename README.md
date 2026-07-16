@@ -647,3 +647,30 @@ PRODUCT_ADD_PARTNER_PRODUCT_URL=https://partner-wowlife.ru/restapi/product.addPa
 `PRODUCTS_ALL_IDS` больше не используется: идентификаторы для `product.getPartnerProducts` берутся из профиля партнёра.
 `PRODUCT_CHANGE_PARTNER_PRODUCT_URL` используется для отправки заявки на модерацию товара из диалога редактирования описания услуги.
 `PRODUCT_ADD_PARTNER_PRODUCT_URL` используется для отправки заявки на создание новой услуги со страницы `/services`.
+
+## PUSH admin panel
+
+Добавлен отдельный административный раздел:
+
+- `/admin/push` — экран конфигурирования и отправки PUSH-рассылок;
+- `/admin/login` — вход администратора по логину и паролю;
+- `/admin/register` — регистрация нового администратора по invite-коду.
+
+Миграция `005_create_admin_push.sql` создаёт таблицы:
+
+- `admin_users` — локальные администраторы;
+- `push_subscription_logs` — лог подписок/отписок PUSH;
+- `push_notification_campaigns` — история админских рассылок.
+
+Также миграция расширяет `push_subscriptions` полями профиля партнёра: `profile_id`, `profile_ids`, `user_id`, `user_name`, `user_email`.
+
+Для создания первого супер-администратора перед запуском миграций задайте:
+
+```env
+ADMIN_SUPER_LOGIN=superadmin
+ADMIN_SUPER_PASSWORD=change-me-strong-password
+ADMIN_SESSION_SECRET=replace-with-admin-session-secret
+MY_INVITE_CODE=replace-with-my-invite-code
+```
+
+`MY_INVITE_CODE` используется на экране `/admin/register` как my-invite код. После входа администратор может отправить PUSH всем активным PWA-подпискам или только выбранным профилям партнёров, указав ID через запятую.

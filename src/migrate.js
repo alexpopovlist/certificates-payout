@@ -39,6 +39,8 @@ async function run() {
       console.log(`apply ${file}`);
       await client.query('BEGIN');
       try {
+        await client.query('SELECT set_config($1, $2, true)', ['app.admin_super_login', process.env.ADMIN_SUPER_LOGIN || '']);
+        await client.query('SELECT set_config($1, $2, true)', ['app.admin_super_password', process.env.ADMIN_SUPER_PASSWORD || '']);
         await client.query(sql);
         await client.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
         await client.query('COMMIT');

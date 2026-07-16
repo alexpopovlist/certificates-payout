@@ -44,12 +44,23 @@ router.post('/subscribe', async (request, response, next) => {
       });
     }
 
+    const session = request.auth || {};
+    const profileIds = Array.isArray(session?.upstream?.allIds)
+      ? session.upstream.allIds.map((id) => String(id)).filter(Boolean)
+      : [];
+    const profileId = profileIds[0] || session?.upstream?.contactId || session?.user?.id || null;
+
     const saved = await saveSubscription({
       subscription: request.body.subscription,
-      userAgent: request.get('user-agent'),
+      userAgent: request.get('user-agent') || request.body.userAgent,
       platform: request.body.platform,
       installed: request.body.installed,
-      permission: request.body.permission
+      permission: request.body.permission,
+      profileId,
+      profileIds: profileIds.length > 0 ? profileIds : [profileId].filter(Boolean),
+      userId: session?.user?.id,
+      userName: session?.user?.name,
+      userEmail: session?.user?.email
     });
 
     response.status(201).json({ item: saved });

@@ -8,6 +8,7 @@ const mobileMenuCloseButton = document.querySelector('#mobileMenuCloseButton');
 const mobileMenuOverlay = document.querySelector('#mobileMenuOverlay');
 
 let currentUser = null;
+let currentAdmin = null;
 
 const authUiState = {
   method: 'password',
@@ -19,7 +20,17 @@ const authUiState = {
   code: ''
 };
 
+const adminAuthUiState = {
+  login: '',
+  password: '',
+  inviteCode: ''
+};
+
+
 const SIGN_IN_PATH = '/authentication/sign-in';
+const ADMIN_SIGN_IN_PATH = '/admin/login';
+const ADMIN_REGISTER_PATH = '/admin/register';
+const ADMIN_PUSH_PATH = '/admin/push';
 const DEFAULT_APP_PATH = '/redeem';
 const APP_ROUTES = new Set(['redeem', 'services', 'certificates', 'new-requests', 'reconciliations', 'payments', 'profile']);
 
@@ -91,6 +102,27 @@ function safeOptionalPath(value) {
   if (!next || !next.startsWith('/') || next.startsWith('//')) return '';
   if (next.startsWith(SIGN_IN_PATH)) return '';
   return next;
+}
+
+function isAdminRoutePath(pathname = window.location.pathname) {
+  return String(pathname || '').replace(/^\/+/, '').startsWith('admin');
+}
+
+function ensureAdminSignInPath() {
+  if (window.location.pathname === ADMIN_SIGN_IN_PATH) return;
+  if (window.location.pathname === ADMIN_REGISTER_PATH) return;
+
+  const current = getCurrentAppUrl();
+  const next = current && current !== '/' ? current : ADMIN_PUSH_PATH;
+  window.history.replaceState({}, '', `${ADMIN_SIGN_IN_PATH}?next=${encodeURIComponent(next)}`);
+}
+
+function leaveAdminSignInPathAfterAuth() {
+  if (window.location.pathname !== ADMIN_SIGN_IN_PATH && window.location.pathname !== ADMIN_REGISTER_PATH) return;
+
+  const params = new URLSearchParams(window.location.search);
+  const next = safeNextPath(params.get('next') || ADMIN_PUSH_PATH);
+  window.history.replaceState({}, '', next.startsWith('/admin') ? next : ADMIN_PUSH_PATH);
 }
 
 function navigationStateFor(path, options = {}) {
@@ -354,7 +386,10 @@ async function api(path, options = {}) {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    if (response.status === 401 && !path.startsWith('/api/auth')) {
+    if (response.status === 401 && path.startsWith('/api/admin')) {
+      currentAdmin = null;
+      renderAdminSignIn('Сессия администратора истекла. Войдите снова.');
+    } else if (response.status === 401 && !path.startsWith('/api/auth')) {
       currentUser = null;
       renderSignIn('Сессия истекла. Войдите снова.');
     }
@@ -368,6 +403,12 @@ async function api(path, options = {}) {
 function setAuthMode(isAuthenticated) {
   document.body.classList.toggle('is-login', !isAuthenticated);
   document.body.classList.toggle('is-authenticated', isAuthenticated);
+}
+
+function setAdminMode(isAdmin) {
+  document.body.classList.toggle('is-admin', Boolean(isAdmin));
+  document.body.classList.toggle('is-login', !isAdmin);
+  document.body.classList.toggle('is-authenticated', Boolean(isAdmin));
 }
 
 function getAuthMethodLabel(method) {
@@ -573,6 +614,7 @@ function codeAuthFieldsHtml() {
 
 function renderSignIn(message = '') {
   ensureSignInPath();
+  document.body.classList.remove('is-admin', 'is-admin-auth');
   setAuthMode(false);
   setHeader('Вход в кабинет партнёра');
   setActiveNavigation('');
@@ -782,6 +824,11 @@ async function initializeAuth() {
 }
 
 async function signOut() {
+  if (isAdminRoutePath() || currentAdmin) {
+    await signOutAdmin();
+    return;
+  }
+
   try {
     await api('/api/auth/sign-out', { method: 'POST' });
   } catch (_error) {
@@ -790,6 +837,442 @@ async function signOut() {
 
   currentUser = null;
   renderSignIn();
+}
+
+
+function adminAuthFieldsHtml({ register = false } = {}) {
+  return `
+    <div class="auth-input-stack">
+      <label>
+        <span>Логин администратора</span>
+        <input
+          name="login"
+          type="text"
+          autocomplete="username"
+          placeholder="admin"
+          value="${escapeHtml(adminAuthUiState.login)}"
+          required
+        />
+      </label>
+      <label>
+        <span>Пароль</span>
+        <span class="auth-password-field">
+          <input
+            id="adminPasswordInput"
+            name="password"
+            type="password"
+            autocomplete="${register ? 'new-password' : 'current-password'}"
+            placeholder="••••••"
+            value="${escapeHtml(adminAuthUiState.password)}"
+            required
+          />
+          <button class="auth-password-toggle" type="button" aria-controls="adminPasswordInput" aria-label="Показать пароль">
+            ${passwordVisibilityIconSvg(false)}
+          </button>
+        </span>
+      </label>
+      ${register ? `
+        <label>
+          <span>Invite-код</span>
+          <input
+            name="inviteCode"
+            type="text"
+            autocomplete="one-time-code"
+            placeholder="my-invite код"
+            value="${escapeHtml(adminAuthUiState.inviteCode)}"
+            required
+          />
+        </label>
+      ` : ''}
+      <button class="button auth-submit" type="submit">${register ? 'Зарегистрироваться' : 'Войти'}</button>
+    </div>
+  `;
+}
+
+function storeAdminAuthFormValues(form = document.querySelector('#adminAuthForm')) {
+  if (!form) return;
+  const formData = new FormData(form);
+  ['login', 'password', 'inviteCode'].forEach((fieldName) => {
+    if (formData.has(fieldName)) {
+      adminAuthUiState[fieldName] = String(formData.get(fieldName) || '').trim();
+    }
+  });
+}
+
+function renderAdminAuthScreen({ register = false, message = '' } = {}) {
+  if (register && window.location.pathname !== ADMIN_REGISTER_PATH) {
+    window.history.replaceState({}, '', ADMIN_REGISTER_PATH);
+  }
+  if (!register) ensureAdminSignInPath();
+
+  setAdminMode(false);
+  document.body.classList.add('is-admin-auth');
+  setHeader(register ? 'Регистрация администратора' : 'Вход администратора');
+  setActiveNavigation('');
+  stopQrScanner({ keepModalOpen: false });
+  if (pushPrompt) {
+    pushPrompt.className = 'push-prompt hidden';
+    pushPrompt.innerHTML = '';
+  }
+
+  app.innerHTML = `
+    <section class="auth-screen auth-screen-wakesurf admin-auth-screen">
+      <div class="auth-brand-panel" aria-hidden="true">
+        <img src="/assets/wowlife-logo.svg" alt="" />
+      </div>
+
+      <div class="auth-panel">
+        <div class="auth-panel-inner">
+          <div class="auth-heading">
+            <img class="auth-mobile-logo" src="/assets/wowlife-logo.svg" alt="" />
+            <h1>${register ? 'Регистрация администратора' : 'Админка PUSH'}</h1>
+            <p>${register ? 'Создайте администратора по invite-коду' : 'Войдите по логину и паролю администратора'}</p>
+          </div>
+
+          <form id="adminAuthForm" class="auth-form auth-form-wakesurf">
+            <div id="adminAuthNotice" class="${message ? 'notice error' : 'hidden'}">${escapeHtml(message)}</div>
+            ${adminAuthFieldsHtml({ register })}
+          </form>
+          <p class="admin-auth-helper">
+            ${register
+              ? `Уже есть доступ? <a href="${ADMIN_SIGN_IN_PATH}">Войти в админку</a>`
+              : `Нет администратора? <a href="${ADMIN_REGISTER_PATH}">Зарегистрироваться по invite-коду</a>`
+            }
+          </p>
+        </div>
+      </div>
+    </section>
+  `;
+
+  const form = document.querySelector('#adminAuthForm');
+  form?.querySelector('.auth-password-toggle')?.addEventListener('click', (event) => {
+    const button = event.currentTarget;
+    const input = document.querySelector('#adminPasswordInput');
+    if (!input) return;
+    const shouldShow = input.type === 'password';
+    input.type = shouldShow ? 'text' : 'password';
+    button.innerHTML = passwordVisibilityIconSvg(shouldShow);
+    button.setAttribute('aria-label', shouldShow ? 'Скрыть пароль' : 'Показать пароль');
+    button.classList.toggle('is-visible', shouldShow);
+  });
+  form?.addEventListener('submit', register ? handleAdminRegisterSubmit : handleAdminSignInSubmit);
+}
+
+function renderAdminSignIn(message = '') {
+  renderAdminAuthScreen({ register: false, message });
+}
+
+function renderAdminRegister(message = '') {
+  renderAdminAuthScreen({ register: true, message });
+}
+
+async function handleAdminSignInSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = form.querySelector('button[type="submit"]');
+  const notice = form.querySelector('#adminAuthNotice');
+  storeAdminAuthFormValues(form);
+
+  submit.disabled = true;
+  submit.textContent = 'Входим...';
+  notice.className = 'hidden';
+  notice.textContent = '';
+
+  try {
+    const result = await api('/api/admin/sign-in', {
+      method: 'POST',
+      body: JSON.stringify({
+        login: adminAuthUiState.login,
+        password: adminAuthUiState.password
+      })
+    });
+    currentAdmin = result.user;
+    setAdminMode(true);
+    document.body.classList.remove('is-admin-auth');
+    leaveAdminSignInPathAfterAuth();
+    route();
+  } catch (error) {
+    notice.className = 'notice error';
+    notice.textContent = error.message;
+  } finally {
+    submit.disabled = false;
+    submit.textContent = 'Войти';
+  }
+}
+
+async function handleAdminRegisterSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = form.querySelector('button[type="submit"]');
+  const notice = form.querySelector('#adminAuthNotice');
+  storeAdminAuthFormValues(form);
+
+  submit.disabled = true;
+  submit.textContent = 'Создаём...';
+  notice.className = 'hidden';
+  notice.textContent = '';
+
+  try {
+    const result = await api('/api/admin/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        login: adminAuthUiState.login,
+        password: adminAuthUiState.password,
+        inviteCode: adminAuthUiState.inviteCode
+      })
+    });
+    currentAdmin = result.user;
+    setAdminMode(true);
+    document.body.classList.remove('is-admin-auth');
+    navigate(ADMIN_PUSH_PATH, { replace: true });
+  } catch (error) {
+    notice.className = 'notice error';
+    notice.textContent = error.message;
+  } finally {
+    submit.disabled = false;
+    submit.textContent = 'Зарегистрироваться';
+  }
+}
+
+async function initializeAdminAuth() {
+  showLoading();
+  try {
+    const result = await api('/api/admin/me');
+    currentAdmin = result.user;
+    setAdminMode(true);
+    document.body.classList.remove('is-admin-auth');
+    leaveAdminSignInPathAfterAuth();
+    route();
+    return true;
+  } catch (_error) {
+    currentAdmin = null;
+    if (window.location.pathname === ADMIN_REGISTER_PATH) {
+      renderAdminRegister();
+    } else {
+      renderAdminSignIn();
+    }
+    return false;
+  }
+}
+
+async function signOutAdmin() {
+  try {
+    await api('/api/admin/sign-out', { method: 'POST' });
+  } catch (_error) {
+    // Even if API is unavailable, reset local admin state.
+  }
+
+  currentAdmin = null;
+  renderAdminSignIn();
+}
+
+function adminStatCard(label, value) {
+  return `
+    <article class="admin-stat-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value ?? 0)}</strong>
+    </article>
+  `;
+}
+
+function adminProfileIdsText(item) {
+  const ids = Array.isArray(item.profileIds) && item.profileIds.length > 0
+    ? item.profileIds
+    : [item.profileId].filter(Boolean);
+  return ids.length > 0 ? ids.join(', ') : '—';
+}
+
+function adminDevicesTable(items = []) {
+  if (!items.length) return '<div class="empty-state compact">Подписанных устройств пока нет.</div>';
+
+  return `
+    <div class="table-wrapper admin-push-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Профиль</th>
+            <th>Пользователь</th>
+            <th>Устройство</th>
+            <th>Статус</th>
+            <th>Последняя активность</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((item) => `
+            <tr>
+              <td>${escapeHtml(adminProfileIdsText(item))}</td>
+              <td>${escapeHtml(item.userName || item.userEmail || item.userId || '—')}</td>
+              <td>${escapeHtml(item.platform || 'PWA')}</td>
+              <td>${statusHtml(certificateStatus, item.isActive ? 'paid' : 'canceled', item.isActive ? 'Активна' : 'Отключена')}</td>
+              <td>${escapeHtml(formatDateTime(item.lastSeenAt || item.createdAt))}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function adminLogsTable(items = []) {
+  if (!items.length) return '<div class="empty-state compact">Лог подписок пока пуст.</div>';
+
+  return `
+    <div class="table-wrapper admin-push-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Событие</th>
+            <th>Профиль</th>
+            <th>Пользователь</th>
+            <th>Устройство</th>
+            <th>Дата</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((item) => `
+            <tr>
+              <td>${escapeHtml(item.eventType === 'unsubscribe' ? 'Отписка' : 'Подписка')}</td>
+              <td>${escapeHtml(adminProfileIdsText(item))}</td>
+              <td>${escapeHtml(item.userName || item.userEmail || item.userId || '—')}</td>
+              <td>${escapeHtml(item.platform || 'PWA')}</td>
+              <td>${escapeHtml(formatDateTime(item.createdAt))}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function renderAdminPush() {
+  if (!currentAdmin) {
+    return renderAdminSignIn();
+  }
+
+  setAdminMode(true);
+  document.body.classList.remove('is-admin-auth');
+  setHeader('Админка PUSH');
+  setActiveNavigation('');
+  showLoading();
+
+  try {
+    const data = await api('/api/admin/push/summary');
+    const summary = data.summary || {};
+    app.innerHTML = `
+      <div class="stack admin-push-screen">
+        <section class="card pad admin-push-hero">
+          <div>
+            <p class="eyebrow">PUSH уведомления</p>
+            <h2>Рассылка по PWA-устройствам</h2>
+            <p>Отправляйте уведомления всем подписанным устройствам или только партнёрам с указанными ID профилей.</p>
+          </div>
+          <button id="adminSignOutButton" class="button secondary" type="button">Выйти</button>
+        </section>
+
+        <section class="admin-stat-grid">
+          ${adminStatCard('Всего устройств', summary.total)}
+          ${adminStatCard('Активных', summary.active)}
+          ${adminStatCard('PWA активных', summary.installed_active)}
+          ${adminStatCard('Профилей', summary.active_profiles)}
+        </section>
+
+        <section class="card pad admin-broadcast-card">
+          <div class="table-header">
+            <div>
+              <h2>Новая PUSH-рассылка</h2>
+              <p>Оставьте ID профилей пустыми, чтобы отправить всем подписанным PWA-устройствам.</p>
+            </div>
+          </div>
+          <form id="adminPushForm" class="admin-push-form">
+            <div class="form-grid two">
+              <label>
+                <span>Заголовок</span>
+                <input name="title" type="text" value="WowLife" required />
+              </label>
+              <label>
+                <span>Ссылка при клике</span>
+                <input name="url" type="text" value="/profile" placeholder="/profile" />
+              </label>
+            </div>
+            <label>
+              <span>Текст уведомления</span>
+              <textarea name="body" rows="4" placeholder="Текст PUSH уведомления" required></textarea>
+            </label>
+            <label>
+              <span>ID профилей партнёров</span>
+              <textarea name="profileIdsText" rows="3" placeholder="301, 4457, 584"></textarea>
+            </label>
+            <label class="checkbox-inline admin-installed-only">
+              <input name="installedOnly" type="checkbox" checked />
+              <span>Отправлять только установленным PWA мобильным версиям</span>
+            </label>
+            <div id="adminPushNotice" class="hidden"></div>
+            <button class="button" type="submit">Отправить PUSH</button>
+          </form>
+        </section>
+
+        <section class="card table-card admin-push-list-card">
+          <div class="table-header">
+            <div>
+              <h2>Подписанные устройства</h2>
+              <p>Последние активные подписки с ID профилей компаний.</p>
+            </div>
+          </div>
+          ${adminDevicesTable(data.subscriptions || [])}
+        </section>
+
+        <section class="card table-card admin-push-list-card">
+          <div class="table-header">
+            <div>
+              <h2>Лог подписок</h2>
+              <p>Кто и с какого профиля подписался на PUSH уведомления.</p>
+            </div>
+          </div>
+          ${adminLogsTable(data.logs || [])}
+        </section>
+      </div>
+    `;
+
+    document.querySelector('#adminSignOutButton')?.addEventListener('click', signOutAdmin);
+    document.querySelector('#adminPushForm')?.addEventListener('submit', handleAdminPushBroadcastSubmit);
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function handleAdminPushBroadcastSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = form.querySelector('button[type="submit"]');
+  const notice = form.querySelector('#adminPushNotice');
+  const formData = new FormData(form);
+
+  submit.disabled = true;
+  submit.textContent = 'Отправляем...';
+  notice.className = 'hidden';
+  notice.textContent = '';
+
+  try {
+    const result = await api('/api/admin/push/broadcast', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: String(formData.get('title') || '').trim(),
+        body: String(formData.get('body') || '').trim(),
+        url: String(formData.get('url') || '').trim() || '/profile',
+        profileIdsText: String(formData.get('profileIdsText') || '').trim(),
+        installedOnly: formData.has('installedOnly')
+      })
+    });
+    notice.className = 'notice success';
+    notice.textContent = `Отправлено: ${result.sent || 0}. Ошибок: ${result.failed || 0}. Получателей: ${result.total || 0}.`;
+    await renderAdminPush();
+  } catch (error) {
+    notice.className = 'notice error';
+    notice.textContent = error.message;
+  } finally {
+    submit.disabled = false;
+    submit.textContent = 'Отправить PUSH';
+  }
 }
 
 
@@ -3778,6 +4261,21 @@ function certificatesTable(certificates, options = {}) {
 function route() {
   normalizeLegacyHashRoute();
 
+  const currentPath = window.location.pathname === '/' ? DEFAULT_APP_PATH : window.location.pathname;
+  const parts = currentPath.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+  const [root, id, action] = parts;
+
+  if (root === 'admin') {
+    stopQrScanner({ keepModalOpen: false });
+    if (id === 'register') return renderAdminRegister();
+    if (!currentAdmin) return renderAdminSignIn();
+    if (!id || id === 'push') return renderAdminPush();
+    navigate(ADMIN_PUSH_PATH, { replace: true });
+    return;
+  }
+
+  document.body.classList.remove('is-admin', 'is-admin-auth');
+
   if (!currentUser) {
     renderSignIn();
     return;
@@ -3788,10 +4286,6 @@ function route() {
   }
 
   stopQrScanner({ keepModalOpen: false });
-
-  const currentPath = window.location.pathname === '/' ? DEFAULT_APP_PATH : window.location.pathname;
-  const parts = currentPath.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
-  const [root, id, action] = parts;
 
   if (!root) {
     navigate(DEFAULT_APP_PATH, { replace: true });
@@ -3849,6 +4343,11 @@ document.addEventListener('click', (event) => {
   navigate(`${url.pathname}${url.search}`);
 });
 window.addEventListener('DOMContentLoaded', async () => {
+  if (isAdminRoutePath()) {
+    await initializeAdminAuth();
+    return;
+  }
+
   const authenticated = await initializeAuth();
   if (authenticated) {
     route();
