@@ -259,6 +259,7 @@ AUTH_PASSWORD_URL=https://partner-wowlife.ru/restapi/auth.goPassword
 AUTH_CODE_URL=https://partner-wowlife.ru/restapi/auth.getCode
 AUTH_AUTHENTICATION_URL=https://partner-wowlife.ru/restapi/auth.authentication
 AUTH_AUTHORIZATION_URL=https://partner-wowlife.ru/restapi/auth.authorization
+AUTH_SET_PASSWORD_URL=https://partner-wowlife.ru/restapi/auth.setPassword
 AUTH_DOMAIN=wowlife-crm.ru
 AUTH_CABINET=partner
 AUTH_METHOD=password
@@ -441,6 +442,14 @@ PROFILE_NOTIFICATION_CHANNELS_URL=https://partner-wowlife.ru/restapi/profile.get
 PROFILE_CABINET=
 PROFILE_CACHE_TTL_MS=300000
 ```
+
+При нажатии **«Установить пароль»** на `/profile` backend вызывает:
+
+```http
+POST https://partner-wowlife.ru/restapi/auth.setPassword
+```
+
+Payload формируется из текущей сессии и профиля партнёра: `id`, `token`, `password`, `email`. URL можно переопределить через `AUTH_SET_PASSWORD_URL`.
 
 Для панели **«Канал связи для уведомлений»** backend отдельно вызывает:
 

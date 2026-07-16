@@ -26,6 +26,10 @@ const adminAuthUiState = {
   inviteCode: ''
 };
 
+const profilePasswordState = {
+  password: ''
+};
+
 
 const SIGN_IN_PATH = '/authentication/sign-in';
 const ADMIN_SIGN_IN_PATH = '/admin/login';
@@ -372,24 +376,30 @@ function showError(error) {
 }
 
 async function api(path, options = {}) {
+  const { skipAuthRedirect = false, ...requestOptions } = options;
   const response = await fetch(path, {
     credentials: 'same-origin',
-    cache: options.cache || 'no-store',
+    cache: requestOptions.cache || 'no-store',
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache',
-      ...(options.headers || {})
+      ...(requestOptions.headers || {})
     },
-    ...options
+    ...requestOptions
   });
 
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    if (response.status === 401 && path.startsWith('/api/admin')) {
+    const shouldHandleAdminAuthError = response.status === 401
+      && path.startsWith('/api/admin')
+      && !skipAuthRedirect
+      && !['/api/admin/me', '/api/admin/sign-in', '/api/admin/register'].includes(path);
+
+    if (shouldHandleAdminAuthError) {
       currentAdmin = null;
       renderAdminSignIn('Сессия администратора истекла. Войдите снова.');
-    } else if (response.status === 401 && !path.startsWith('/api/auth')) {
+    } else if (response.status === 401 && !path.startsWith('/api/auth') && !skipAuthRedirect) {
       currentUser = null;
       renderSignIn('Сессия истекла. Войдите снова.');
     }
@@ -925,7 +935,7 @@ function renderAdminAuthScreen({ register = false, message = '' } = {}) {
         <div class="auth-panel-inner">
           <div class="auth-heading">
             <img class="auth-mobile-logo" src="/assets/wowlife-logo.svg" alt="" />
-            <h1>${register ? 'Регистрация администратора' : 'Админка PUSH'}</h1>
+            <h1>${register ? 'Регистрация администратора' : 'Панель администратора'}</h1>
             <p>${register ? 'Создайте администратора по invite-коду' : 'Войдите по логину и паролю администратора'}</p>
           </div>
 
@@ -936,7 +946,7 @@ function renderAdminAuthScreen({ register = false, message = '' } = {}) {
           <p class="admin-auth-helper">
             ${register
               ? `Уже есть доступ? <a href="${ADMIN_SIGN_IN_PATH}">Войти в админку</a>`
-              : `Нет администратора? <a href="${ADMIN_REGISTER_PATH}">Зарегистрироваться по invite-коду</a>`
+              : `<a href="${ADMIN_REGISTER_PATH}">Зарегистрироваться по invite-коду</a>`
             }
           </p>
         </div>
@@ -981,6 +991,7 @@ async function handleAdminSignInSubmit(event) {
   try {
     const result = await api('/api/admin/sign-in', {
       method: 'POST',
+      skipAuthRedirect: true,
       body: JSON.stringify({
         login: adminAuthUiState.login,
         password: adminAuthUiState.password
@@ -1015,6 +1026,7 @@ async function handleAdminRegisterSubmit(event) {
   try {
     const result = await api('/api/admin/register', {
       method: 'POST',
+      skipAuthRedirect: true,
       body: JSON.stringify({
         login: adminAuthUiState.login,
         password: adminAuthUiState.password,
@@ -1037,7 +1049,7 @@ async function handleAdminRegisterSubmit(event) {
 async function initializeAdminAuth() {
   showLoading();
   try {
-    const result = await api('/api/admin/me');
+    const result = await api('/api/admin/me', { skipAuthRedirect: true });
     currentAdmin = result.user;
     setAdminMode(true);
     document.body.classList.remove('is-admin-auth');
@@ -1151,7 +1163,7 @@ async function renderAdminPush() {
 
   setAdminMode(true);
   document.body.classList.remove('is-admin-auth');
-  setHeader('Админка PUSH');
+  setHeader('Панель администратора');
   setActiveNavigation('');
   showLoading();
 
@@ -2934,7 +2946,7 @@ function renderCertificatesResult(data, emptyText = 'Погашенных сер
 }
 
 async function renderCertificates() {
-  setHeader('Погашенные сертификаты');
+  setHeader('Сертификаты');
   setActiveNavigation('certificates');
   showLoading();
   certificatesListState.page = 1;
@@ -3644,6 +3656,191 @@ function profileSection(title, body, extraClass = '') {
   `;
 }
 
+function profilePasswordFormHtml({ notice = '' } = {}) {
+  return `
+    <form id="profilePasswordForm" class="auth-form auth-form-wakesurf profile-password-form">
+      <div id="profilePasswordNotice" class="${notice ? 'notice error' : 'hidden'}">${escapeHtml(notice)}</div>
+      <div class="auth-input-stack">
+        <label>
+          <span>Новый пароль</span>
+          <span class="auth-password-field">
+            <input
+              id="profilePasswordInput"
+              name="password"
+              type="password"
+              autocomplete="new-password"
+              placeholder="••••••"
+              value="${escapeHtml(profilePasswordState.password)}"
+              required
+            />
+            <button class="auth-password-toggle" type="button" aria-controls="profilePasswordInput" aria-label="Показать пароль">
+              ${passwordVisibilityIconSvg(false)}
+            </button>
+          </span>
+        </label>
+        <button class="button auth-submit" type="submit">Установить пароль</button>
+      </div>
+    </form>
+  `;
+}
+
+function toggleProfilePasswordVisibility(event) {
+  const button = event.currentTarget;
+  const input = document.querySelector('#profilePasswordInput');
+  if (!input) return;
+
+  const shouldShow = input.type === 'password';
+  input.type = shouldShow ? 'text' : 'password';
+  button.innerHTML = passwordVisibilityIconSvg(shouldShow);
+  button.setAttribute('aria-label', shouldShow ? 'Скрыть пароль' : 'Показать пароль');
+  button.classList.toggle('is-visible', shouldShow);
+}
+
+function closeProfilePasswordModal() {
+  document.querySelector('#profilePasswordModal')?.remove();
+}
+
+function closeProfilePasswordSuccessDialog() {
+  document.querySelector('#profilePasswordSuccessModal')?.remove();
+}
+
+function showProfilePasswordSuccessDialog() {
+  closeProfilePasswordSuccessDialog();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="profilePasswordSuccessModal" class="schedule-modal profile-password-success-modal" role="dialog" aria-modal="true" aria-labelledby="profilePasswordSuccessTitle">
+      <button class="schedule-modal-backdrop" type="button" aria-label="Закрыть"></button>
+      <div class="schedule-panel profile-password-success-panel">
+        <div class="schedule-header">
+          <h2 id="profilePasswordSuccessTitle">Готово</h2>
+          <button class="icon-button schedule-close" type="button" aria-label="Закрыть">×</button>
+        </div>
+        <div class="profile-password-success-body">
+          <p>Пароль успешно установлен</p>
+          <button id="profilePasswordSuccessOk" class="button" type="button">ОК</button>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const modal = document.querySelector('#profilePasswordSuccessModal');
+  modal?.querySelector('.schedule-modal-backdrop')?.addEventListener('click', closeProfilePasswordSuccessDialog);
+  modal?.querySelector('.schedule-close')?.addEventListener('click', closeProfilePasswordSuccessDialog);
+  modal?.querySelector('#profilePasswordSuccessOk')?.addEventListener('click', closeProfilePasswordSuccessDialog);
+}
+
+async function handleProfilePasswordSubmit(event, options = {}) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = form.querySelector('button[type="submit"]');
+  const notice = form.querySelector('#profilePasswordNotice');
+  const formData = new FormData(form);
+  const password = String(formData.get('password') || '').trim();
+  profilePasswordState.password = password;
+
+  if (!password) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = 'Введите пароль.';
+    }
+    return;
+  }
+
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = 'Сохраняем...';
+  }
+  if (notice) {
+    notice.className = 'hidden';
+    notice.textContent = '';
+  }
+
+  try {
+    await api('/api/profile/password', {
+      method: 'POST',
+      body: JSON.stringify({ password })
+    });
+
+    profilePasswordState.password = '';
+    form.reset();
+    if (options.closeModal) closeProfilePasswordModal();
+    showProfilePasswordSuccessDialog();
+  } catch (error) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = error.message || 'Не удалось установить пароль.';
+    }
+  } finally {
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = 'Установить пароль';
+    }
+  }
+}
+
+function setupProfilePasswordForm(options = {}) {
+  const form = document.querySelector('#profilePasswordForm');
+  form?.querySelector('.auth-password-toggle')?.addEventListener('click', toggleProfilePasswordVisibility);
+  form?.addEventListener('submit', (event) => handleProfilePasswordSubmit(event, options));
+}
+
+function openProfilePasswordDialog() {
+  closeProfilePasswordModal();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="profilePasswordModal" class="schedule-modal profile-password-modal" role="dialog" aria-modal="true" aria-labelledby="profilePasswordTitle">
+      <button class="schedule-modal-backdrop" type="button" aria-label="Закрыть"></button>
+      <div class="schedule-panel profile-password-panel">
+        <div class="schedule-header">
+          <h2 id="profilePasswordTitle">Установить пароль</h2>
+          <button class="icon-button schedule-close" type="button" aria-label="Закрыть">×</button>
+        </div>
+        <div class="profile-password-dialog-body">
+          ${profilePasswordFormHtml()}
+        </div>
+      </div>
+    </div>
+  `);
+
+  const modal = document.querySelector('#profilePasswordModal');
+  modal?.querySelector('.schedule-modal-backdrop')?.addEventListener('click', closeProfilePasswordModal);
+  modal?.querySelector('.schedule-close')?.addEventListener('click', closeProfilePasswordModal);
+  setupProfilePasswordForm({ closeModal: true });
+}
+
+function openProfilePasswordFlow() {
+  if (shouldUseDialogScreen()) {
+    navigate('/profile/password');
+    return;
+  }
+  openProfilePasswordDialog();
+}
+
+function renderProfilePasswordScreen() {
+  setHeader('Установить пароль', { backTo: '/profile' });
+  setActiveNavigation('profile');
+  profilePasswordState.password = '';
+
+  app.innerHTML = `
+    <section class="profile-password-screen auth-screen-wakesurf">
+      <div class="auth-brand-panel" aria-hidden="true">
+        <img src="/assets/wowlife-logo.svg" alt="" />
+      </div>
+
+      <div class="auth-panel">
+        <div class="auth-panel-inner">
+          <div class="auth-heading">
+            <img class="auth-mobile-logo" src="/assets/wowlife-logo.svg" alt="" />
+            <h1>Установить пароль</h1>
+            <p>Введите новый пароль для входа в кабинет партнёра</p>
+          </div>
+          ${profilePasswordFormHtml()}
+        </div>
+      </div>
+    </section>
+  `;
+
+  setupProfilePasswordForm({ closeModal: false });
+}
+
 async function renderProfile() {
   setHeader('Профиль');
   setActiveNavigation('profile');
@@ -3693,9 +3890,8 @@ async function renderProfile() {
             </div>
           </div>
           <div class="profile-actions">
-            <button id="profileBroadcastButton" class="button secondary" type="button">Рассылка</button>
             <button class="button secondary" type="button" disabled>Заявка на модерацию</button>
-            <button class="button secondary" type="button" disabled>Пароль</button>
+            <button id="profileSetPasswordButton" class="button secondary" type="button">Установить пароль</button>
           </div>
         </section>
 
@@ -3709,6 +3905,8 @@ async function renderProfile() {
         </div>
       </div>
     `;
+
+    document.querySelector('#profileSetPasswordButton')?.addEventListener('click', openProfilePasswordFlow);
   } catch (error) {
     showError(error);
   }
@@ -3899,7 +4097,7 @@ async function renderReconciliations() {
 }
 
 async function renderPayments() {
-  setHeader('Заявки на оплату');
+  setHeader('Оплаты');
   setActiveNavigation('payments');
   showLoading();
 
@@ -4307,6 +4505,7 @@ function route() {
   if (root === 'services' && id && action === 'description') return renderServiceDescriptionScreen(id);
   if (root === 'services') return renderServices();
   if (root === 'reconciliations') return renderReconciliations();
+  if (root === 'profile' && id === 'password') return renderProfilePasswordScreen();
   if (root === 'profile') return renderProfile();
   if (root === 'payments' && id === 'create') return renderCreatePayment();
   if (root === 'payments' && id) return renderPaymentDetail(id);

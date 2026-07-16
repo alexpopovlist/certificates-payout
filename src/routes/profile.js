@@ -1,5 +1,5 @@
 const express = require('express');
-const { fetchPartnerProfile } = require('../services/profileService');
+const { fetchPartnerProfile, setPartnerPassword } = require('../services/profileService');
 const { setSessionCookie } = require('../services/authService');
 
 const router = express.Router();
@@ -20,6 +20,37 @@ router.get('/', async (request, response, next) => {
       setSessionCookie(response, session);
     }
     response.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+router.post('/password', async (request, response, next) => {
+  try {
+    const password = String(request.body?.password || '').trim();
+    if (!password) {
+      return response.status(400).json({ error: 'Введите пароль.' });
+    }
+
+    const profileResult = await fetchPartnerProfile({
+      session: request.auth,
+      skipCache: false
+    });
+
+    const activeSession = profileResult.session || request.auth;
+    if (profileResult.session) {
+      request.auth = profileResult.session;
+      setSessionCookie(response, profileResult.session);
+    }
+
+    await setPartnerPassword({
+      session: activeSession,
+      profile: profileResult.item,
+      password
+    });
+
+    response.json({ result: true });
   } catch (error) {
     next(error);
   }

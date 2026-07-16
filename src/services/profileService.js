@@ -3,6 +3,7 @@ const { refreshAuthorizationSession } = require('./authService');
 const DEFAULT_AUTH_BASE_URL = 'https://partner-wowlife.ru';
 const DEFAULT_PROFILE_PATH = '/restapi/profile.getProfile';
 const DEFAULT_NOTIFICATION_CHANNELS_PATH = '/restapi/profile.getNotificationChannels';
+const DEFAULT_SET_PASSWORD_PATH = '/restapi/auth.setPassword';
 
 function normalizeBaseUrl() {
   return String(process.env.AUTH_BASE_URL || DEFAULT_AUTH_BASE_URL).replace(/\/+$/, '');
@@ -28,6 +29,14 @@ function getNotificationChannelsUrl() {
     process.env.PROFILE_NOTIFICATION_CHANNELS_URL || process.env.NOTIFICATION_CHANNELS_SERVICE_URL,
     process.env.PROFILE_NOTIFICATION_CHANNELS_PATH || process.env.NOTIFICATION_CHANNELS_SERVICE_PATH,
     DEFAULT_NOTIFICATION_CHANNELS_PATH
+  );
+}
+
+function getSetPasswordUrl() {
+  return resolveUrl(
+    process.env.AUTH_SET_PASSWORD_URL || process.env.PROFILE_SET_PASSWORD_URL,
+    process.env.AUTH_SET_PASSWORD_PATH || process.env.PROFILE_SET_PASSWORD_PATH,
+    DEFAULT_SET_PASSWORD_PATH
   );
 }
 
@@ -654,6 +663,15 @@ function postToNotificationChannelsService(session, body) {
   );
 }
 
+function postToSetPasswordService(session, body) {
+  return postToProfileEndpoint(
+    session,
+    body,
+    getSetPasswordUrl(),
+    'Не удалось установить пароль через сервис WOWlife.'
+  );
+}
+
 function getProfileRequestCredentials(session) {
   const contactId = getSessionContactId(session);
   const token = getSessionToken(session);
@@ -842,6 +860,61 @@ async function fetchProfileNotificationChannels({ session, contactId: explicitCo
   return mergeNotificationChannels(normalizeNotificationChannelItems(payload));
 }
 
+
+async function setPartnerPassword({ session, profile, password } = {}) {
+  const normalizedPassword = String(password || '').trim();
+  if (!normalizedPassword) {
+    const error = new Error('Password is required');
+    error.statusCode = 400;
+    error.publicMessage = 'Введите пароль.';
+    throw error;
+  }
+
+  const credentials = getProfileRequestCredentials(session);
+  const id = String(profile?.id || credentials.contactId || '').trim();
+  const email = String(profile?.email || session?.user?.email || '').trim();
+
+  if (!id) {
+    const error = new Error('Profile id is required for auth.setPassword');
+    error.statusCode = 400;
+    error.publicMessage = 'Не найден ID профиля для установки пароля.';
+    throw error;
+  }
+
+  if (!email) {
+    const error = new Error('Profile email is required for auth.setPassword');
+    error.statusCode = 400;
+    error.publicMessage = 'Не найден email профиля для установки пароля.';
+    throw error;
+  }
+
+  const requestPayload = {
+    id,
+    token: credentials.token,
+    password: normalizedPassword,
+    email
+  };
+
+  const { payload } = await postToSetPasswordService(session, requestPayload);
+  const result = payload?.result ?? payload?.data?.result ?? payload?.response?.result;
+
+  if (result !== true) {
+    const error = new Error('WOWlife auth.setPassword returned unsuccessful result');
+    error.statusCode = 502;
+    error.publicMessage = getServiceErrorMessage(payload) || 'Сервис WOWlife не подтвердил установку пароля.';
+    error.upstreamPayload = payload;
+    throw error;
+  }
+
+  return {
+    ok: true,
+    request: {
+      id,
+      email
+    }
+  };
+}
+
 async function fetchPartnerProfile({ session, skipCache = false } = {}) {
   let currentSession = session;
   let authorizationRefreshed = false;
@@ -925,5 +998,6 @@ async function fetchPartnerProfile({ session, skipCache = false } = {}) {
 module.exports = {
   fetchPartnerProfile,
   fetchProfileNotificationChannels,
+  setPartnerPassword,
   normalizeProfile
 };

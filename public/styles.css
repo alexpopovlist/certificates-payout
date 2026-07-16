@@ -3943,3 +3943,68 @@ body.is-admin-auth .mobile-logo {
     grid-template-columns: 1fr;
   }
 }
+
+/* Profile password setup: reuse sign-in input language inside profile flows. */
+.profile-password-modal .profile-password-panel {
+  width: min(100%, 460px);
+}
+
+.profile-password-dialog-body {
+  padding: 24px;
+}
+
+.profile-password-form {
+  width: 100%;
+}
+
+.profile-password-screen {
+  min-height: min(720px, calc(100vh - 120px));
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+}
+
+.profile-password-screen .auth-panel {
+  min-height: min(720px, calc(100vh - 120px));
+}
+
+.profile-password-success-panel {
+  width: min(100%, 420px);
+}
+
+.profile-password-success-body {
+  display: grid;
+  gap: 20px;
+  padding: 24px;
+}
+
+.profile-password-success-body p {
+  margin: 0;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.profile-password-success-body .button {
+  justify-self: end;
+  min-width: 112px;
+}
+
+@media (max-width: 680px) {
+  .profile-password-screen {
+    min-height: auto;
+    border-radius: 18px;
+  }
+
+  .profile-password-screen .auth-panel {
+    min-height: auto;
+    align-items: flex-start;
+    padding: 24px 18px;
+  }
+
+  .profile-password-success-body .button {
+    width: 100%;
+    justify-self: stretch;
+  }
+}
