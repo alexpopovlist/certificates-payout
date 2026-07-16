@@ -200,7 +200,7 @@ const certificateStatus = {
   REDEEMED: { label: 'Погашен', className: 'redeemed' },
   PAYMENT_PROCESSING: { label: 'В процессе оплаты', className: 'processing' },
   PAID: { label: 'Оплачен', className: 'paid' },
-  new: { label: 'Новая заявка', className: '' },
+  new: { label: 'Новый', className: '' },
   waiting: { label: 'Согласование', className: 'processing' },
   confirmed: { label: 'Записан', className: 'scheduled' },
   visited: { label: 'Посетил', className: 'visited' },
@@ -208,6 +208,8 @@ const certificateStatus = {
   notrepaid: { label: 'Не погашен', className: 'not-redeemed' },
   paid: { label: 'Оплачен', className: 'paid' },
   canceled: { label: 'Отменен', className: '' },
+  'C2:NEW': { label: 'Новый', className: '' },
+  NEW: { label: 'Новый', className: '' },
   'C2:UC_RPZ7AA': { label: 'Ожидает оплаты', className: 'awaiting-payment' },
   UC_RPZ7AA: { label: 'Ожидает оплаты', className: 'awaiting-payment' },
   'C2:8': { label: 'Не погашен', className: 'not-redeemed' },
@@ -1102,6 +1104,9 @@ function normalizeStatusLabel(label) {
     return 'Ожидает оплаты';
   }
   const normalizedForCompare = normalized.replace(/ё/g, 'е');
+  if (normalizedForCompare === 'c2:new' || normalizedForCompare === 'new' || normalizedForCompare === 'новый') {
+    return 'Новый';
+  }
   if (normalizedForCompare.includes('uc_rpz7aa') || normalizedForCompare === 'verification') {
     return 'Ожидает оплаты';
   }
@@ -1492,6 +1497,7 @@ function certificateCard(certificate) {
       </div>
       ${showScheduleButton ? `
         <div class="certificate-card-actions">
+          <button class="button certificate-list-action" type="button" data-certificate-accept-id="${escapeHtml(certificate.id)}">Принять в работу</button>
           <button class="button certificate-list-action" type="button" data-certificate-schedule-id="${escapeHtml(certificate.id)}">Записать</button>
         </div>
       ` : ''}
@@ -2302,6 +2308,35 @@ function certificatesPaginationHtml(pagination) {
   `;
 }
 
+
+async function acceptCertificateWork(button, item, options = {}) {
+  if (!button || !item?.id) return;
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Отправляем...';
+
+  try {
+    await api(`/api/certificates/${encodeURIComponent(item.id)}/accept-work`, {
+      method: 'POST',
+      body: JSON.stringify({
+        dealId: item.externalId || item.id,
+        stageId: 'C2:NEW'
+      })
+    });
+
+    if (typeof options.onSuccess === 'function') {
+      await options.onSuccess();
+    } else if (item.id) {
+      await renderCertificateDetail(item.id);
+    }
+  } catch (error) {
+    alert(error.message || 'Не удалось принять сертификат в работу.');
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
 function bindCertificateListActions(list) {
   list.querySelectorAll('[data-certificate-link]').forEach((card) => {
     const openCard = () => navigate(card.dataset.certificateLink);
@@ -2316,6 +2351,20 @@ function bindCertificateListActions(list) {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         openCard();
+      }
+    });
+  });
+
+  list.querySelectorAll('[data-certificate-accept-id]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const item = certificatesListState.itemsById.get(String(button.dataset.certificateAcceptId));
+      if (item) {
+        acceptCertificateWork(button, item, {
+          onSuccess: () => loadFilteredCertificates(certificatesListState.page)
+        });
       }
     });
   });
@@ -2831,12 +2880,19 @@ async function renderCertificateDetail(id) {
           </div>
           ${showScheduleButton ? `
             <div class="detail-actions detail-actions-right">
+              <button id="acceptCertificateWorkButton" class="button detail-action-button" type="button">Принять в работу</button>
               <button id="openScheduleDialog" class="button detail-action-button" type="button">Записать</button>
             </div>
           ` : ''}
         </div>
       </section>
     `;
+
+    document.querySelector('#acceptCertificateWorkButton')?.addEventListener('click', (event) => {
+      acceptCertificateWork(event.currentTarget, item, {
+        onSuccess: () => renderCertificateDetail(item.id)
+      });
+    });
 
     document.querySelector('#openScheduleDialog')?.addEventListener('click', () => openCertificateScheduleDialog(item, {
       nextPath: `/certificates/${item.id}`
@@ -3517,7 +3573,12 @@ function certificatesTable(certificates, options = {}) {
   const scheduleActionMarkup = (certificate) => {
     if (!scheduleActions || !isNewCertificateStatus(certificate)) return '—';
 
-    return `<button class="button certificate-list-action table-action-button" type="button" data-certificate-schedule-id="${escapeHtml(certificate.id)}">Записать</button>`;
+    return `
+      <div class="table-action-stack">
+        <button class="button certificate-list-action table-action-button" type="button" data-certificate-accept-id="${escapeHtml(certificate.id)}">Принять в работу</button>
+        <button class="button certificate-list-action table-action-button" type="button" data-certificate-schedule-id="${escapeHtml(certificate.id)}">Записать</button>
+      </div>
+    `;
   };
 
   const rows = certificates.map((certificate) => {
@@ -3570,6 +3631,7 @@ function certificatesTable(certificates, options = {}) {
           </div>
           ${scheduleActions && isNewCertificateStatus(certificate) ? `
             <div class="certificate-card-actions">
+              <button class="button certificate-list-action" type="button" data-certificate-accept-id="${escapeHtml(certificate.id)}">Принять в работу</button>
               <button class="button certificate-list-action" type="button" data-certificate-schedule-id="${escapeHtml(certificate.id)}">Записать</button>
             </div>
           ` : ''}

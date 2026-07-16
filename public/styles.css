@@ -3653,3 +3653,15 @@ body:not(.is-login) .services-name-cell {
     width: 100%;
   }
 }
+
+/* Certificate new status actions */
+.table-action-stack {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.table-action-stack .table-action-button {
+  width: 100%;
+}

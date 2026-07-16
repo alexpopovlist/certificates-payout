@@ -9,7 +9,8 @@ const {
   fetchPartnerCertificateById,
   fetchPartnerCertificateForRedeem,
   redeemPartnerCertificate,
-  changePartnerCertificateStage
+  changePartnerCertificateStage,
+  acceptPartnerCertificateWork
 } = require('../services/partnerCertificateService');
 
 const router = express.Router();
@@ -392,6 +393,26 @@ router.post('/redeem', async (request, response, next) => {
     });
 
     response.status(201).json({ item });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+router.post('/:id/accept-work', async (request, response, next) => {
+  try {
+    if (!shouldUseCertificatesService()) {
+      return response.status(409).json({
+        error: 'Изменение статуса сертификата через WOWlife доступно только при CERTIFICATES_USE_SERVICE=true.'
+      });
+    }
+
+    const result = await acceptPartnerCertificateWork({
+      session: request.auth,
+      certificateId: request.body?.dealId || request.params.id
+    });
+
+    return response.json(result);
   } catch (error) {
     next(error);
   }

@@ -9,6 +9,7 @@ const DEFAULT_PRODUCTS_PATH = '/restapi/product.getPartnerProducts';
 const DEFAULT_CHANGE_PARTNER_PRODUCT_PATH = '/restapi/product.changePartnerProduct';
 const DEFAULT_ADD_PARTNER_PRODUCT_PATH = '/restapi/product.addPartnerProduct';
 const DEFAULT_SCHEDULE_TIME_ZONE = 'Europe/Moscow';
+const DEFAULT_ACCEPT_WORK_STAGE_ID = 'C2:NEW';
 
 const { fetchPartnerProfile } = require('./profileService');
 
@@ -842,6 +843,10 @@ function getDefaultScheduleStageId() {
   return process.env.CERTIFICATE_SCHEDULE_STAGE_ID || 'C2:UC_4Q05NY';
 }
 
+function getAcceptWorkStageId() {
+  return process.env.CERTIFICATE_ACCEPT_WORK_STAGE_ID || DEFAULT_ACCEPT_WORK_STAGE_ID;
+}
+
 function normalizeDealId(value) {
   const text = String(value ?? '').trim();
   if (!text) return '';
@@ -1236,6 +1241,58 @@ async function addPartnerProduct({ session, body = {} }) {
 }
 
 
+function buildSimpleStagePayload(body = {}) {
+  const dealId = normalizeDealId(body.dealId || body.id || body.certificateId);
+  const stageId = String(body.stageId || '').trim();
+
+  if (!dealId) {
+    const error = new Error('Certificate id is required for stage change');
+    error.statusCode = 400;
+    error.publicMessage = 'Не указан идентификатор сертификата.';
+    throw error;
+  }
+
+  if (!stageId) {
+    const error = new Error('Stage id is required for stage change');
+    error.statusCode = 400;
+    error.publicMessage = 'Не указан целевой статус сертификата.';
+    throw error;
+  }
+
+  return { dealId, stageId };
+}
+
+async function changePartnerCertificateStageSimple({ session, body = {} }) {
+  const requestPayload = buildSimpleStagePayload(body);
+
+  try {
+    const { payload } = await postJsonToPartnerService(session, getChangeStageUrl(), requestPayload, '/certificates');
+    const result = getPayloadResult(payload) || {};
+    return {
+      item: mapChangedCertificate(result),
+      raw: result,
+      source: 'wowlife',
+      request: requestPayload
+    };
+  } catch (error) {
+    if (!error.publicMessage || error.publicMessage === 'Не удалось выполнить запрос в сервис WOWlife.') {
+      error.publicMessage = 'Не удалось изменить статус сертификата в сервисе WOWlife.';
+    }
+    throw error;
+  }
+}
+
+async function acceptPartnerCertificateWork({ session, certificateId }) {
+  return changePartnerCertificateStageSimple({
+    session,
+    body: {
+      dealId: certificateId,
+      stageId: getAcceptWorkStageId()
+    }
+  });
+}
+
+
 async function changePartnerCertificateStage({ session, body = {} }) {
   const requestPayload = buildSchedulePayload(body);
 
@@ -1274,5 +1331,6 @@ module.exports = {
   redeemPartnerCertificate,
   redeemPartnerCertificateById,
   changePartnerCertificateStage,
+  acceptPartnerCertificateWork,
   DEFAULT_GROUP_IDS
 };

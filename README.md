@@ -525,9 +525,21 @@ Payload формируется в формате:
 ```env
 CERTIFICATE_STAGE_CHANGE_URL=https://partner-wowlife.ru/restapi/certificate.changeCertificateStage
 CERTIFICATE_SCHEDULE_STAGE_ID=C2:UC_4Q05NY
+CERTIFICATE_ACCEPT_WORK_STAGE_ID=C2:NEW
 CERTIFICATE_NEW_STAGE_ID=C2:UC_MCMFWK
 CERTIFICATE_SCHEDULE_TIME_ZONE=Europe/Moscow
 ```
+
+Для кнопки **«Принять в работу»** на сертификате со статусом **«Новый»** используется тот же сервис `certificate.changeCertificateStage`, но с коротким payload:
+
+```json
+{
+  "dealId": 207096,
+  "stageId": "C2:NEW"
+}
+```
+
+Целевой статус задаётся переменной `CERTIFICATE_ACCEPT_WORK_STAGE_ID`.
 
 ### Просмотр данных сертификата перед погашением
 
