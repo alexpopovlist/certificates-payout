@@ -207,7 +207,15 @@ const certificateStatus = {
   verification: { label: 'Ожидает оплаты', className: 'awaiting-payment' },
   notrepaid: { label: 'Не погашен', className: 'not-redeemed' },
   paid: { label: 'Оплачен', className: 'paid' },
-  canceled: { label: 'Отменен', className: '' }
+  canceled: { label: 'Отменен', className: '' },
+  'C2:UC_RPZ7AA': { label: 'Ожидает оплаты', className: 'awaiting-payment' },
+  UC_RPZ7AA: { label: 'Ожидает оплаты', className: 'awaiting-payment' },
+  'C2:8': { label: 'Не погашен', className: 'not-redeemed' },
+  '8': { label: 'Не погашен', className: 'not-redeemed' },
+  'C2:UC_ZRY3C1': { label: 'Посетил', className: 'visited' },
+  UC_ZRY3C1: { label: 'Посетил', className: 'visited' },
+  'C2:UC_M7SHZP': { label: 'Записан', className: 'scheduled' },
+  UC_M7SHZP: { label: 'Записан', className: 'scheduled' }
 };
 
 const paymentStatus = {
@@ -1094,6 +1102,18 @@ function normalizeStatusLabel(label) {
     return 'Ожидает оплаты';
   }
   const normalizedForCompare = normalized.replace(/ё/g, 'е');
+  if (normalizedForCompare.includes('uc_rpz7aa') || normalizedForCompare === 'verification') {
+    return 'Ожидает оплаты';
+  }
+  if (normalizedForCompare === 'c2:8' || normalizedForCompare === 'notrepaid') {
+    return 'Не погашен';
+  }
+  if (normalizedForCompare.includes('uc_zry3c1') || normalizedForCompare === 'visited') {
+    return 'Посетил';
+  }
+  if (normalizedForCompare.includes('uc_m7shzp') || normalizedForCompare === 'confirmed') {
+    return 'Записан';
+  }
   if (['подтвержден', 'подтержден', 'подтверждено', 'подтерждено'].includes(normalizedForCompare)) {
     return 'Записан';
   }
@@ -1106,8 +1126,17 @@ function normalizeStatusLabel(label) {
   return value;
 }
 
+function findStatusMeta(statusMap, status) {
+  const value = String(status || '').trim();
+  if (!value) return { label: '—', className: '' };
+  if (statusMap[value]) return statusMap[value];
+  const caseInsensitiveKey = Object.keys(statusMap).find((key) => key.toLowerCase() === value.toLowerCase());
+  if (caseInsensitiveKey) return statusMap[caseInsensitiveKey];
+  return { label: value, className: '' };
+}
+
 function statusHtml(statusMap, status, labelOverride = null) {
-  const meta = statusMap[status] || { label: status || '—', className: '' };
+  const meta = findStatusMeta(statusMap, status);
   const label = normalizeStatusLabel(labelOverride || meta.label);
   return `<span class="status ${meta.className}">${escapeHtml(label)}</span>`;
 }

@@ -79,13 +79,14 @@ function formatServiceTime(value) {
 }
 
 const CERTIFICATE_STAGE_ID_STATUS_MAP = {
-  'UC_RPZ7AA': 'verification',
-  'C2:UC_RPZ7AA': 'verification',
-  'C2:8': 'notrepaid',
-  'UC_ZRY3C1': 'visited',
-  'C2:UC_ZRY3C1': 'visited',
-  'UC_M7SHZP': 'confirmed',
-  'C2:UC_M7SHZP': 'confirmed'
+  'uc_rpz7aa': 'verification',
+  'c2:uc_rpz7aa': 'verification',
+  'c2:8': 'notrepaid',
+  '8': 'notrepaid',
+  'uc_zry3c1': 'visited',
+  'c2:uc_zry3c1': 'visited',
+  'uc_m7shzp': 'confirmed',
+  'c2:uc_m7shzp': 'confirmed'
 };
 
 const CERTIFICATE_STAGE_GROUP_STATUS_MAP = {
@@ -111,17 +112,37 @@ function normalizeStageText(value) {
 function getCertificateStageTitle(stage) {
   if (!stage) return null;
   if (typeof stage === 'object') {
-    return getStageField(stage, 'group_title', 'groupTitle') || getStageField(stage, 'title', 'title');
+    return getStageField(stage, 'group_title', 'groupTitle') || getStageField(stage, 'title', 'title') || getStageField(stage, 'name', 'name');
   }
-  return stage;
+  return null;
 }
 
 function getCertificateStageId(stage) {
   if (!stage) return '';
   if (typeof stage === 'object') {
-    return String(getStageField(stage, 'id', 'id') || '').trim();
+    return String(
+      getStageField(stage, 'id', 'id') ||
+      getStageField(stage, 'stage_id', 'stageId') ||
+      getStageField(stage, 'status_id', 'statusId') ||
+      ''
+    ).trim();
   }
   return String(stage).trim();
+}
+
+function pickCertificateStage(raw = {}) {
+  const directStage = raw.STAGE || raw.stage;
+  if (directStage && typeof directStage === 'object') return directStage;
+
+  const stageId = directStage || raw.STAGE_ID || raw.stageId || raw.STATUS_ID || raw.statusId || raw.STATUS || raw.status;
+  const groupId = raw.STAGE_GROUP_ID || raw.stageGroupId || raw.GROUP_ID || raw.groupId;
+  const title = raw.STAGE_TITLE || raw.stageTitle || raw.STAGE_GROUP_TITLE || raw.stageGroupTitle || raw.STATUS_TITLE || raw.statusTitle || raw.STATUS_NAME || raw.statusName;
+
+  return {
+    id: stageId || null,
+    group_id: groupId || null,
+    group_title: title || null
+  };
 }
 
 function normalizeCertificateStageTitle(title) {
@@ -142,7 +163,8 @@ function mapCertificateStageToStatus(stage) {
   if (CERTIFICATE_STAGE_GROUP_STATUS_MAP[groupId]) return CERTIFICATE_STAGE_GROUP_STATUS_MAP[groupId];
 
   const stageId = getCertificateStageId(stage);
-  if (CERTIFICATE_STAGE_ID_STATUS_MAP[stageId]) return CERTIFICATE_STAGE_ID_STATUS_MAP[stageId];
+  const normalizedStageId = normalizeStageText(stageId);
+  if (CERTIFICATE_STAGE_ID_STATUS_MAP[normalizedStageId]) return CERTIFICATE_STAGE_ID_STATUS_MAP[normalizedStageId];
 
   const normalizedStage = normalizeStageText([stageId, getCertificateStageTitle(stage)].filter(Boolean).join(' '));
 
@@ -159,6 +181,7 @@ function mapCertificateStageToStatus(stage) {
 
 function mapVerificationCertificate(raw = {}, parent = {}) {
   const opportunity = raw.OPPORTUNITY ?? raw.opportunity ?? 0;
+  const stage = pickCertificateStage(raw);
 
   return {
     id: String(raw.ID || raw.id || raw.NUMBER || raw.number || ''),
@@ -169,10 +192,10 @@ function mapVerificationCertificate(raw = {}, parent = {}) {
     amountCents: parseOpportunity(opportunity),
     serviceDurationMinutes: null,
     imageUrl: null,
-    status: mapCertificateStageToStatus(raw.STAGE || raw.stage),
-    statusLabel: normalizeCertificateStageTitle(getCertificateStageTitle(raw.STAGE || raw.stage)),
-    stageGroupId: getStageField(raw.STAGE || raw.stage, 'group_id', 'groupId'),
-    stageId: getCertificateStageId(raw.STAGE || raw.stage) || null,
+    status: mapCertificateStageToStatus(stage),
+    statusLabel: normalizeCertificateStageTitle(getCertificateStageTitle(stage)),
+    stageGroupId: getStageField(stage, 'group_id', 'groupId'),
+    stageId: getCertificateStageId(stage) || null,
     serviceDate: null,
     serviceTime: null,
     customerFullName: raw.NAME || raw.name || '—',
