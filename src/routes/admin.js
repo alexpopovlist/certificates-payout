@@ -13,6 +13,7 @@ const {
   listPushSubscriptions,
   listPushSubscriptionLogs,
   getPushSummary,
+  listPushCampaigns,
   savePushCampaign
 } = require('../services/pushService');
 
@@ -101,6 +102,23 @@ router.get('/push/logs', requireAdminAuth, async (request, response, next) => {
     const profileIds = normalizeProfileIds(request.query.profileIds || request.query.profileId);
     const logs = await listPushSubscriptionLogs({ profileIds, limit: Number(request.query.limit || 100) });
     response.json({ items: logs });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/push/campaigns', requireAdminAuth, async (request, response, next) => {
+  try {
+    const campaigns = await listPushCampaigns({
+      dateFrom: request.query.dateFrom,
+      dateTo: request.query.dateTo,
+      status: request.query.status,
+      search: request.query.search,
+      profileId: request.query.profileId,
+      limit: Number(request.query.limit || 100)
+    });
+
+    response.json({ items: campaigns });
   } catch (error) {
     next(error);
   }

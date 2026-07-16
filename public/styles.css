@@ -4163,3 +4163,99 @@ body:not(.is-login) .profile-moderation-field textarea {
     width: 100%;
   }
 }
+
+/* Desktop admin PUSH layout and campaign history filters. Mobile layout intentionally keeps the existing single-column flow. */
+.admin-hero-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.admin-campaign-filters {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-campaign-filters label {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-campaign-filters label > span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.admin-campaign-filter-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-campaigns-table table {
+  min-width: 980px;
+}
+
+.admin-campaigns-table td strong,
+.admin-campaigns-table td small {
+  display: block;
+}
+
+.admin-campaigns-table td small {
+  color: var(--muted);
+  line-height: 1.45;
+  margin-top: 6px;
+  max-width: 420px;
+}
+
+@media (min-width: 1024px) {
+  .admin-push-screen {
+    max-width: 1360px;
+    width: 100%;
+  }
+
+  .admin-push-screen:not(.admin-campaigns-screen) {
+    align-items: start;
+    grid-template-columns: minmax(360px, 430px) minmax(0, 1fr);
+  }
+
+  .admin-push-screen:not(.admin-campaigns-screen) .admin-push-hero,
+  .admin-push-screen:not(.admin-campaigns-screen) .admin-stat-grid {
+    grid-column: 1 / -1;
+  }
+
+  .admin-push-screen:not(.admin-campaigns-screen) .admin-broadcast-card {
+    grid-column: 1;
+    grid-row: 3 / span 2;
+    position: sticky;
+    top: 24px;
+  }
+
+  .admin-push-screen:not(.admin-campaigns-screen) .admin-push-list-card {
+    grid-column: 2;
+  }
+
+  .admin-campaigns-screen {
+    grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  }
+
+  .admin-campaigns-screen .admin-push-hero {
+    grid-column: 1 / -1;
+  }
+
+  .admin-campaigns-screen .admin-campaign-filters-card {
+    grid-column: 1;
+    position: sticky;
+    top: 24px;
+  }
+
+  .admin-campaigns-screen .admin-push-list-card {
+    grid-column: 2;
+  }
+
+  .admin-campaign-filter-actions {
+    grid-template-columns: 1fr;
+  }
+}

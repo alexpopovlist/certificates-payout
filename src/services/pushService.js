@@ -71,6 +71,34 @@ function rowToPushDevice(row) {
   };
 }
 
+
+function normalizeCampaignStatus(value) {
+  const status = String(value || '').trim().toLowerCase();
+  if (['success', 'sent', 'ok', 'успешно'].includes(status)) return 'success';
+  if (['error', 'failed', 'ошибка'].includes(status)) return 'error';
+  return '';
+}
+
+function rowToPushCampaign(row) {
+  const details = Array.isArray(row.result_details) ? row.result_details : [];
+  const derivedStatus = row.delivery_status || (Number(row.failed_count || 0) > 0 ? 'error' : 'success');
+
+  return {
+    id: row.id,
+    title: row.title,
+    body: row.body,
+    url: row.url || null,
+    profileIds: Array.isArray(row.profile_ids) ? row.profile_ids : [],
+    installedOnly: Boolean(row.installed_only),
+    total: Number(row.total_count || 0),
+    sent: Number(row.sent_count || 0),
+    failed: Number(row.failed_count || 0),
+    status: normalizeCampaignStatus(derivedStatus) || 'success',
+    details,
+    createdAt: row.created_at
+  };
+}
+
 function rowToPushLog(row) {
   return {
     id: row.id,
@@ -388,6 +416,8 @@ async function listPushSubscriptionLogs({ profileIds = [], limit = 100 } = {}) {
 
 async function savePushCampaign({ adminUserId, title, body, url, profileIds = [], installedOnly = true, result = {} }) {
   const normalizedProfileIds = normalizeTextArray(profileIds);
+  const deliveryStatus = Number(result.failed || 0) > 0 ? 'error' : 'success';
+  const resultDetails = Array.isArray(result.details) ? result.details : [];
   const { rows } = await query(
     `
       INSERT INTO push_notification_campaigns (
@@ -399,10 +429,12 @@ async function savePushCampaign({ adminUserId, title, body, url, profileIds = []
         installed_only,
         total_count,
         sent_count,
-        failed_count
+        failed_count,
+        delivery_status,
+        result_details
       )
-      VALUES ($1, $2, $3, $4, $5::text[], $6, $7, $8, $9)
-      RETURNING id, title, body, url, profile_ids, installed_only, total_count, sent_count, failed_count, created_at
+      VALUES ($1, $2, $3, $4, $5::text[], $6, $7, $8, $9, $10, $11::jsonb)
+      RETURNING id, title, body, url, profile_ids, installed_only, total_count, sent_count, failed_count, delivery_status, result_details, created_at
     `,
     [
       adminUserId || null,
@@ -413,11 +445,60 @@ async function savePushCampaign({ adminUserId, title, body, url, profileIds = []
       Boolean(installedOnly),
       Number(result.total || 0),
       Number(result.sent || 0),
-      Number(result.failed || 0)
+      Number(result.failed || 0),
+      deliveryStatus,
+      JSON.stringify(resultDetails)
     ]
   );
 
-  return rows[0];
+  return rowToPushCampaign(rows[0]);
+}
+
+
+async function listPushCampaigns({ dateFrom = '', dateTo = '', status = '', search = '', profileId = '', limit = 100 } = {}) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
+  const normalizedStatus = normalizeCampaignStatus(status);
+  const normalizedSearch = String(search || '').trim() || null;
+  const normalizedProfileId = String(profileId || '').trim() || null;
+  const normalizedDateFrom = String(dateFrom || '').trim() || null;
+  const normalizedDateTo = String(dateTo || '').trim() || null;
+
+  const { rows } = await query(
+    `
+      SELECT id, title, body, url, profile_ids, installed_only, total_count, sent_count, failed_count, delivery_status, result_details, created_at
+      FROM push_notification_campaigns
+      WHERE ($1::date IS NULL OR created_at >= $1::date)
+        AND ($2::date IS NULL OR created_at < ($2::date + INTERVAL '1 day'))
+        AND (
+          $3::text IS NULL
+          OR delivery_status = $3::text
+          OR ($3::text = 'success' AND failed_count = 0)
+          OR ($3::text = 'error' AND failed_count > 0)
+        )
+        AND (
+          $4::text IS NULL
+          OR title ILIKE '%' || $4::text || '%'
+          OR body ILIKE '%' || $4::text || '%'
+        )
+        AND (
+          $5::text IS NULL
+          OR $5::text = ANY(profile_ids)
+          OR array_length(profile_ids, 1) IS NULL
+        )
+      ORDER BY created_at DESC
+      LIMIT $6
+    `,
+    [
+      normalizedDateFrom,
+      normalizedDateTo,
+      normalizedStatus || null,
+      normalizedSearch,
+      normalizedProfileId,
+      safeLimit
+    ]
+  );
+
+  return rows.map(rowToPushCampaign);
 }
 
 module.exports = {
@@ -429,5 +510,6 @@ module.exports = {
   getPushSummary,
   listPushSubscriptions,
   listPushSubscriptionLogs,
+  listPushCampaigns,
   savePushCampaign
 };

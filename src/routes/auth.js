@@ -4,8 +4,8 @@ const {
   setSessionCookie,
   clearSessionCookie,
   signInWithPartner,
-  requestSmsCode,
-  signInWithSmsCode,
+  requestAuthCode,
+  signInWithCode,
   buildSession
 } = require('../services/authService');
 
@@ -26,18 +26,19 @@ router.get('/me', (request, response) => {
 
 router.post('/request-code', async (request, response, next) => {
   try {
-    const { authMethod, method, phone, contact } = request.body || {};
+    const { authMethod, method, phone, email, contact } = request.body || {};
     const selectedMethod = String(authMethod || method || 'sms').toLowerCase();
 
-    if (selectedMethod !== 'sms') {
-      return response.status(501).json({ error: 'Получение кода для этого типа авторизации пока не подключено' });
+    if (!['sms', 'email'].includes(selectedMethod)) {
+      return response.status(400).json({ error: 'Неподдерживаемый тип авторизации для получения кода' });
     }
 
-    const result = await requestSmsCode({
-      contact: String(contact || phone || '').trim()
+    const result = await requestAuthCode({
+      contact: String(contact || email || phone || '').trim(),
+      method: selectedMethod === 'email' ? 'email' : 'phone'
     });
 
-    response.status(201).json({ ok: true, contact: result.contact });
+    response.status(201).json({ ok: true, contact: result.contact, method: selectedMethod });
   } catch (error) {
     next(error);
   }
@@ -48,10 +49,11 @@ router.post('/sign-in', async (request, response, next) => {
     const { authMethod, method, login, email, phone, contact, username, password, code } = request.body || {};
     const selectedMethod = String(authMethod || method || 'password').toLowerCase();
 
-    const result = selectedMethod === 'sms'
-      ? await signInWithSmsCode({
-          contact: String(contact || phone || '').trim(),
-          code: String(code || '').trim()
+    const result = ['sms', 'email'].includes(selectedMethod)
+      ? await signInWithCode({
+          contact: String(contact || email || phone || '').trim(),
+          code: String(code || '').trim(),
+          method: selectedMethod === 'email' ? 'email' : 'phone'
         })
       : await signInWithPartner({
           login: String(login || email || phone || username || '').trim(),

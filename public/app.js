@@ -41,6 +41,7 @@ const SIGN_IN_PATH = '/authentication/sign-in';
 const ADMIN_SIGN_IN_PATH = '/admin/login';
 const ADMIN_REGISTER_PATH = '/admin/register';
 const ADMIN_PUSH_PATH = '/admin/push';
+const ADMIN_PUSH_CAMPAIGNS_PATH = '/admin/push/campaigns';
 const DEFAULT_APP_PATH = '/redeem';
 const APP_ROUTES = new Set(['redeem', 'services', 'certificates', 'new-requests', 'reconciliations', 'payments', 'profile']);
 
@@ -727,19 +728,24 @@ async function handleAuthCodeRequest(event) {
     return;
   }
 
-  if (authUiState.method !== 'sms') {
+  const contact = authUiState.method === 'sms'
+    ? normalizeAuthPhoneContact(value)
+    : String(value || '').trim().toLowerCase();
+
+  if (!contact) {
     if (notice) {
       notice.className = 'notice error';
-      notice.textContent = 'Запросы для входа по Email будут подключены после описания модели API.';
+      notice.textContent = authUiState.method === 'sms'
+        ? 'Введите корректный телефон, чтобы получить код.'
+        : 'Введите корректный email, чтобы получить код.';
     }
     return;
   }
 
-  const contact = normalizeAuthPhoneContact(value);
-  if (!contact) {
+  if (authUiState.method === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact)) {
     if (notice) {
       notice.className = 'notice error';
-      notice.textContent = 'Введите корректный телефон, чтобы получить код.';
+      notice.textContent = 'Введите корректный email, чтобы получить код.';
     }
     return;
   }
@@ -755,13 +761,17 @@ async function handleAuthCodeRequest(event) {
     await api('/api/auth/request-code', {
       method: 'POST',
       body: JSON.stringify({
-        authMethod: 'sms',
-        phone: value,
+        authMethod: authUiState.method,
+        [authUiState.method === 'sms' ? 'phone' : 'email']: value,
         contact
       })
     });
 
-    authUiState.phone = formatAuthPhoneMask(contact);
+    if (authUiState.method === 'sms') {
+      authUiState.phone = formatAuthPhoneMask(contact);
+    } else {
+      authUiState.email = contact;
+    }
     authUiState.codeRequested = true;
     authUiState.code = '';
     renderSignIn();
@@ -784,15 +794,9 @@ async function handleSignInSubmit(event) {
 
   storeAuthFormValues(form);
 
-  if (authUiState.method === 'email') {
+  if (['sms', 'email'].includes(authUiState.method) && !authUiState.code) {
     notice.className = 'notice error';
-    notice.textContent = 'Запросы для входа по Email будут подключены после описания модели API.';
-    return;
-  }
-
-  if (authUiState.method === 'sms' && !authUiState.code) {
-    notice.className = 'notice error';
-    notice.textContent = 'Введите код из SMS.';
+    notice.textContent = authUiState.method === 'sms' ? 'Введите код из SMS.' : 'Введите код из email.';
     return;
   }
 
@@ -808,6 +812,8 @@ async function handleSignInSubmit(event) {
 
     if (authUiState.method === 'sms') {
       payload.contact = normalizeAuthPhoneContact(payload.phone || authUiState.phone);
+    } else if (authUiState.method === 'email') {
+      payload.contact = String(payload.email || authUiState.email || '').trim().toLowerCase();
     }
 
     const result = await api('/api/auth/sign-in', {
@@ -1167,6 +1173,111 @@ function adminLogsTable(items = []) {
   `;
 }
 
+
+function adminCampaignProfilesText(item) {
+  const ids = Array.isArray(item.profileIds) ? item.profileIds.filter(Boolean) : [];
+  return ids.length > 0 ? ids.join(', ') : 'Все профили';
+}
+
+function adminCampaignStatusHtml(status) {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (normalized === 'error') return statusHtml(certificateStatus, 'notrepaid', 'Ошибка');
+  return statusHtml(certificateStatus, 'paid', 'Успешно');
+}
+
+function adminCampaignFiltersFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    dateFrom: params.get('dateFrom') || '',
+    dateTo: params.get('dateTo') || '',
+    status: params.get('status') || '',
+    search: params.get('search') || '',
+    profileId: params.get('profileId') || ''
+  };
+}
+
+function adminCampaignFiltersQuery(filters = {}) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    const normalized = String(value || '').trim();
+    if (normalized) params.set(key, normalized);
+  });
+  return params.toString();
+}
+
+function adminCampaignResultText(item) {
+  return `${Number(item.sent || 0)} успешно / ${Number(item.failed || 0)} ошибка / ${Number(item.total || 0)} всего`;
+}
+
+function adminCampaignsTable(items = []) {
+  if (!items.length) return '<div class="empty-state compact">Рассылок по заданным фильтрам не найдено.</div>';
+
+  return `
+    <div class="table-wrapper admin-push-table admin-campaigns-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Дата</th>
+            <th>Текст рассылки</th>
+            <th>ID профилей</th>
+            <th>Статус PUSH</th>
+            <th>Результат</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((item) => `
+            <tr>
+              <td>${escapeHtml(formatDateTime(item.createdAt))}</td>
+              <td>
+                <strong>${escapeHtml(item.title || '—')}</strong>
+                <small>${escapeHtml(item.body || '—')}</small>
+              </td>
+              <td>${escapeHtml(adminCampaignProfilesText(item))}</td>
+              <td>${adminCampaignStatusHtml(item.status)}</td>
+              <td>${escapeHtml(adminCampaignResultText(item))}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function adminCampaignFiltersHtml(filters = {}) {
+  return `
+    <form id="adminCampaignFiltersForm" class="admin-campaign-filters">
+      <label>
+        <span>Дата С</span>
+        <input name="dateFrom" type="date" value="${escapeHtml(filters.dateFrom || '')}" />
+      </label>
+      <label>
+        <span>Дата По</span>
+        <input name="dateTo" type="date" value="${escapeHtml(filters.dateTo || '')}" />
+      </label>
+      <label>
+        <span>Статус рассылки</span>
+        <select name="status">
+          <option value="" ${!filters.status ? 'selected' : ''}>Все статусы</option>
+          <option value="success" ${filters.status === 'success' ? 'selected' : ''}>Успешно</option>
+          <option value="error" ${filters.status === 'error' ? 'selected' : ''}>Ошибка</option>
+        </select>
+      </label>
+      <label>
+        <span>Поиск по тексту</span>
+        <input name="search" type="search" value="${escapeHtml(filters.search || '')}" placeholder="Заголовок или текст" />
+      </label>
+      <label>
+        <span>ID профиля</span>
+        <input name="profileId" type="text" inputmode="numeric" value="${escapeHtml(filters.profileId || '')}" placeholder="301" />
+      </label>
+      <div class="admin-campaign-filter-actions">
+        <button class="button" type="submit">Найти</button>
+        <button id="adminCampaignFiltersReset" class="button secondary" type="button">Сбросить</button>
+      </div>
+    </form>
+  `;
+}
+
 async function renderAdminPush() {
   if (!currentAdmin) {
     return renderAdminSignIn();
@@ -1189,7 +1300,10 @@ async function renderAdminPush() {
             <h2>Рассылка по PWA-устройствам</h2>
             <p>Отправляйте уведомления всем подписанным устройствам или только партнёрам с указанными ID профилей.</p>
           </div>
-          <button id="adminSignOutButton" class="button secondary" type="button">Выйти</button>
+          <div class="admin-hero-actions">
+            <a class="button secondary" href="${ADMIN_PUSH_CAMPAIGNS_PATH}">Таблица рассылок</a>
+            <button id="adminSignOutButton" class="button secondary" type="button">Выйти</button>
+          </div>
         </section>
 
         <section class="admin-stat-grid">
@@ -1261,6 +1375,79 @@ async function renderAdminPush() {
   } catch (error) {
     showError(error);
   }
+}
+
+async function renderAdminPushCampaigns() {
+  if (!currentAdmin) {
+    return renderAdminSignIn();
+  }
+
+  setAdminMode(true);
+  document.body.classList.remove('is-admin-auth');
+  setHeader('Панель администратора');
+  setActiveNavigation('');
+  showLoading();
+
+  const filters = adminCampaignFiltersFromUrl();
+  const query = adminCampaignFiltersQuery(filters);
+
+  try {
+    const data = await api(`/api/admin/push/campaigns${query ? `?${query}` : ''}`);
+    app.innerHTML = `
+      <div class="stack admin-push-screen admin-campaigns-screen">
+        <section class="card pad admin-push-hero">
+          <div>
+            <p class="eyebrow">История PUSH</p>
+            <h2>Таблица рассылок</h2>
+            <p>Проверяйте, каким профилям была отправка, и отслеживайте статус PUSH уведомления.</p>
+          </div>
+          <div class="admin-hero-actions">
+            <a class="button secondary" href="${ADMIN_PUSH_PATH}">Новая рассылка</a>
+            <button id="adminSignOutButton" class="button secondary" type="button">Выйти</button>
+          </div>
+        </section>
+
+        <section class="card pad admin-campaign-filters-card">
+          <div class="table-header">
+            <div>
+              <h2>Фильтры</h2>
+              <p>Можно выбрать период, статус, найти рассылку по тексту или ID профиля.</p>
+            </div>
+          </div>
+          ${adminCampaignFiltersHtml(filters)}
+        </section>
+
+        <section class="card table-card admin-push-list-card">
+          <div class="table-header">
+            <div>
+              <h2>Рассылки</h2>
+              <p>Статус «Ошибка» отображается, если хотя бы одно PUSH уведомление не доставлено.</p>
+            </div>
+          </div>
+          ${adminCampaignsTable(data.items || [])}
+        </section>
+      </div>
+    `;
+
+    document.querySelector('#adminSignOutButton')?.addEventListener('click', signOutAdmin);
+    document.querySelector('#adminCampaignFiltersForm')?.addEventListener('submit', handleAdminCampaignFiltersSubmit);
+    document.querySelector('#adminCampaignFiltersReset')?.addEventListener('click', () => navigate(ADMIN_PUSH_CAMPAIGNS_PATH));
+  } catch (error) {
+    showError(error);
+  }
+}
+
+function handleAdminCampaignFiltersSubmit(event) {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+  const query = adminCampaignFiltersQuery({
+    dateFrom: formData.get('dateFrom'),
+    dateTo: formData.get('dateTo'),
+    status: formData.get('status'),
+    search: formData.get('search'),
+    profileId: formData.get('profileId')
+  });
+  navigate(`${ADMIN_PUSH_CAMPAIGNS_PATH}${query ? `?${query}` : ''}`);
 }
 
 async function handleAdminPushBroadcastSubmit(event) {
@@ -4728,7 +4915,10 @@ function route() {
     stopQrScanner({ keepModalOpen: false });
     if (id === 'register') return renderAdminRegister();
     if (!currentAdmin) return renderAdminSignIn();
-    if (!id || id === 'push') return renderAdminPush();
+    if (!id || id === 'push') {
+      if (action === 'campaigns') return renderAdminPushCampaigns();
+      return renderAdminPush();
+    }
     navigate(ADMIN_PUSH_PATH, { replace: true });
     return;
   }

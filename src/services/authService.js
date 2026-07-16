@@ -119,8 +119,8 @@ function getPasswordUrl() {
 
 function getCodeUrl() {
   return resolveAuthUrl(
-    process.env.AUTH_CODE_URL,
-    process.env.AUTH_CODE_PATH,
+    process.env.AUTH_GET_CODE_URL || process.env.AUTH_CODE_URL,
+    process.env.AUTH_GET_CODE_PATH || process.env.AUTH_CODE_PATH,
     DEFAULT_CODE_PATH
   );
 }
@@ -155,6 +155,10 @@ function getAuthMethod() {
 
 function getPhoneAuthMethod() {
   return process.env.AUTH_PHONE_METHOD || 'phone';
+}
+
+function getEmailAuthMethod() {
+  return process.env.AUTH_EMAIL_METHOD || 'email';
 }
 
 function collectNestedCandidates(value, depth = 0, seen = new Set()) {
@@ -483,6 +487,23 @@ function normalizePhoneContact(value) {
   return `+${digits.slice(0, 15)}`;
 }
 
+function normalizeEmailContact(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeCodeContact(value, method = getPhoneAuthMethod()) {
+  const normalizedMethod = String(method || '').toLowerCase();
+  if (normalizedMethod === 'email' || normalizedMethod === getEmailAuthMethod().toLowerCase()) {
+    return normalizeEmailContact(value);
+  }
+  return normalizePhoneContact(value);
+}
+
+function getCodeContactLabel(method = getPhoneAuthMethod()) {
+  const normalizedMethod = String(method || '').toLowerCase();
+  return normalizedMethod === 'email' || normalizedMethod === getEmailAuthMethod().toLowerCase() ? 'Email' : 'Телефон';
+}
+
 
 function getAuthorizationContactIdFromSession(session) {
   return (
@@ -581,24 +602,34 @@ async function refreshAuthorizationSession({ session }) {
   };
 }
 
-async function requestSmsCode({ contact }) {
-  const normalizedContact = normalizePhoneContact(contact);
+async function requestAuthCode({ contact, method = getPhoneAuthMethod() }) {
+  const normalizedMethod = String(method || getPhoneAuthMethod()).toLowerCase();
+  const normalizedContact = normalizeCodeContact(contact, normalizedMethod);
+  const contactLabel = getCodeContactLabel(normalizedMethod);
+
   if (!normalizedContact) {
-    const error = new Error('Phone is required');
+    const error = new Error('Contact is required');
     error.statusCode = 400;
-    error.publicMessage = 'Телефон обязателен';
+    error.publicMessage = `${contactLabel} обязателен`;
+    throw error;
+  }
+
+  if (normalizedMethod === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedContact)) {
+    const error = new Error('Valid email is required');
+    error.statusCode = 400;
+    error.publicMessage = 'Введите корректный email';
     throw error;
   }
 
   if (process.env.AUTH_MOCK === 'true') {
-    return { ok: true, contact: normalizedContact, upstream: { codeUrl: 'mock' } };
+    return { ok: true, contact: normalizedContact, method: normalizedMethod, upstream: { codeUrl: 'mock' } };
   }
 
   const codeUrl = getCodeUrl();
   let codeResult;
 
   try {
-    codeResult = await requestJsonPost(codeUrl, buildCodeBody({ contact: normalizedContact }));
+    codeResult = await requestJsonPost(codeUrl, buildCodeBody({ contact: normalizedContact, method: normalizedMethod }));
   } catch (error) {
     const serviceError = new Error(`WOWlife auth.getCode request failed: ${error.message}`);
     serviceError.statusCode = 502;
@@ -610,23 +641,35 @@ async function requestSmsCode({ contact }) {
     throwAuthRejected(codeResult, 'Не удалось отправить код авторизации');
   }
 
-  return { ok: true, contact: normalizedContact, upstream: { codeUrl, cookies: codeResult.cookies } };
+  return { ok: true, contact: normalizedContact, method: normalizedMethod, upstream: { codeUrl, cookies: codeResult.cookies } };
 }
 
-async function signInWithSmsCode({ contact, code }) {
-  const normalizedContact = normalizePhoneContact(contact);
+async function requestSmsCode({ contact }) {
+  return requestAuthCode({ contact, method: getPhoneAuthMethod() });
+}
+
+async function signInWithCode({ contact, code, method = getPhoneAuthMethod() }) {
+  const normalizedMethod = String(method || getPhoneAuthMethod()).toLowerCase();
+  const normalizedContact = normalizeCodeContact(contact, normalizedMethod);
   const normalizedCode = String(code || '').trim();
+  const contactLabel = getCodeContactLabel(normalizedMethod);
 
   if (!normalizedContact || !normalizedCode) {
-    const error = new Error('Phone and code are required');
+    const error = new Error('Contact and code are required');
     error.statusCode = 400;
-    error.publicMessage = 'Телефон и код обязательны';
+    error.publicMessage = `${contactLabel} и код обязательны`;
     throw error;
   }
 
   if (process.env.AUTH_MOCK === 'true') {
     return {
-      user: { id: 'mock-user', name: normalizedContact, email: null, phone: normalizedContact, role: 'mock' },
+      user: {
+        id: 'mock-user',
+        name: normalizedContact,
+        email: normalizedMethod === 'email' ? normalizedContact : null,
+        phone: normalizedMethod === 'email' ? null : normalizedContact,
+        role: 'mock'
+      },
       upstream: { token: null, refreshToken: null, cookies: [], authUrl: 'mock', authenticationUrl: 'mock', contactId: 'mock-user', allIds: ['mock-user'] }
     };
   }
@@ -638,7 +681,7 @@ async function signInWithSmsCode({ contact, code }) {
   try {
     authenticationResult = await requestJsonPost(
       authenticationUrl,
-      buildAuthenticationBody({ contact: normalizedContact, code: normalizedCode })
+      buildAuthenticationBody({ contact: normalizedContact, code: normalizedCode, method: normalizedMethod })
     );
   } catch (error) {
     const serviceError = new Error(`WOWlife auth.authentication request failed: ${error.message}`);
@@ -693,6 +736,10 @@ async function signInWithSmsCode({ contact, code }) {
       allIds
     }
   };
+}
+
+async function signInWithSmsCode({ contact, code }) {
+  return signInWithCode({ contact, code, method: getPhoneAuthMethod() });
 }
 
 async function signInWithPartner({ login, password }) {
@@ -793,7 +840,9 @@ module.exports = {
   clearSessionCookie,
   signInWithPartner,
   requestSmsCode,
+  requestAuthCode,
   signInWithSmsCode,
+  signInWithCode,
   refreshAuthorizationSession,
   buildSession
 };

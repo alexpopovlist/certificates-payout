@@ -243,10 +243,10 @@ POST https://partner-wowlife.ru/restapi/auth.authorization
 
 После успешного второго шага backend создаёт локальную `HttpOnly` session-cookie. Пароль пользователя в сессию не сохраняется.
 
-Для SMS-авторизации backend использует цепочку:
+Для SMS- и Email-авторизации backend использует цепочку:
 
-1. `POST /restapi/auth.getCode` с `contact` и `method: "phone"`;
-2. `POST /restapi/auth.authentication` с `contact`, `code` и `method: "phone"`;
+1. `POST /restapi/auth.getCode` с `contact` и `method: "phone"` для SMS или `method: "email"` для Email;
+2. `POST /restapi/auth.authentication` с `contact`, `code` и тем же `method`;
 3. `POST /restapi/auth.authorization` с `contactId` и `token`.
 
 Если первый ответ WOWlife содержит `contactId` и `token` не на верхнем уровне, backend теперь ищет эти поля рекурсивно и без учёта регистра (`contactId`, `contact_id`, `CONTACT_ID`, `id`, `ID`, `token`, `TOKEN`). Для редкой нестандартной структуры можно явно указать пути через `AUTH_PASSWORD_CONTACT_ID_PATH` и `AUTH_PASSWORD_TOKEN_PATH`.
@@ -256,6 +256,7 @@ POST https://partner-wowlife.ru/restapi/auth.authorization
 ```env
 AUTH_BASE_URL=https://partner-wowlife.ru
 AUTH_PASSWORD_URL=https://partner-wowlife.ru/restapi/auth.goPassword
+AUTH_GET_CODE_URL=https://partner-wowlife.ru/restapi/auth.getCode
 AUTH_CODE_URL=https://partner-wowlife.ru/restapi/auth.getCode
 AUTH_AUTHENTICATION_URL=https://partner-wowlife.ru/restapi/auth.authentication
 AUTH_AUTHORIZATION_URL=https://partner-wowlife.ru/restapi/auth.authorization
@@ -264,6 +265,7 @@ AUTH_DOMAIN=wowlife-crm.ru
 AUTH_CABINET=partner
 AUTH_METHOD=password
 AUTH_PHONE_METHOD=phone
+AUTH_EMAIL_METHOD=email
 # Optional: only if WOWlife returns contactId/token in a non-standard nested shape.
 # Examples: data.contact.id, result.contact.ID, data.token
 AUTH_PASSWORD_CONTACT_ID_PATH=
@@ -662,6 +664,7 @@ PRODUCT_ADD_PARTNER_PRODUCT_URL=https://partner-wowlife.ru/restapi/product.addPa
 Добавлен отдельный административный раздел:
 
 - `/admin/push` — экран конфигурирования и отправки PUSH-рассылок;
+- `/admin/push/campaigns` — таблица рассылок с фильтрами по датам, статусу, тексту и ID профиля;
 - `/admin/login` — вход администратора по логину и паролю;
 - `/admin/register` — регистрация нового администратора по invite-коду.
 
@@ -682,7 +685,7 @@ ADMIN_SESSION_SECRET=replace-with-admin-session-secret
 MY_INVITE_CODE=replace-with-my-invite-code
 ```
 
-`MY_INVITE_CODE` используется на экране `/admin/register` как my-invite код. После входа администратор может отправить PUSH всем активным PWA-подпискам или только выбранным профилям партнёров, указав ID через запятую.
+`MY_INVITE_CODE` используется на экране `/admin/register` как my-invite код. После входа администратор может отправить PUSH всем активным PWA-подпискам или только выбранным профилям партнёров, указав ID через запятую. Миграция `006_push_campaign_status_details.sql` сохраняет статус рассылки (`success` / `error`) и технические детали отправки для таблицы истории.
 
 ## Заявка на модерацию профиля
 
