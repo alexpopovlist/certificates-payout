@@ -168,6 +168,28 @@ body.no-scroll {
   object-fit: contain;
 }
 
+.mobile-menu-button {
+  display: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: #0f172a;
+}
+
+.mobile-menu-button img {
+  display: block;
+  width: 30px;
+  height: 30px;
+}
+
+.mobile-menu-overlay {
+  display: none;
+}
+
 .icon-button {
   display: grid;
   place-items: center;
@@ -844,6 +866,104 @@ input[type="checkbox"] {
     display: none;
   }
 
+  .mobile-menu-button {
+    display: grid;
+  }
+
+  body.mobile-menu-open {
+    overflow: hidden;
+  }
+
+  .mobile-menu-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: block;
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  .mobile-menu-overlay.open {
+    pointer-events: auto;
+    visibility: visible;
+  }
+
+  .mobile-menu-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0);
+    transition: background 180ms ease;
+  }
+
+  .mobile-menu-overlay.open .mobile-menu-backdrop {
+    background: rgba(15, 23, 42, 0.36);
+  }
+
+  .mobile-side-menu {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(320px, 86vw);
+    padding: 18px;
+    background: rgba(255, 255, 255, 0.98);
+    border-right: 1px solid #e2e8f0;
+    box-shadow: 18px 0 44px rgba(15, 23, 42, 0.18);
+    transform: translateX(-102%);
+    transition: transform 220ms ease;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: 20px;
+  }
+
+  .mobile-menu-overlay.open .mobile-side-menu {
+    transform: translateX(0);
+  }
+
+  .mobile-side-menu-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    min-height: 48px;
+  }
+
+  .mobile-side-menu-header img {
+    width: 136px;
+    height: auto;
+    max-height: 42px;
+    object-fit: contain;
+  }
+
+  .mobile-menu-close {
+    color: #0f172a;
+    background: #f1f5f9;
+  }
+
+  .mobile-side-nav {
+    display: grid;
+    align-content: start;
+    gap: 8px;
+  }
+
+  .mobile-side-nav a {
+    color: #22304f;
+    text-decoration: none;
+    padding: 13px 14px;
+    border-radius: 14px;
+    font-size: 15px;
+    font-weight: 800;
+    transition: 0.18s ease;
+  }
+
+  .mobile-side-nav a:hover,
+  .mobile-side-nav a:focus-visible,
+  .mobile-side-nav a.active {
+    color: #ffffff;
+    background: #0b1324;
+    outline: none;
+  }
+
   .workspace {
     min-height: 100vh;
     padding-bottom: 76px;
@@ -851,10 +971,12 @@ input[type="checkbox"] {
 
   .topbar {
     height: 58px;
-    padding: 0 18px;
+    padding: 0 14px;
+    gap: 10px;
   }
 
   .topbar h1 {
+    min-width: 0;
     font-size: 24px;
   }
 
@@ -887,7 +1009,7 @@ input[type="checkbox"] {
     z-index: 20;
     height: 92px;
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     background: rgba(255, 255, 255, 0.96);
     border-top: 1px solid var(--line);
     box-shadow: 0 -8px 24px rgba(31, 41, 55, 0.08);
@@ -1443,7 +1565,8 @@ body.is-login .layout {
 body.is-login .sidebar,
 body.is-login .topbar,
 body.is-login .bottom-nav,
-body.is-login #pushPrompt {
+body.is-login #pushPrompt,
+body.is-login .mobile-menu-overlay {
   display: none !important;
 }
 
@@ -2780,7 +2903,7 @@ body:not(.is-login) .multiselect-option[aria-selected="true"] .multiselect-check
 
 @media (max-width: 920px) {
   body:not(.is-login) .bottom-nav {
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 
   .profile-hero {
@@ -3322,7 +3445,7 @@ body:not(.is-login) .services-name-cell {
 
 @media (max-width: 920px) {
   .bottom-nav {
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 
   .bottom-nav a {
@@ -3341,7 +3464,7 @@ body:not(.is-login) .services-name-cell {
   }
 
   body:not(.is-login) .bottom-nav {
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 
   body:not(.is-login) .bottom-nav a {

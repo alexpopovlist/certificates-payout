@@ -32,10 +32,32 @@
       <section class="workspace">
         <header class="topbar">
           <button id="backButton" class="icon-button hidden" type="button" aria-label="Назад">←</button>
+          <button id="mobileMenuButton" class="mobile-menu-button" type="button" aria-label="Открыть меню" aria-controls="mobileSideMenu" aria-expanded="false">
+            <img src="/assets/mobile-menu.svg" alt="" aria-hidden="true" />
+          </button>
           <img class="mobile-logo" src="/assets/wowlife-logo.svg" alt="" />
           <h1 id="pageTitle">Погасить сертификат</h1>
           <button class="icon-button logout-button" type="button" aria-label="Выход">⎋</button>
         </header>
+
+        <div id="mobileMenuOverlay" class="mobile-menu-overlay" aria-hidden="true">
+          <div class="mobile-menu-backdrop" data-mobile-menu-close></div>
+          <aside id="mobileSideMenu" class="mobile-side-menu" aria-label="Мобильное меню">
+            <div class="mobile-side-menu-header">
+              <img src="/assets/wowlife-logo.svg" alt="WowLife" />
+              <button id="mobileMenuCloseButton" class="icon-button mobile-menu-close" type="button" aria-label="Закрыть меню">×</button>
+            </div>
+            <nav class="mobile-side-nav">
+              <a href="/redeem" data-route="redeem">Погасить</a>
+              <a href="/certificates" data-route="certificates">Сертификаты</a>
+              <a href="/new-requests" data-route="new-requests">Новые заявки</a>
+              <a href="/reconciliations" data-route="reconciliations">Сверки</a>
+              <a href="/payments" data-route="payments">Оплаты</a>
+              <a href="/services" data-route="services">Услуги</a>
+              <a href="/profile" data-route="profile">Профиль</a>
+            </nav>
+          </aside>
+        </div>
 
         <div id="pushPrompt" class="push-prompt hidden"></div>
         <main id="app" class="content" tabindex="-1"></main>
@@ -49,10 +71,6 @@
             <span class="nav-icon nav-icon-image"><img src="/assets/mobile-copy.png" alt="" /></span>
             <span>Сертификаты</span>
           </a>
-          <a href="/new-requests" data-route="new-requests">
-            <span class="nav-icon nav-icon-image"><img src="/assets/mobile-copy.png" alt="" /></span>
-            <span>Заявки</span>
-          </a>
           <a href="/reconciliations" data-route="reconciliations">
             <span class="nav-icon nav-icon-svg" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -65,24 +83,6 @@
           <a href="/payments" data-route="payments">
             <span class="nav-icon nav-icon-image"><img src="/assets/mobile-wallet.png" alt="" /></span>
             <span>Оплаты</span>
-          </a>
-          <a href="/services" data-route="services">
-            <span class="nav-icon nav-icon-svg" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3H4a1 1 0 0 0-1 1v5.59A2 2 0 0 0 3.59 11l9.59 9.59a2 2 0 0 0 2.82 0l4.59-4.59a2 2 0 0 0 0-2.59Z" />
-                <path d="M7 7h.01" />
-              </svg>
-            </span>
-            <span>Услуги</span>
-          </a>
-          <a href="/profile" data-route="profile">
-            <span class="nav-icon nav-icon-svg" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M20 21a8 8 0 0 0-16 0" />
-                <circle cx="12" cy="8" r="4" />
-              </svg>
-            </span>
-            <span>Профиль</span>
           </a>
         </nav>
       </section>

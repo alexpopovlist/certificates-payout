@@ -3,6 +3,9 @@ const pageTitle = document.querySelector('#pageTitle');
 const backButton = document.querySelector('#backButton');
 const pushPrompt = document.querySelector('#pushPrompt');
 const logoutButton = document.querySelector('.logout-button');
+const mobileMenuButton = document.querySelector('#mobileMenuButton');
+const mobileMenuCloseButton = document.querySelector('#mobileMenuCloseButton');
+const mobileMenuOverlay = document.querySelector('#mobileMenuOverlay');
 
 let currentUser = null;
 
@@ -309,6 +312,22 @@ function setActiveNavigation(routeName) {
   document.querySelectorAll('[data-route]').forEach((link) => {
     link.classList.toggle('active', link.dataset.route === routeName);
   });
+}
+
+function openMobileMenu() {
+  if (!mobileMenuOverlay || !mobileMenuButton) return;
+  mobileMenuOverlay.classList.add('open');
+  mobileMenuOverlay.setAttribute('aria-hidden', 'false');
+  mobileMenuButton.setAttribute('aria-expanded', 'true');
+  document.body.classList.add('mobile-menu-open');
+}
+
+function closeMobileMenu() {
+  if (!mobileMenuOverlay || !mobileMenuButton) return;
+  mobileMenuOverlay.classList.remove('open');
+  mobileMenuOverlay.setAttribute('aria-hidden', 'true');
+  mobileMenuButton.setAttribute('aria-expanded', 'false');
+  document.body.classList.remove('mobile-menu-open');
 }
 
 function showLoading() {
@@ -3803,8 +3822,19 @@ function route() {
 }
 
 window.addEventListener('beforeunload', () => stopQrScanner());
-window.addEventListener('popstate', route);
+window.addEventListener('popstate', () => {
+  closeMobileMenu();
+  route();
+});
 logoutButton?.addEventListener('click', signOut);
+mobileMenuButton?.addEventListener('click', openMobileMenu);
+mobileMenuCloseButton?.addEventListener('click', closeMobileMenu);
+mobileMenuOverlay?.addEventListener('click', (event) => {
+  if (event.target.closest?.('[data-mobile-menu-close]')) closeMobileMenu();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeMobileMenu();
+});
 document.addEventListener('click', (event) => {
   const link = event.target.closest?.('a[href]');
   if (!link) return;
@@ -3815,6 +3845,7 @@ document.addEventListener('click', (event) => {
   const url = new URL(href, window.location.origin);
   if (url.origin !== window.location.origin) return;
   event.preventDefault();
+  closeMobileMenu();
   navigate(`${url.pathname}${url.search}`);
 });
 window.addEventListener('DOMContentLoaded', async () => {
