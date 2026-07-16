@@ -887,7 +887,7 @@ input[type="checkbox"] {
     z-index: 20;
     height: 92px;
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(7, 1fr);
     background: rgba(255, 255, 255, 0.96);
     border-top: 1px solid var(--line);
     box-shadow: 0 -8px 24px rgba(31, 41, 55, 0.08);
@@ -2780,7 +2780,7 @@ body:not(.is-login) .multiselect-option[aria-selected="true"] .multiselect-check
 
 @media (max-width: 920px) {
   body:not(.is-login) .bottom-nav {
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(7, 1fr);
   }
 
   .profile-hero {
@@ -3204,7 +3204,7 @@ body:not(.is-login) .schedule-field label {
 
 @media (max-width: 920px) {
   body:not(.is-login) .bottom-nav a {
-    font-size: 11px;
+    font-size: 10px;
     gap: 4px;
   }
 
@@ -3322,7 +3322,7 @@ body:not(.is-login) .services-name-cell {
 
 @media (max-width: 920px) {
   .bottom-nav {
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(7, 1fr);
   }
 
   .bottom-nav a {
@@ -3341,11 +3341,11 @@ body:not(.is-login) .services-name-cell {
   }
 
   body:not(.is-login) .bottom-nav {
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(7, 1fr);
   }
 
   body:not(.is-login) .bottom-nav a {
-    font-size: 12px;
+    font-size: 10px;
   }
 }
 

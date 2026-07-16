@@ -270,6 +270,29 @@ router.get('/reconciliations/availability', async (request, response, next) => {
   }
 });
 
+
+router.get('/new-requests', async (request, response, next) => {
+  try {
+    const query = {
+      ...request.query,
+      status: ['new', 'waiting']
+    };
+
+    if (shouldUseCertificatesService()) {
+      const data = await fetchPartnerCertificates({
+        session: request.auth,
+        query
+      });
+      return response.json(data);
+    }
+
+    const data = await fetchDbRedeemedCertificates(query);
+    return response.json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/redeemed', async (request, response, next) => {
   try {
     if (shouldUseCertificatesService()) {

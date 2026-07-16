@@ -18,7 +18,7 @@ const authUiState = {
 
 const SIGN_IN_PATH = '/authentication/sign-in';
 const DEFAULT_APP_PATH = '/redeem';
-const APP_ROUTES = new Set(['redeem', 'services', 'certificates', 'reconciliations', 'payments', 'profile']);
+const APP_ROUTES = new Set(['redeem', 'services', 'certificates', 'new-requests', 'reconciliations', 'payments', 'profile']);
 
 const MOBILE_DIALOG_QUERY = '(max-width: 680px)';
 const MOBILE_SERVICES_DIALOG_QUERY = '(max-width: 920px)';
@@ -201,7 +201,7 @@ const certificateStatus = {
   PAYMENT_PROCESSING: { label: 'В процессе оплаты', className: 'processing' },
   PAID: { label: 'Оплачен', className: 'paid' },
   new: { label: 'Новый', className: '' },
-  waiting: { label: 'Согласование', className: 'processing' },
+  waiting: { label: 'Принять заявку в работу', className: 'processing' },
   confirmed: { label: 'Записан', className: 'scheduled' },
   visited: { label: 'Посетил', className: 'visited' },
   verification: { label: 'Ожидает оплаты', className: 'awaiting-payment' },
@@ -1102,6 +1102,9 @@ function normalizeStatusLabel(label) {
   const normalized = value.toLowerCase();
   if (normalized === 'ожидает сверки' || normalized === 'ожидание сверки') {
     return 'Ожидает оплаты';
+  }
+  if (normalized === 'согласование') {
+    return 'Принять заявку в работу';
   }
   const normalizedForCompare = normalized.replace(/ё/g, 'е');
   if (normalizedForCompare === 'c2:new' || normalizedForCompare === 'new' || normalizedForCompare === 'новый') {
@@ -2337,7 +2340,11 @@ async function acceptCertificateWork(button, item, options = {}) {
   }
 }
 
-function bindCertificateListActions(list) {
+function bindCertificateListActions(list, options = {}) {
+  const reloadList = typeof options.onSuccess === 'function'
+    ? options.onSuccess
+    : () => loadFilteredCertificates(certificatesListState.page);
+  const nextPath = options.nextPath || '/certificates';
   list.querySelectorAll('[data-certificate-link]').forEach((card) => {
     const openCard = () => navigate(card.dataset.certificateLink);
 
@@ -2363,7 +2370,7 @@ function bindCertificateListActions(list) {
       const item = certificatesListState.itemsById.get(String(button.dataset.certificateAcceptId));
       if (item) {
         acceptCertificateWork(button, item, {
-          onSuccess: () => loadFilteredCertificates(certificatesListState.page)
+          onSuccess: reloadList
         });
       }
     });
@@ -2377,15 +2384,15 @@ function bindCertificateListActions(list) {
       const item = certificatesListState.itemsById.get(String(button.dataset.certificateScheduleId));
       if (item) {
         openCertificateScheduleDialog(item, {
-          nextPath: '/certificates',
-          onSuccess: () => loadFilteredCertificates(certificatesListState.page)
+          nextPath,
+          onSuccess: reloadList
         });
       }
     });
   });
 }
 
-function renderCertificatesResult(data, emptyText = 'Погашенных сертификатов пока нет.') {
+function renderCertificatesResult(data, emptyText = 'Погашенных сертификатов пока нет.', options = {}) {
   const list = document.querySelector('#certificatesList');
   const pagination = document.querySelector('#certificatesPagination');
   if (!list) return;
@@ -2398,7 +2405,7 @@ function renderCertificatesResult(data, emptyText = 'Погашенных сер
     list.innerHTML = `
       <div class="table-header">
         <div>
-          <h2>Сертификаты</h2>
+          <h2>${escapeHtml(options.title || 'Сертификаты')}</h2>
         </div>
       </div>
       ${certificatesTable(items, { selectable: false, linkNumbers: true, scheduleActions: true, rowLinks: true })}
@@ -2408,7 +2415,7 @@ function renderCertificatesResult(data, emptyText = 'Погашенных сер
     list.innerHTML = `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
   }
 
-  bindCertificateListActions(list);
+  bindCertificateListActions(list, options);
 
   if (pagination) {
     pagination.innerHTML = certificatesPaginationHtml(data.pagination);
@@ -2416,7 +2423,8 @@ function renderCertificatesResult(data, emptyText = 'Погашенных сер
       button.addEventListener('click', () => {
         const page = Number(button.dataset.page || 1);
         if (Number.isFinite(page) && page > 0) {
-          loadFilteredCertificates(page);
+          const loadPage = typeof options.onPage === 'function' ? options.onPage : loadFilteredCertificates;
+          loadPage(page);
         }
       });
     });
@@ -2442,14 +2450,14 @@ async function renderCertificates() {
               </button>
               <div class="multiselect-menu" role="listbox" aria-label="Статус сертификата" aria-multiselectable="true">
                 <label class="multiselect-option" role="option" aria-selected="false">
-                  <input type="checkbox" value="new" data-label="Новая заявка" />
+                  <input type="checkbox" value="new" data-label="Новый" />
                   <span class="multiselect-check" aria-hidden="true">✓</span>
-                  <span>Новая заявка</span>
+                  <span>Новый</span>
                 </label>
                 <label class="multiselect-option" role="option" aria-selected="false">
-                  <input type="checkbox" value="waiting" data-label="Согласование" />
+                  <input type="checkbox" value="waiting" data-label="Принять заявку в работу" />
                   <span class="multiselect-check" aria-hidden="true">✓</span>
-                  <span>Согласование</span>
+                  <span>Принять заявку в работу</span>
                 </label>
                 <label class="multiselect-option" role="option" aria-selected="false">
                   <input type="checkbox" value="confirmed" data-label="Записан" />
@@ -2505,6 +2513,73 @@ async function renderCertificates() {
   initStatusMultiselect();
   document.querySelector('#applyCertificateFilters').addEventListener('click', () => loadFilteredCertificates(1));
   await loadFilteredCertificates(1, 'Погашенных сертификатов пока нет.');
+}
+
+
+async function renderNewRequests() {
+  setHeader('Новые заявки');
+  setActiveNavigation('new-requests');
+  showLoading();
+  certificatesListState.page = 1;
+
+  app.innerHTML = `
+    <div class="stack">
+      <div class="card pad filters-card">
+        <div class="filters certificate-filters">
+          <div class="filter-date-row">
+            <div class="filter-field">
+              <label for="fromFilter">С даты</label>
+              <input id="fromFilter" type="date" />
+            </div>
+            <div class="filter-field">
+              <label for="toFilter">По дату</label>
+              <input id="toFilter" type="date" />
+            </div>
+          </div>
+          <button id="applyNewRequestsFilters" class="button filter-apply certificate-apply-button" type="button">Применить</button>
+        </div>
+      </div>
+      <section id="certificatesList" class="card table-card certificates-table-card"><div class="loading-card">Загрузка...</div></section>
+      <div id="certificatesPagination"></div>
+    </div>
+  `;
+
+  document.querySelector('#applyNewRequestsFilters')?.addEventListener('click', () => loadNewRequests(1));
+  await loadNewRequests(1);
+}
+
+async function loadNewRequests(page = 1, emptyText = 'Новых заявок пока нет.') {
+  const params = new URLSearchParams();
+  const from = document.querySelector('#fromFilter')?.value || '';
+  const to = document.querySelector('#toFilter')?.value || '';
+
+  certificatesListState.page = page;
+  params.append('status', 'new');
+  params.append('status', 'waiting');
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  params.set('page', String(page));
+  params.set('limit', String(certificatesListState.limit));
+
+  const list = document.querySelector('#certificatesList');
+  const pagination = document.querySelector('#certificatesPagination');
+  if (list) {
+    list.className = 'card table-card certificates-table-card';
+    list.innerHTML = '<div class="loading-card">Загрузка...</div>';
+  }
+  if (pagination) pagination.innerHTML = '';
+
+  try {
+    const data = await api(`/api/certificates/new-requests?${params.toString()}`);
+    renderCertificatesResult(data, emptyText, {
+      title: 'Новые заявки',
+      nextPath: '/new-requests',
+      onSuccess: () => loadNewRequests(certificatesListState.page),
+      onPage: loadNewRequests
+    });
+  } catch (error) {
+    if (list) list.innerHTML = `<div class="error-state">${escapeHtml(error.message)}</div>`;
+  }
 }
 
 async function loadFilteredCertificates(page = 1, emptyText = 'По выбранным фильтрам сертификатов нет.') {
@@ -3714,6 +3789,7 @@ function route() {
   if (root === 'certificates' && id && action === 'schedule') return renderCertificateScheduleScreen(id);
   if (root === 'certificates' && id) return renderCertificateDetail(id);
   if (root === 'certificates') return renderCertificates();
+  if (root === 'new-requests') return renderNewRequests();
   if (root === 'services' && id === 'create') return renderServiceCreateScreen();
   if (root === 'services' && id && action === 'description') return renderServiceDescriptionScreen(id);
   if (root === 'services') return renderServices();
