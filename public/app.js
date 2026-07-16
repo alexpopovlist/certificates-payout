@@ -2912,14 +2912,19 @@ function profileNotificationChannelNoteHtml(channel = {}) {
 
   const channelKey = String(channel.id || channel.title || '').trim().toLowerCase();
 
-  if ((channelKey === 'max' || channelKey === 'tg') && note.includes('бот')) {
+  if (channelKey === 'max' || channelKey === 'tg') {
     const botUrl = channelKey === 'max'
       ? 'https://max.ru/id471610095635_1_bot'
       : 'https://t.me/wowlifepartner_bot';
-    const [before, ...afterParts] = note.split('бот');
-    const after = afterParts.join('бот');
+    const linkText = 'нужно написать в бот';
+    const linkStart = note.indexOf(linkText);
 
-    return `${escapeHtml(before)}${notificationLink(botUrl, 'бот', 'target="_blank"')}${escapeHtml(after)}`;
+    if (linkStart >= 0) {
+      const before = note.slice(0, linkStart);
+      const after = note.slice(linkStart + linkText.length);
+
+      return `${escapeHtml(before)}${notificationLink(botUrl, linkText, 'target="_blank"')}${escapeHtml(after)}`;
+    }
   }
 
   if (channelKey === 'email') {
