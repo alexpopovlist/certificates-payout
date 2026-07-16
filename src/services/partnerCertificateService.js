@@ -900,7 +900,6 @@ function buildSchedulePayload(body = {}) {
     ['date', 'Укажите дату записи.'],
     ['time', 'Укажите время записи.'],
     ['phone', 'Укажите телефон для связи.'],
-    ['address', 'Укажите адрес проведения.'],
     ['stageId', 'Не указан целевой статус записи.']
   ];
 
@@ -913,7 +912,7 @@ function buildSchedulePayload(body = {}) {
     }
   }
 
-  if (payload.addressArray.length === 0) payload.addressArray = [payload.address];
+  if (payload.address && payload.addressArray.length === 0) payload.addressArray = [payload.address];
   return payload;
 }
 

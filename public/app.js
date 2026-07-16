@@ -2657,7 +2657,7 @@ function certificateScheduleFormHtml(item = {}, profile = {}) {
 
       <div class="schedule-field schedule-field-full">
         <label for="scheduleAddress">Адрес проведения</label>
-        <select id="scheduleAddress" name="address" required>${addressOptions}</select>
+        <select id="scheduleAddress" name="address">${addressOptions}</select>
       </div>
 
       <div class="schedule-field schedule-field-full schedule-textarea-field">
