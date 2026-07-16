@@ -1,5 +1,5 @@
 const express = require('express');
-const { fetchPartnerProfile, setPartnerPassword } = require('../services/profileService');
+const { fetchPartnerProfile, setPartnerPassword, createProfileModerationRequest } = require('../services/profileService');
 const { setSessionCookie } = require('../services/authService');
 
 const router = express.Router();
@@ -25,6 +25,23 @@ router.get('/', async (request, response, next) => {
   }
 });
 
+
+
+router.post('/moderation', async (request, response, next) => {
+  try {
+    const body = request.body || {};
+    const result = await createProfileModerationRequest({
+      session: request.auth,
+      name: body.name,
+      info: body.info,
+      file: body.file
+    });
+
+    response.json({ result: true, item: result.item || null });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.post('/password', async (request, response, next) => {
   try {

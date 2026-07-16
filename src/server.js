@@ -14,7 +14,7 @@ const { requireAuth } = require('./middleware/auth');
 const app = express();
 const port = Number(process.env.PORT || 3000);
 
-app.use(express.json());
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '15mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.get('/api/health', (_request, response) => {

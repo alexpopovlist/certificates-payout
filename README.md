@@ -683,3 +683,7 @@ MY_INVITE_CODE=replace-with-my-invite-code
 ```
 
 `MY_INVITE_CODE` используется на экране `/admin/register` как my-invite код. После входа администратор может отправить PUSH всем активным PWA-подпискам или только выбранным профилям партнёров, указав ID через запятую.
+
+## Заявка на модерацию профиля
+
+На экране `/profile` кнопка **«Заявка на модерацию»** открывает desktop-диалог или мобильный экран `/profile/moderation`. При отправке backend вызывает `PROFILE_SET_PARTNER_PROFILE_URL` с payload `partnerData.name`, `partnerData.info` и опциональным файлом в base64 (`partnerData.file.fileName`, `partnerData.file.fileContent`).

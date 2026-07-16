@@ -30,6 +30,12 @@ const profilePasswordState = {
   password: ''
 };
 
+const profileModerationState = {
+  name: '',
+  info: '',
+  file: null
+};
+
 
 const SIGN_IN_PATH = '/authentication/sign-in';
 const ADMIN_SIGN_IN_PATH = '/admin/login';
@@ -88,6 +94,11 @@ function serviceCreateScreenPath(nextPath = '') {
 function serviceScreenBackPath() {
   const params = new URLSearchParams(window.location.search);
   return safeNextPath(params.get('next') || '/services');
+}
+
+function profileModerationBackPath() {
+  const params = new URLSearchParams(window.location.search);
+  return safeNextPath(params.get('next') || '/profile');
 }
 
 function getCurrentAppUrl() {
@@ -3814,6 +3825,255 @@ function openProfilePasswordFlow() {
   openProfilePasswordDialog();
 }
 
+
+function profileModerationAttachIconSvg() {
+  return `
+    <svg class="profile-moderation-attach-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+      <path d="M8.75 17.35 16.9 9.2a3.1 3.1 0 0 0-4.38-4.38L4.38 12.96a5.2 5.2 0 0 0 7.35 7.35l8.14-8.14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="m8.35 13.45 6.72-6.72" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  `;
+}
+
+function profileModerationFormHtml({ noticeId = 'profileModerationNotice', formId = 'profileModerationForm' } = {}) {
+  const fileName = profileModerationState.file?.name || '';
+  return `
+    <form id="${escapeHtml(formId)}" class="schedule-form profile-moderation-form" novalidate>
+      <div class="schedule-field schedule-field-full profile-moderation-field">
+        <label for="profileModerationName">Заголовок</label>
+        <input id="profileModerationName" name="name" autocomplete="off" placeholder="Заголовок" value="${escapeHtml(profileModerationState.name)}" required />
+      </div>
+      <div class="schedule-field schedule-field-full profile-moderation-field">
+        <label for="profileModerationInfo">Описание</label>
+        <textarea id="profileModerationInfo" name="info" rows="5" placeholder="Описание" required>${escapeHtml(profileModerationState.info)}</textarea>
+      </div>
+      <div class="profile-moderation-file-row">
+        <input id="profileModerationFile" class="visually-hidden" name="file" type="file" />
+        <button class="profile-moderation-file-button" type="button" data-profile-moderation-file-button>
+          ${profileModerationAttachIconSvg()}
+          <span>Прикрепить файл</span>
+        </button>
+        <span id="profileModerationFileName" class="profile-moderation-file-name">${fileName ? escapeHtml(fileName) : ''}</span>
+      </div>
+      <div id="${escapeHtml(noticeId)}" class="hidden"></div>
+      <div class="schedule-actions profile-moderation-actions">
+        <button class="button secondary schedule-cancel" type="button" data-close-profile-moderation>Отмена</button>
+        <button class="button schedule-submit profile-moderation-submit" type="submit">Отправить</button>
+      </div>
+    </form>
+  `;
+}
+
+function profileModerationDialogHtml() {
+  return `
+    <div id="profileModerationModal" class="schedule-modal profile-moderation-modal" role="dialog" aria-modal="true" aria-labelledby="profileModerationTitle">
+      <button class="schedule-modal-backdrop" type="button" data-close-profile-moderation aria-label="Закрыть"></button>
+      <section class="schedule-panel profile-moderation-panel">
+        <header class="schedule-header">
+          <h2 id="profileModerationTitle">Создать заявку на модерацию</h2>
+          <button class="icon-button schedule-close" type="button" data-close-profile-moderation aria-label="Закрыть">×</button>
+        </header>
+        ${profileModerationFormHtml()}
+      </section>
+    </div>
+  `;
+}
+
+function resetProfileModerationState() {
+  profileModerationState.name = '';
+  profileModerationState.info = '';
+  profileModerationState.file = null;
+}
+
+function updateProfileModerationStateFromForm(form) {
+  if (!form) return;
+  const formData = new FormData(form);
+  profileModerationState.name = String(formData.get('name') || '').trim();
+  profileModerationState.info = String(formData.get('info') || '').trim();
+}
+
+function closeProfileModerationDialog() {
+  document.querySelector('#profileModerationModal')?.remove();
+}
+
+function closeProfileModerationSuccessDialog() {
+  document.querySelector('#profileModerationSuccessModal')?.remove();
+}
+
+function showProfileModerationSuccessDialog() {
+  closeProfileModerationSuccessDialog();
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="profileModerationSuccessModal" class="schedule-modal profile-moderation-success-modal" role="dialog" aria-modal="true" aria-labelledby="profileModerationSuccessTitle">
+      <button class="schedule-modal-backdrop" type="button" aria-label="Закрыть"></button>
+      <div class="schedule-panel profile-moderation-success-panel">
+        <div class="schedule-header">
+          <h2 id="profileModerationSuccessTitle">Готово</h2>
+          <button class="icon-button schedule-close" type="button" aria-label="Закрыть">×</button>
+        </div>
+        <div class="profile-moderation-success-body">
+          <p>Заявка на модерацию создана!</p>
+          <button id="profileModerationSuccessOk" class="button" type="button">ОК</button>
+        </div>
+      </div>
+    </div>
+  `);
+
+  const modal = document.querySelector('#profileModerationSuccessModal');
+  const close = () => {
+    closeProfileModerationSuccessDialog();
+    if (window.location.pathname === '/profile/moderation') navigate('/profile');
+  };
+  modal?.querySelector('.schedule-modal-backdrop')?.addEventListener('click', close);
+  modal?.querySelector('.schedule-close')?.addEventListener('click', close);
+  modal?.querySelector('#profileModerationSuccessOk')?.addEventListener('click', close);
+}
+
+function fileToBase64Content(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      resolve(null);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      const result = String(reader.result || '');
+      const marker = 'base64,';
+      const markerIndex = result.indexOf(marker);
+      resolve(markerIndex >= 0 ? result.slice(markerIndex + marker.length) : result);
+    });
+    reader.addEventListener('error', () => reject(reader.error || new Error('Не удалось прочитать файл.')));
+    reader.readAsDataURL(file);
+  });
+}
+
+function setupProfileModerationForm(options = {}) {
+  const form = document.querySelector('#profileModerationForm');
+  const fileInput = form?.querySelector('#profileModerationFile');
+  const fileName = form?.querySelector('#profileModerationFileName');
+
+  form?.querySelector('[data-profile-moderation-file-button]')?.addEventListener('click', () => {
+    fileInput?.click();
+  });
+
+  fileInput?.addEventListener('change', () => {
+    const file = fileInput.files?.[0] || null;
+    profileModerationState.file = file;
+    if (fileName) fileName.textContent = file?.name || '';
+  });
+
+  form?.addEventListener('submit', (event) => handleProfileModerationSubmit(event, options));
+}
+
+async function handleProfileModerationSubmit(event, options = {}) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const notice = form.querySelector('#profileModerationNotice, #profileModerationScreenNotice');
+  const submit = form.querySelector('[type="submit"]');
+  const nameInput = form.querySelector('#profileModerationName');
+  const infoInput = form.querySelector('#profileModerationInfo');
+  updateProfileModerationStateFromForm(form);
+
+  if (notice) {
+    notice.className = 'hidden';
+    notice.textContent = '';
+  }
+
+  if (!profileModerationState.name || !profileModerationState.info) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = 'Заполните заголовок и описание заявки.';
+    }
+    (!profileModerationState.name ? nameInput : infoInput)?.focus();
+    return;
+  }
+
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = 'Отправляем...';
+  }
+
+  try {
+    const selectedFile = profileModerationState.file || form.querySelector('#profileModerationFile')?.files?.[0] || null;
+    const fileContent = await fileToBase64Content(selectedFile);
+    const payload = {
+      name: profileModerationState.name,
+      info: profileModerationState.info
+    };
+
+    if (selectedFile && fileContent) {
+      payload.file = {
+        fileName: selectedFile.name,
+        fileContent
+      };
+    }
+
+    await api('/api/profile/moderation', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
+    resetProfileModerationState();
+    form.reset();
+    if (typeof options.onSuccess === 'function') {
+      await options.onSuccess();
+    } else {
+      closeProfileModerationDialog();
+      showProfileModerationSuccessDialog();
+    }
+  } catch (error) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = error.message || 'Не удалось отправить заявку на модерацию.';
+    }
+  } finally {
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = 'Отправить';
+    }
+  }
+}
+
+function openProfileModerationDialog() {
+  if (shouldUseDialogScreen()) {
+    updateProfileModerationStateFromForm(document.querySelector('#profileModerationForm'));
+    navigate(`/profile/moderation?next=${encodeURIComponent('/profile')}`);
+    return;
+  }
+
+  closeProfileModerationDialog();
+  document.body.insertAdjacentHTML('beforeend', profileModerationDialogHtml());
+  document.querySelectorAll('[data-close-profile-moderation]').forEach((button) => {
+    button.addEventListener('click', closeProfileModerationDialog);
+  });
+  setupProfileModerationForm();
+  document.querySelector('#profileModerationName')?.focus();
+}
+
+function renderProfileModerationScreen() {
+  const backTo = profileModerationBackPath();
+  setHeader('Заявка на модерацию', { backTo });
+  setActiveNavigation('profile');
+
+  app.innerHTML = `
+    <section class="card schedule-screen-card profile-moderation-screen-card">
+      <header class="schedule-header schedule-screen-header">
+        <h2>Создать заявку на модерацию</h2>
+      </header>
+      ${profileModerationFormHtml({ noticeId: 'profileModerationScreenNotice' })}
+    </section>
+  `;
+
+  document.querySelectorAll('[data-close-profile-moderation]').forEach((button) => {
+    button.addEventListener('click', () => navigate(backTo));
+  });
+  setupProfileModerationForm({
+    onSuccess: async () => {
+      showProfileModerationSuccessDialog();
+    }
+  });
+}
+
 function renderProfilePasswordScreen() {
   setHeader('Установить пароль', { backTo: '/profile' });
   setActiveNavigation('profile');
@@ -3890,7 +4150,7 @@ async function renderProfile() {
             </div>
           </div>
           <div class="profile-actions">
-            <button class="button secondary" type="button" disabled>Заявка на модерацию</button>
+            <button id="profileModerationButton" class="button secondary" type="button">Заявка на модерацию</button>
             <button id="profileSetPasswordButton" class="button secondary" type="button">Установить пароль</button>
           </div>
         </section>
@@ -3906,6 +4166,7 @@ async function renderProfile() {
       </div>
     `;
 
+    document.querySelector('#profileModerationButton')?.addEventListener('click', openProfileModerationDialog);
     document.querySelector('#profileSetPasswordButton')?.addEventListener('click', openProfilePasswordFlow);
   } catch (error) {
     showError(error);
@@ -4505,6 +4766,7 @@ function route() {
   if (root === 'services' && id && action === 'description') return renderServiceDescriptionScreen(id);
   if (root === 'services') return renderServices();
   if (root === 'reconciliations') return renderReconciliations();
+  if (root === 'profile' && id === 'moderation') return renderProfileModerationScreen();
   if (root === 'profile' && id === 'password') return renderProfilePasswordScreen();
   if (root === 'profile') return renderProfile();
   if (root === 'payments' && id === 'create') return renderCreatePayment();

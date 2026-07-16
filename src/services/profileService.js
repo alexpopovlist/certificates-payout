@@ -4,6 +4,7 @@ const DEFAULT_AUTH_BASE_URL = 'https://partner-wowlife.ru';
 const DEFAULT_PROFILE_PATH = '/restapi/profile.getProfile';
 const DEFAULT_NOTIFICATION_CHANNELS_PATH = '/restapi/profile.getNotificationChannels';
 const DEFAULT_SET_PASSWORD_PATH = '/restapi/auth.setPassword';
+const DEFAULT_SET_PARTNER_PROFILE_PATH = '/restapi/profile.setPartnerProfile';
 
 function normalizeBaseUrl() {
   return String(process.env.AUTH_BASE_URL || DEFAULT_AUTH_BASE_URL).replace(/\/+$/, '');
@@ -37,6 +38,14 @@ function getSetPasswordUrl() {
     process.env.AUTH_SET_PASSWORD_URL || process.env.PROFILE_SET_PASSWORD_URL,
     process.env.AUTH_SET_PASSWORD_PATH || process.env.PROFILE_SET_PASSWORD_PATH,
     DEFAULT_SET_PASSWORD_PATH
+  );
+}
+
+function getSetPartnerProfileUrl() {
+  return resolveUrl(
+    process.env.PROFILE_SET_PARTNER_PROFILE_URL || process.env.PROFILE_MODERATION_URL,
+    process.env.PROFILE_SET_PARTNER_PROFILE_PATH || process.env.PROFILE_MODERATION_PATH,
+    DEFAULT_SET_PARTNER_PROFILE_PATH
   );
 }
 
@@ -672,6 +681,15 @@ function postToSetPasswordService(session, body) {
   );
 }
 
+function postToSetPartnerProfileService(session, body) {
+  return postToProfileEndpoint(
+    session,
+    body,
+    getSetPartnerProfileUrl(),
+    'Не удалось отправить заявку на модерацию через сервис WOWlife.'
+  );
+}
+
 function getProfileRequestCredentials(session) {
   const contactId = getSessionContactId(session);
   const token = getSessionToken(session);
@@ -861,6 +879,77 @@ async function fetchProfileNotificationChannels({ session, contactId: explicitCo
 }
 
 
+
+function normalizeModerationFile(file = {}) {
+  const fileName = String(file.fileName || file.name || '').trim();
+  const fileContent = String(file.fileContent || file.content || '').trim();
+
+  if (!fileName && !fileContent) return null;
+
+  if (!fileName || !fileContent) {
+    const error = new Error('Invalid moderation file');
+    error.statusCode = 400;
+    error.publicMessage = 'Файл для заявки передан не полностью.';
+    throw error;
+  }
+
+  return { fileName, fileContent };
+}
+
+async function createProfileModerationRequest({ session, name, info, file } = {}) {
+  const normalizedName = String(name || '').trim();
+  const normalizedInfo = String(info || '').trim();
+  const normalizedFile = normalizeModerationFile(file);
+
+  if (!normalizedName) {
+    const error = new Error('Moderation request title is required');
+    error.statusCode = 400;
+    error.publicMessage = 'Введите заголовок заявки.';
+    throw error;
+  }
+
+  if (!normalizedInfo) {
+    const error = new Error('Moderation request description is required');
+    error.statusCode = 400;
+    error.publicMessage = 'Введите описание заявки.';
+    throw error;
+  }
+
+  const requestPayload = {
+    partnerData: {
+      name: normalizedName,
+      info: normalizedInfo
+    }
+  };
+
+  if (normalizedFile) {
+    requestPayload.partnerData.file = normalizedFile;
+  }
+
+  const { payload } = await postToSetPartnerProfileService(session, requestPayload);
+  const result = payload?.result ?? payload?.data?.result ?? payload?.response?.result;
+
+  if (result !== true && result !== 'true' && !payload?.result?.ID && !payload?.result?.id) {
+    const error = new Error('WOWlife profile.setPartnerProfile returned unsuccessful result');
+    error.statusCode = 502;
+    error.publicMessage = getServiceErrorMessage(payload) || 'Сервис WOWlife не подтвердил создание заявки на модерацию.';
+    error.upstreamPayload = payload;
+    throw error;
+  }
+
+  return {
+    ok: true,
+    item: payload?.result || null,
+    request: {
+      partnerData: {
+        name: normalizedName,
+        info: normalizedInfo,
+        hasFile: Boolean(normalizedFile)
+      }
+    }
+  };
+}
+
 async function setPartnerPassword({ session, profile, password } = {}) {
   const normalizedPassword = String(password || '').trim();
   if (!normalizedPassword) {
@@ -999,5 +1088,6 @@ module.exports = {
   fetchPartnerProfile,
   fetchProfileNotificationChannels,
   setPartnerPassword,
+  createProfileModerationRequest,
   normalizeProfile
 };

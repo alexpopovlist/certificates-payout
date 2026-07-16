@@ -4008,3 +4008,158 @@ body.is-admin-auth .mobile-logo {
     justify-self: stretch;
   }
 }
+
+/* Profile moderation request: dialog/screen adapted from redeem info modal. */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.profile-moderation-panel {
+  width: min(100%, 620px);
+}
+
+.profile-moderation-form {
+  gap: 22px;
+}
+
+.profile-moderation-form .schedule-field label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.profile-moderation-field input,
+.profile-moderation-field textarea,
+body:not(.is-login) .profile-moderation-field input,
+body:not(.is-login) .profile-moderation-field textarea {
+  border-color: #d1d5db;
+  border-radius: 12px;
+  color: #0f172a;
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.profile-moderation-field input::placeholder,
+.profile-moderation-field textarea::placeholder {
+  color: #7c859f;
+}
+
+.profile-moderation-field textarea {
+  min-height: 132px;
+}
+
+.profile-moderation-file-row {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding: 10px 0 4px;
+}
+
+.profile-moderation-file-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: #1d6ff2;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.profile-moderation-file-button:hover,
+.profile-moderation-file-button:focus-visible {
+  color: #0f58d6;
+  outline: none;
+}
+
+.profile-moderation-file-button:focus-visible {
+  box-shadow: 0 0 0 3px rgba(29, 111, 242, 0.16);
+  border-radius: 12px;
+}
+
+.profile-moderation-attach-icon {
+  flex: 0 0 auto;
+}
+
+.profile-moderation-file-name {
+  min-height: 18px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.profile-moderation-actions {
+  padding-top: 4px;
+}
+
+.profile-moderation-submit {
+  min-width: 180px;
+}
+
+.profile-moderation-screen-card {
+  overflow: hidden;
+}
+
+.profile-moderation-success-panel {
+  width: min(100%, 420px);
+}
+
+.profile-moderation-success-body {
+  display: grid;
+  gap: 20px;
+  padding: 24px;
+}
+
+.profile-moderation-success-body p {
+  margin: 0;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.profile-moderation-success-body .button {
+  justify-self: end;
+  min-width: 112px;
+}
+
+@media (max-width: 680px) {
+  .profile-moderation-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .profile-moderation-actions .button,
+  .profile-moderation-success-body .button {
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .profile-moderation-file-row {
+    justify-items: stretch;
+  }
+
+  .profile-moderation-file-button {
+    width: 100%;
+  }
+}
