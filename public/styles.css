@@ -947,12 +947,15 @@ input[type="checkbox"] {
   }
 
   .mobile-side-nav a {
-    color: #22304f;
+    color: #0f172a;
     text-decoration: none;
     padding: 13px 14px;
     border-radius: 14px;
+    font: inherit;
     font-size: 15px;
-    font-weight: 800;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0;
     transition: 0.18s ease;
   }
 
