@@ -78,11 +78,83 @@ function formatServiceTime(value) {
   return null;
 }
 
+const CERTIFICATE_STAGE_ID_STATUS_MAP = {
+  'UC_RPZ7AA': 'verification',
+  'C2:UC_RPZ7AA': 'verification',
+  'C2:8': 'notrepaid',
+  'UC_ZRY3C1': 'visited',
+  'C2:UC_ZRY3C1': 'visited',
+  'UC_M7SHZP': 'confirmed',
+  'C2:UC_M7SHZP': 'confirmed'
+};
+
+const CERTIFICATE_STAGE_GROUP_STATUS_MAP = {
+  verification: 'verification',
+  notrepaid: 'notrepaid',
+  visited: 'visited',
+  confirmed: 'confirmed',
+  paid: 'paid',
+  waiting: 'waiting',
+  new: 'new',
+  canceled: 'canceled'
+};
+
+function getStageField(stage, snakeName, camelName) {
+  if (!stage || typeof stage !== 'object') return null;
+  return stage[snakeName] ?? stage[camelName] ?? null;
+}
+
+function normalizeStageText(value) {
+  return String(value || '').trim().toLowerCase().replace(/ё/g, 'е');
+}
+
+function getCertificateStageTitle(stage) {
+  if (!stage) return null;
+  if (typeof stage === 'object') {
+    return getStageField(stage, 'group_title', 'groupTitle') || getStageField(stage, 'title', 'title');
+  }
+  return stage;
+}
+
+function getCertificateStageId(stage) {
+  if (!stage) return '';
+  if (typeof stage === 'object') {
+    return String(getStageField(stage, 'id', 'id') || '').trim();
+  }
+  return String(stage).trim();
+}
+
+function normalizeCertificateStageTitle(title) {
+  const value = String(title || '').trim();
+  if (!value) return null;
+
+  const normalized = normalizeStageText(value);
+  if (normalized === 'ожидает сверки' || normalized === 'ожидание сверки') return 'Ожидает оплаты';
+  if (['подтвержден', 'подтержден', 'подтверждено', 'подтерждено'].includes(normalized)) return 'Записан';
+  if (['погашен', 'погашено'].includes(normalized)) return 'Посетил';
+  if (['не погашен', 'не погашено', 'непогашен', 'непогашено'].includes(normalized)) return 'Не погашен';
+
+  return value;
+}
+
 function mapCertificateStageToStatus(stage) {
-  const normalizedStage = String(stage || '').toUpperCase();
-  if (normalizedStage.includes('WON') || normalizedStage.includes('SUCCESS') || normalizedStage.includes('PAID')) return 'PAID';
-  if (normalizedStage.includes('WAIT') || normalizedStage.includes('VERIFICATION') || normalizedStage.includes('CONFIRM')) return 'PAYMENT_PROCESSING';
-  return 'REDEEMED';
+  const groupId = normalizeStageText(getStageField(stage, 'group_id', 'groupId'));
+  if (CERTIFICATE_STAGE_GROUP_STATUS_MAP[groupId]) return CERTIFICATE_STAGE_GROUP_STATUS_MAP[groupId];
+
+  const stageId = getCertificateStageId(stage);
+  if (CERTIFICATE_STAGE_ID_STATUS_MAP[stageId]) return CERTIFICATE_STAGE_ID_STATUS_MAP[stageId];
+
+  const normalizedStage = normalizeStageText([stageId, getCertificateStageTitle(stage)].filter(Boolean).join(' '));
+
+  if (normalizedStage.includes('ожидает сверки') || normalizedStage.includes('ожидание сверки') || normalizedStage.includes('verification')) return 'verification';
+  if (normalizedStage.includes('не погашен') || normalizedStage.includes('непогашен') || normalizedStage.includes('notrepaid')) return 'notrepaid';
+  if (normalizedStage.includes('подтвержден') || normalizedStage.includes('подтержден') || normalizedStage.includes('confirmed')) return 'confirmed';
+  if (normalizedStage.includes('погашен') || normalizedStage.includes('visited')) return 'visited';
+
+  if (normalizedStage.includes('won') || normalizedStage.includes('success') || normalizedStage.includes('paid')) return 'paid';
+  if (normalizedStage.includes('wait')) return 'verification';
+
+  return 'visited';
 }
 
 function mapVerificationCertificate(raw = {}, parent = {}) {
@@ -98,7 +170,9 @@ function mapVerificationCertificate(raw = {}, parent = {}) {
     serviceDurationMinutes: null,
     imageUrl: null,
     status: mapCertificateStageToStatus(raw.STAGE || raw.stage),
-    stageId: raw.STAGE || raw.stage || null,
+    statusLabel: normalizeCertificateStageTitle(getCertificateStageTitle(raw.STAGE || raw.stage)),
+    stageGroupId: getStageField(raw.STAGE || raw.stage, 'group_id', 'groupId'),
+    stageId: getCertificateStageId(raw.STAGE || raw.stage) || null,
     serviceDate: null,
     serviceTime: null,
     customerFullName: raw.NAME || raw.name || '—',
