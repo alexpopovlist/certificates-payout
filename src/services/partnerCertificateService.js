@@ -18,9 +18,10 @@ const DEFAULT_GROUP_IDS = [
   'confirmed',
   'visited',
   'verification',
-  'notrepaid',
   'paid',
-  'canceled'
+  'canceled',
+  'notcome',
+  'notrepaid'
 ];
 
 const ALLOWED_STAGE_GROUP_IDS = new Set(DEFAULT_GROUP_IDS);
@@ -296,6 +297,11 @@ function buildGroupIds(statusQuery) {
   return selectedGroupIds.length > 0 ? selectedGroupIds : parseDefaultGroupIds();
 }
 
+function normalizeServiceDate(value) {
+  const normalized = String(value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : '';
+}
+
 function buildServiceFilters(query = {}, extraFilters = {}) {
   const filters = { ...extraFilters };
 
@@ -304,17 +310,11 @@ function buildServiceFilters(query = {}, extraFilters = {}) {
     filters.stage_id = { EQUAL: selectedGroupIds[0] };
   }
 
+  const from = normalizeServiceDate(query.from);
+  const to = normalizeServiceDate(query.to);
 
-  if (query.from) {
-    filters.from = query.from;
-    filters.dateFrom = query.from;
-    filters.activationDateFrom = query.from;
-  }
-
-  if (query.to) {
-    filters.to = query.to;
-    filters.dateTo = query.to;
-    filters.activationDateTo = query.to;
+  if (from && to && !filters.schedule_time) {
+    filters.schedule_time = { BETWEEN: [from, to] };
   }
 
   return filters;
