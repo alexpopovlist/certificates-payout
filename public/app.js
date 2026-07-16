@@ -202,9 +202,10 @@ const certificateStatus = {
   PAID: { label: 'Оплачен', className: 'paid' },
   new: { label: 'Новая заявка', className: '' },
   waiting: { label: 'Согласование', className: 'processing' },
-  confirmed: { label: 'Посетил', className: 'processing' },
-  visited: { label: 'Посетил', className: 'redeemed' },
-  verification: { label: 'Ожидание оплаты', className: 'processing' },
+  confirmed: { label: 'Записан', className: 'scheduled' },
+  visited: { label: 'Посетил', className: 'visited' },
+  verification: { label: 'Ожидает оплаты', className: 'awaiting-payment' },
+  notrepaid: { label: 'Не погашен', className: 'not-redeemed' },
   paid: { label: 'Оплачен', className: 'paid' },
   canceled: { label: 'Отменен', className: '' }
 };
@@ -1094,7 +1095,13 @@ function normalizeStatusLabel(label) {
   }
   const normalizedForCompare = normalized.replace(/ё/g, 'е');
   if (['подтвержден', 'подтержден', 'подтверждено', 'подтерждено'].includes(normalizedForCompare)) {
+    return 'Записан';
+  }
+  if (['погашен', 'погашено'].includes(normalizedForCompare)) {
     return 'Посетил';
+  }
+  if (['не погашен', 'не погашено', 'непогашен', 'непогашено'].includes(normalizedForCompare)) {
+    return 'Не погашен';
   }
   return value;
 }
@@ -2377,9 +2384,14 @@ async function renderCertificates() {
                   <span>Посетил / Погашен</span>
                 </label>
                 <label class="multiselect-option" role="option" aria-selected="false">
-                  <input type="checkbox" value="verification" data-label="Ожидание оплаты" />
+                  <input type="checkbox" value="notrepaid" data-label="Не погашен" />
                   <span class="multiselect-check" aria-hidden="true">✓</span>
-                  <span>Ожидание оплаты</span>
+                  <span>Не погашен</span>
+                </label>
+                <label class="multiselect-option" role="option" aria-selected="false">
+                  <input type="checkbox" value="verification" data-label="Ожидает оплаты" />
+                  <span class="multiselect-check" aria-hidden="true">✓</span>
+                  <span>Ожидает оплаты</span>
                 </label>
                 <label class="multiselect-option" role="option" aria-selected="false">
                   <input type="checkbox" value="paid" data-label="Оплачен" />

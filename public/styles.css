@@ -514,6 +514,22 @@ body.no-scroll {
   color: var(--accent-dark);
 }
 
+.status.scheduled {
+  color: var(--accent-blue);
+}
+
+.status.awaiting-payment {
+  color: #db2777;
+}
+
+.status.visited {
+  color: #6b7280;
+}
+
+.status.not-redeemed {
+  color: var(--danger);
+}
+
 .status.paid {
   color: var(--success);
 }

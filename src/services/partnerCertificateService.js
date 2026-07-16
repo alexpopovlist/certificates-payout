@@ -18,6 +18,7 @@ const DEFAULT_GROUP_IDS = [
   'confirmed',
   'visited',
   'verification',
+  'notrepaid',
   'paid',
   'canceled'
 ];
@@ -369,7 +370,13 @@ function normalizeStageTitle(title) {
   }
   const normalizedForCompare = normalized.replace(/ё/g, 'е');
   if (['подтвержден', 'подтержден', 'подтверждено', 'подтерждено'].includes(normalizedForCompare)) {
+    return 'Записан';
+  }
+  if (['погашен', 'погашено'].includes(normalizedForCompare)) {
     return 'Посетил';
+  }
+  if (['не погашен', 'не погашено', 'непогашен', 'непогашено'].includes(normalizedForCompare)) {
+    return 'Не погашен';
   }
   return value;
 }
