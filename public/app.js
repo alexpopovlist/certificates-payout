@@ -2902,19 +2902,39 @@ function profileRequisitesHtml(requisites = {}) {
   )).join('') || profileEmpty('Реквизиты не указаны');
 }
 
+function notificationLink(url, label, extraAttrs = '') {
+  return `<a href="${escapeHtml(url)}" ${extraAttrs} rel="noopener noreferrer">${escapeHtml(label)}</a>`;
+}
+
 function profileNotificationChannelNoteHtml(channel = {}) {
   const note = String(channel.note || '');
   if (!note) return '';
 
   const channelKey = String(channel.id || channel.title || '').trim().toLowerCase();
-  if (channelKey !== 'tg' || !note.includes('WOWlife Bot')) {
-    return escapeHtml(note);
+
+  if ((channelKey === 'max' || channelKey === 'tg') && note.includes('бот')) {
+    const botUrl = channelKey === 'max'
+      ? 'https://max.ru/id471610095635_1_bot'
+      : 'https://t.me/wowlifepartner_bot';
+    const [before, ...afterParts] = note.split('бот');
+    const after = afterParts.join('бот');
+
+    return `${escapeHtml(before)}${notificationLink(botUrl, 'бот', 'target="_blank"')}${escapeHtml(after)}`;
   }
 
-  const [before, ...afterParts] = note.split('WOWlife Bot');
-  const after = afterParts.join('WOWlife Bot');
+  if (channelKey === 'email') {
+    return escapeHtml(note)
+      .replace(
+        '@wowlifepartners',
+        notificationLink('https://t.me/wowlifepartners', '@wowlifepartners', 'target="_blank"')
+      )
+      .replace(
+        'oplata@wowlife.club',
+        notificationLink('mailto:oplata@wowlife.club', 'oplata@wowlife.club')
+      );
+  }
 
-  return `${escapeHtml(before)}<a href="https://t.me/wowlifepartner_bot" target="_blank" rel="noopener noreferrer">WOWlife Bot</a>${escapeHtml(after)}`;
+  return escapeHtml(note);
 }
 
 function profileNotificationChannelsHtml(channels = []) {

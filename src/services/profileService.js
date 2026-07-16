@@ -473,21 +473,29 @@ function normalizeProfileAddresses(profile) {
 }
 
 function getDefaultNotificationChannels() {
+  const messengerNote = 'Чтобы оповещения заработали, нужно написать в бот название вашей компании, менеджер подключит вас';
+
   return [
     {
       id: 'max',
-      title: 'Max',
+      title: 'MAX',
       enabled: false,
-      note: 'Чтобы оповещения заработали нужно подписаться WOWlife Max Bot'
+      note: messengerNote
     },
     {
       id: 'tg',
       title: 'TG',
       enabled: false,
-      note: 'Чтобы оповещения заработали нужно подписаться WOWlife Bot'
+      note: messengerNote
     },
+    { id: 'wa', title: 'WA', enabled: false, note: '' },
     { id: 'sms', title: 'SMS', enabled: false, note: '' },
-    { id: 'email', title: 'email', enabled: false, note: '' }
+    {
+      id: 'email',
+      title: 'email',
+      enabled: false,
+      note: 'Пришлите адрес почты для получения оповещений нашему менеджеру в тг @wowlifepartners или на почту oplata@wowlife.club'
+    }
   ];
 }
 
@@ -497,6 +505,7 @@ function normalizeNotificationChannelKey(value) {
   if (['telegram', 'телеграм', 'тг'].includes(normalized)) return 'tg';
   if (['mail', 'e-mail', 'email', 'почта'].includes(normalized)) return 'email';
   if (normalized === 'max' || normalized === 'макс') return 'max';
+  if (['whatsapp', 'wa', 'ватсап', 'вацап', 'вотсап'].includes(normalized)) return 'wa';
   if (normalized === 'sms' || normalized === 'смс') return 'sms';
   return normalized.replace(/[^a-zа-я0-9]/gi, '');
 }

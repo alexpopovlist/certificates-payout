@@ -2750,6 +2750,18 @@ body:not(.is-login) .multiselect-option[aria-selected="true"] .multiselect-check
   line-height: 1.35;
 }
 
+
+.profile-channel-body small a {
+  color: #4c1d95;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.profile-channel-body small a:hover,
+.profile-channel-body small a:focus-visible {
+  text-decoration: underline;
+}
+
 @media (max-width: 920px) {
   body:not(.is-login) .bottom-nav {
     grid-template-columns: repeat(6, 1fr);
