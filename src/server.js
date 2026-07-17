@@ -10,6 +10,7 @@ const profileRoutes = require('./routes/profile');
 const servicesRoutes = require('./routes/services');
 const adminRoutes = require('./routes/admin');
 const { requireAuth } = require('./middleware/auth');
+const { clearSessionCookie } = require('./services/authService');
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -39,8 +40,15 @@ app.get('*', (_request, response) => {
 
 app.use((error, _request, response, _next) => {
   console.error(error);
+
+  if (error.reauthRequired) {
+    clearSessionCookie(response);
+  }
+
   response.status(error.statusCode || 500).json({
-    error: error.publicMessage || 'Internal server error'
+    error: error.publicMessage || 'Internal server error',
+    code: error.code || undefined,
+    reauthRequired: error.reauthRequired || undefined
   });
 });
 

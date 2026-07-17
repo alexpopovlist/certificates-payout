@@ -49,6 +49,8 @@ const ADMIN_PUSH_CAMPAIGNS_PATH = '/admin/push/campaigns';
 const ADMIN_PUSH_DEVICES_PATH = '/admin/push/devices';
 const ADMIN_PUSH_LOGS_PATH = '/admin/push/logs';
 const DEFAULT_APP_PATH = '/redeem';
+const PROFILE_EMPTY_REAUTH_MESSAGE = 'Сервис WOWlife profile.getProfile вернул пустой профиль. Проверьте, что текущая сессия содержит актуальные contactId/token, и войдите заново.';
+const PROFILE_REAUTH_NOTICE = 'Авторизация устарела. Войдите заново, чтобы обновить данные профиля.';
 const APP_ROUTES = new Set(['redeem', 'services', 'certificates', 'new-requests', 'reconciliations', 'payments', 'profile']);
 
 const MOBILE_DIALOG_QUERY = '(max-width: 680px)';
@@ -211,6 +213,36 @@ function normalizeLegacyHashRoute() {
   const next = `/${legacy}`;
   window.history.replaceState({}, '', next);
   return true;
+}
+
+function createHandledAuthRedirectError(message = PROFILE_REAUTH_NOTICE) {
+  const error = new Error(message);
+  error.handledAuthRedirect = true;
+  return error;
+}
+
+function isHandledAuthRedirectError(error) {
+  return Boolean(error?.handledAuthRedirect);
+}
+
+function isProfileReauthPayload(payload = {}) {
+  const message = String(payload?.error || payload?.message || '').trim();
+  return Boolean(payload?.reauthRequired)
+    || payload?.code === 'PROFILE_REAUTH_REQUIRED'
+    || message === PROFILE_EMPTY_REAUTH_MESSAGE;
+}
+
+function redirectToSignInForProfileReauth(message = PROFILE_REAUTH_NOTICE) {
+  currentUser = null;
+  try {
+    if (typeof scheduleProfileCache !== 'undefined') {
+      scheduleProfileCache.item = null;
+      scheduleProfileCache.promise = null;
+    }
+  } catch (_error) {
+    // Cache may not be initialized yet during early bootstrap.
+  }
+  renderSignIn(message || PROFILE_REAUTH_NOTICE);
 }
 
 function ensureSignInPath() {
@@ -390,6 +422,7 @@ function showLoading() {
 }
 
 function showError(error) {
+  if (isHandledAuthRedirectError(error)) return;
   app.innerHTML = `<div class="error-state">${escapeHtml(error.message || 'Ошибка загрузки данных')}</div>`;
 }
 
@@ -409,6 +442,7 @@ async function api(path, options = {}) {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    const errorMessage = payload.error || 'Ошибка запроса';
     const shouldHandleAdminAuthError = response.status === 401
       && path.startsWith('/api/admin')
       && !skipAuthRedirect
@@ -417,12 +451,21 @@ async function api(path, options = {}) {
     if (shouldHandleAdminAuthError) {
       currentAdmin = null;
       renderAdminSignIn('Сессия администратора истекла. Войдите снова.');
-    } else if (response.status === 401 && !path.startsWith('/api/auth') && !skipAuthRedirect) {
-      currentUser = null;
-      renderSignIn('Сессия истекла. Войдите снова.');
+      throw createHandledAuthRedirectError(errorMessage);
     }
 
-    throw new Error(payload.error || 'Ошибка запроса');
+    if (!skipAuthRedirect && isProfileReauthPayload(payload)) {
+      redirectToSignInForProfileReauth(PROFILE_REAUTH_NOTICE);
+      throw createHandledAuthRedirectError(errorMessage);
+    }
+
+    if (response.status === 401 && !path.startsWith('/api/auth') && !skipAuthRedirect) {
+      currentUser = null;
+      renderSignIn('Сессия истекла. Войдите снова.');
+      throw createHandledAuthRedirectError(errorMessage);
+    }
+
+    throw new Error(errorMessage);
   }
 
   return payload;

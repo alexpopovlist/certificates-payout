@@ -855,7 +855,9 @@ function hasProfileDisplayData(profile) {
 function createEmptyProfileError(payload) {
   console.warn('WOWlife profile payload does not contain partner profile fields', sanitizeProfilePayload(payload));
   const error = new Error('WOWlife profile response is empty');
-  error.statusCode = 502;
+  error.statusCode = 401;
+  error.code = 'PROFILE_REAUTH_REQUIRED';
+  error.reauthRequired = true;
   error.publicMessage = 'Сервис WOWlife profile.getProfile вернул пустой профиль. Проверьте, что текущая сессия содержит актуальные contactId/token, и войдите заново.';
   error.upstreamPayload = sanitizeProfilePayload(payload);
   return error;
