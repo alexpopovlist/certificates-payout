@@ -4243,7 +4243,7 @@ function renderProfileModerationScreen() {
   setActiveNavigation('profile');
 
   app.innerHTML = `
-    <section class="card schedule-screen-card profile-moderation-screen-card">
+    <section class="card schedule-screen-card service-dialog-screen-card profile-moderation-screen-card">
       <header class="schedule-header schedule-screen-header">
         <h2>Создать заявку на модерацию</h2>
       </header>

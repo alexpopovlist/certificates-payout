@@ -211,6 +211,12 @@ body.no-scroll {
   margin-left: auto;
 }
 
+.logout-button img {
+  display: block;
+  width: 24px;
+  height: 24px;
+}
+
 .hidden {
   display: none !important;
 }
@@ -4161,6 +4167,69 @@ body:not(.is-login) .profile-moderation-field textarea {
 
   .profile-moderation-file-button {
     width: 100%;
+  }
+}
+
+
+/* Profile moderation mobile screen: align typography with /services/create screen. */
+@media (max-width: 680px) {
+  .profile-moderation-screen-card .profile-moderation-form,
+  body:not(.is-login) .profile-moderation-screen-card .profile-moderation-form {
+    gap: 16px;
+  }
+
+  .profile-moderation-screen-card .profile-moderation-form .schedule-field label {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .profile-moderation-screen-card .profile-moderation-field input,
+  .profile-moderation-screen-card .profile-moderation-field textarea,
+  body:not(.is-login) .profile-moderation-screen-card .profile-moderation-field input,
+  body:not(.is-login) .profile-moderation-screen-card .profile-moderation-field textarea {
+    border-color: #e2e8f0;
+    border-radius: 14px;
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+
+  .profile-moderation-screen-card .profile-moderation-field input,
+  body:not(.is-login) .profile-moderation-screen-card .profile-moderation-field input {
+    height: 48px;
+    padding: 0 14px;
+  }
+
+  .profile-moderation-screen-card .profile-moderation-field textarea,
+  body:not(.is-login) .profile-moderation-screen-card .profile-moderation-field textarea {
+    min-height: 142px;
+    padding: 14px;
+  }
+
+  .profile-moderation-screen-card .profile-moderation-file-button {
+    min-height: 48px;
+    color: #2563eb;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.3;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .profile-moderation-screen-card .profile-moderation-file-name {
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.35;
   }
 }
 
