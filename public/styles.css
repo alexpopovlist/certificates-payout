@@ -4919,3 +4919,469 @@ body.is-admin .admin-push-screen.admin-subscription-logs-screen .admin-push-list
   min-width: 0;
   position: static;
 }
+
+/* Admin PUSH redesign: use the main app shell on desktop and mobile cards for data-heavy screens. */
+body.is-admin .layout {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  background: #f6f7fb;
+}
+
+body.is-admin .sidebar {
+  display: block !important;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  background: #ffffff;
+  border-right: 1px solid #e2e8f0;
+  padding: 0;
+  backdrop-filter: none;
+}
+
+body.is-admin .admin-brand {
+  min-height: 56px;
+  height: 56px;
+  margin: 0;
+  padding: 2mm 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+body.is-admin .admin-brand img {
+  width: 160px;
+  height: auto;
+  max-height: calc(56px - 4mm);
+  object-fit: contain;
+}
+
+body.is-admin .admin-desktop-nav {
+  padding: 16px 12px;
+  gap: 4px;
+}
+
+body.is-admin .admin-desktop-nav a {
+  border-radius: 8px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 9px 12px;
+}
+
+body.is-admin .admin-desktop-nav a:hover,
+body.is-admin .admin-desktop-nav a:focus-visible {
+  background: #f1f5f9;
+  color: #0f172a;
+  outline: none;
+}
+
+body.is-admin .admin-desktop-nav a.active {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+body.is-admin .workspace {
+  grid-column: auto;
+  min-width: 0;
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+body.is-admin .topbar {
+  display: flex;
+  grid-template-columns: none;
+  height: 56px;
+  padding: 0 24px;
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: none;
+  backdrop-filter: blur(12px);
+}
+
+body.is-admin .topbar h1 {
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+body.is-admin .mobile-logo {
+  display: none;
+}
+
+body.is-admin .mobile-menu-button,
+body.is-admin .mobile-menu-overlay {
+  display: none !important;
+}
+
+body.is-admin .bottom-nav {
+  display: none !important;
+}
+
+body.is-admin .content {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 24px;
+}
+
+body.is-admin .admin-shell,
+body.is-admin .admin-shell-content,
+body.is-admin #app,
+body.is-admin .admin-push-screen,
+body.is-admin .admin-campaigns-screen {
+  display: block;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  margin: 0;
+}
+
+body.is-admin .admin-push-screen,
+body.is-admin .admin-campaigns-screen,
+body.is-admin .admin-new-broadcast-screen,
+body.is-admin .admin-devices-screen,
+body.is-admin .admin-subscription-logs-screen {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 24px;
+  align-items: start;
+}
+
+body.is-admin .admin-push-hero,
+body.is-admin .admin-stat-grid,
+body.is-admin .admin-broadcast-card,
+body.is-admin .admin-push-list-card,
+body.is-admin .admin-campaign-filters-card {
+  grid-column: 1 / -1 !important;
+  grid-row: auto !important;
+  width: 100%;
+  min-width: 0;
+  position: static !important;
+}
+
+body.is-admin .admin-push-hero,
+body.is-admin .admin-broadcast-card,
+body.is-admin .admin-push-list-card,
+body.is-admin .admin-campaign-filters-card,
+body.is-admin .admin-stat-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+body.is-admin .admin-push-hero {
+  min-height: 86px;
+  padding: 20px;
+  align-items: center;
+}
+
+body.is-admin .admin-push-hero h2 {
+  margin: 4px 0 6px;
+  color: #0f172a;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+body.is-admin .admin-push-hero p:not(.eyebrow) {
+  max-width: 780px;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+body.is-admin .admin-push-hero .eyebrow {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+body.is-admin .admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+body.is-admin .admin-stat-card {
+  padding: 18px;
+}
+
+body.is-admin .admin-stat-card span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+body.is-admin .admin-stat-card strong {
+  color: #0f172a;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+body.is-admin .admin-broadcast-card.card.pad,
+body.is-admin .admin-campaign-filters-card.card.pad {
+  padding: 0;
+}
+
+body.is-admin .admin-push-form,
+body.is-admin .admin-campaign-filters {
+  padding: 20px;
+}
+
+body.is-admin .admin-new-broadcast-screen .admin-push-form {
+  max-width: none;
+}
+
+body.is-admin .admin-campaign-filters {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr)) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+body.is-admin .admin-campaign-filter-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(112px, auto));
+  gap: 10px;
+}
+
+body.is-admin .admin-push-table table,
+body.is-admin .admin-campaigns-table table {
+  width: 100%;
+  min-width: 980px;
+  font-size: 14px;
+}
+
+body.is-admin .admin-campaigns-table table {
+  min-width: 1120px;
+}
+
+body.is-admin .admin-mobile-cards {
+  display: none;
+}
+
+body.is-admin .admin-mobile-card-meta,
+body.is-admin .admin-mobile-card-subtitle {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+body.is-admin .admin-mobile-card-badge {
+  flex: 0 0 auto;
+}
+
+body.is-admin .admin-mobile-card-badge .status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #f8fafc;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+@media (max-width: 920px) {
+  body.is-admin .layout {
+    display: block;
+  }
+
+  body.is-admin .sidebar {
+    display: none !important;
+  }
+
+  body.is-admin .workspace {
+    min-height: 100vh;
+    padding-bottom: 0;
+  }
+
+  body.is-admin .topbar {
+    height: 64px;
+    padding: 0 18px;
+    gap: 10px;
+    background: #ffffff;
+  }
+
+  body.is-admin .mobile-menu-button {
+    display: grid !important;
+  }
+
+  body.is-admin .mobile-menu-overlay {
+    display: block !important;
+  }
+
+  body.is-admin .mobile-logo {
+    display: block;
+  }
+
+  body.is-admin .topbar h1 {
+    min-width: 0;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  body.is-admin .logout-button {
+    width: 36px;
+    height: 36px;
+  }
+
+  body.is-admin .content {
+    padding: 20px 18px 30px;
+  }
+
+  body.is-admin .admin-push-screen,
+  body.is-admin .admin-campaigns-screen,
+  body.is-admin .admin-new-broadcast-screen,
+  body.is-admin .admin-devices-screen,
+  body.is-admin .admin-subscription-logs-screen {
+    gap: 16px;
+  }
+
+  body.is-admin .admin-push-hero {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 20px;
+    border-radius: 24px;
+  }
+
+  body.is-admin .admin-push-hero h2 {
+    font-size: 22px;
+  }
+
+  body.is-admin .admin-hero-actions,
+  body.is-admin .admin-hero-actions .button {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  body.is-admin .admin-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  body.is-admin .admin-stat-card {
+    border-radius: 18px;
+    padding: 16px;
+  }
+
+  body.is-admin .admin-stat-card strong {
+    font-size: 26px;
+  }
+
+  body.is-admin .admin-broadcast-card,
+  body.is-admin .admin-campaign-filters-card {
+    border-radius: 24px;
+    overflow: hidden;
+  }
+
+  body.is-admin .admin-broadcast-card .table-header,
+  body.is-admin .admin-campaign-filters-card .table-header {
+    grid-template-columns: 1fr;
+    padding: 20px;
+  }
+
+  body.is-admin .admin-push-form,
+  body.is-admin .admin-campaign-filters {
+    padding: 20px;
+  }
+
+  body.is-admin .admin-push-form .form-grid.two,
+  body.is-admin .admin-campaign-filters {
+    grid-template-columns: 1fr;
+  }
+
+  body.is-admin .admin-campaign-filter-actions {
+    grid-template-columns: 1fr;
+  }
+
+  body.is-admin .admin-push-form > .button,
+  body.is-admin .admin-campaign-filter-actions .button,
+  body.is-admin .admin-hero-actions .button {
+    width: 100%;
+    min-height: 48px;
+    height: 48px;
+    border-radius: 14px;
+  }
+
+  body.is-admin .admin-push-list-card {
+    display: grid;
+    gap: 16px;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  body.is-admin .admin-push-list-card > .table-header {
+    grid-template-columns: 1fr;
+    padding: 20px;
+    border: 1px solid #e2e8f0;
+    border-radius: 24px;
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  body.is-admin .admin-push-list-card > .table-wrapper {
+    display: none !important;
+  }
+
+  body.is-admin .admin-push-list-card > .admin-mobile-cards {
+    display: grid !important;
+    gap: 16px;
+    padding: 0;
+  }
+
+  body.is-admin .admin-mobile-card {
+    border-radius: 24px;
+    padding: 20px;
+  }
+
+  body.is-admin .admin-mobile-card-topline {
+    align-items: flex-start;
+  }
+
+  body.is-admin .admin-mobile-card-title {
+    min-width: 0;
+    font-size: 22px;
+    overflow-wrap: anywhere;
+  }
+
+  body.is-admin .admin-mobile-card .mobile-table-meta {
+    gap: 10px;
+  }
+
+  body.is-admin .admin-mobile-card .mobile-table-row {
+    align-items: flex-start;
+  }
+
+  body.is-admin .admin-mobile-card .mobile-table-row strong {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 560px) {
+  body.is-admin .admin-stat-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 380px) {
+  body.is-admin .admin-stat-grid {
+    grid-template-columns: 1fr;
+  }
+}

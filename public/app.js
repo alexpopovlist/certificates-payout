@@ -6,6 +6,10 @@ const logoutButton = document.querySelector('.logout-button');
 const mobileMenuButton = document.querySelector('#mobileMenuButton');
 const mobileMenuCloseButton = document.querySelector('#mobileMenuCloseButton');
 const mobileMenuOverlay = document.querySelector('#mobileMenuOverlay');
+const desktopSidebar = document.querySelector('.sidebar');
+const mobileSideMenu = document.querySelector('#mobileSideMenu');
+const defaultDesktopSidebarHtml = desktopSidebar?.innerHTML || '';
+const defaultMobileSideMenuHtml = mobileSideMenu?.innerHTML || '';
 
 let currentUser = null;
 let currentAdmin = null;
@@ -1106,34 +1110,64 @@ function adminStatCard(label, value) {
   `;
 }
 
-function adminNavigationHtml(activePath = ADMIN_PUSH_PATH) {
-  const items = [
+function adminNavigationItems() {
+  return [
     { href: ADMIN_PUSH_PATH, label: 'Новая рассылка' },
     { href: ADMIN_PUSH_CAMPAIGNS_PATH, label: 'Таблица рассылок' },
     { href: ADMIN_PUSH_DEVICES_PATH, label: 'Подписанные устройства' },
     { href: ADMIN_PUSH_LOGS_PATH, label: 'Лог подписок' }
   ];
+}
 
+function adminNavigationLinksHtml(activePath = ADMIN_PUSH_PATH, attributeName = 'data-admin-route') {
+  return adminNavigationItems().map((item) => `
+    <a class="${item.href === activePath ? 'active' : ''}" href="${item.href}" ${attributeName}="${item.href}">
+      ${escapeHtml(item.label)}
+    </a>
+  `).join('');
+}
+
+function adminDesktopSidebarHtml(activePath = ADMIN_PUSH_PATH) {
   return `
-    <aside class="admin-sidebar-panel" aria-label="Навигация администратора">
-      <a class="admin-sidebar-brand" href="${ADMIN_PUSH_PATH}" aria-label="WowLife">
-        <img src="/assets/wowlife-logo.svg" alt="WowLife" />
-      </a>
-      <nav class="admin-sidebar-nav">
-        ${items.map((item) => `
-          <a class="${item.href === activePath ? 'active' : ''}" href="${item.href}" data-admin-route="${item.href}">
-            ${escapeHtml(item.label)}
-          </a>
-        `).join('')}
-      </nav>
-    </aside>
+    <a class="brand admin-brand" href="${ADMIN_PUSH_PATH}" aria-label="WowLife">
+      <img src="/assets/wowlife-logo.svg" alt="WowLife" />
+    </a>
+    <nav class="desktop-nav admin-desktop-nav" aria-label="Навигация администратора">
+      ${adminNavigationLinksHtml(activePath)}
+    </nav>
   `;
 }
 
-function adminShellHtml(activePath, contentHtml) {
+function adminMobileSideMenuHtml(activePath = ADMIN_PUSH_PATH) {
+  return `
+    <div class="mobile-side-menu-header">
+      <img src="/assets/wowlife-logo.svg" alt="WowLife" />
+      <button id="mobileMenuCloseButton" class="icon-button mobile-menu-close" type="button" aria-label="Закрыть меню" data-mobile-menu-close>×</button>
+    </div>
+    <nav class="mobile-side-nav admin-mobile-side-nav" aria-label="Мобильное меню администратора">
+      ${adminNavigationLinksHtml(activePath)}
+    </nav>
+  `;
+}
+
+function resetAppNavigation() {
+  if (desktopSidebar && desktopSidebar.innerHTML !== defaultDesktopSidebarHtml) {
+    desktopSidebar.innerHTML = defaultDesktopSidebarHtml;
+  }
+  if (mobileSideMenu && mobileSideMenu.innerHTML !== defaultMobileSideMenuHtml) {
+    mobileSideMenu.innerHTML = defaultMobileSideMenuHtml;
+  }
+}
+
+function setAdminLayout(activePath = ADMIN_PUSH_PATH) {
+  setAdminMode(true);
+  if (desktopSidebar) desktopSidebar.innerHTML = adminDesktopSidebarHtml(activePath);
+  if (mobileSideMenu) mobileSideMenu.innerHTML = adminMobileSideMenuHtml(activePath);
+}
+
+function adminShellHtml(_activePath, contentHtml) {
   return `
     <div class="admin-shell">
-      ${adminNavigationHtml(activePath)}
       <div class="admin-shell-content">
         ${contentHtml}
       </div>
@@ -1148,8 +1182,75 @@ function adminProfileIdsText(item) {
   return ids.length > 0 ? ids.join(', ') : '—';
 }
 
+function adminMobileCardHtml({ title, meta = '', badge = '', rows = [], subtitle = '' } = {}) {
+  const rowsHtml = rows
+    .filter((row) => row && row.label)
+    .map((row) => mobileTableRow(row.label, row.value ?? '—'))
+    .join('');
+
+  return `
+    <article class="card payment-card table-mobile-card admin-mobile-card">
+      <div class="card-topline admin-mobile-card-topline">
+        <div>
+          <div class="card-title admin-mobile-card-title">${title || '—'}</div>
+          ${meta ? `<p class="admin-mobile-card-meta">${meta}</p>` : ''}
+        </div>
+        ${badge ? `<div class="admin-mobile-card-badge">${badge}</div>` : ''}
+      </div>
+      ${subtitle ? `<p class="card-subtitle admin-mobile-card-subtitle">${subtitle}</p>` : ''}
+      <div class="dashed-line"></div>
+      <div class="mobile-table-meta">${rowsHtml}</div>
+    </article>
+  `;
+}
+
+function adminDeviceStatusHtml(item = {}) {
+  return statusHtml(certificateStatus, item.isActive ? 'paid' : 'canceled', item.isActive ? 'Активна' : 'Отключена');
+}
+
+function adminInstalledText(item = {}) {
+  return item.installed ? 'PWA установлено' : 'Браузер';
+}
+
+function adminPermissionText(value) {
+  const permission = String(value || '').trim();
+  if (!permission) return '—';
+  if (permission === 'granted') return 'Разрешено';
+  if (permission === 'denied') return 'Запрещено';
+  if (permission === 'default') return 'Не выбрано';
+  return escapeHtml(permission);
+}
+
+function adminEventText(value) {
+  return value === 'unsubscribe' ? 'Отписка' : 'Подписка';
+}
+
 function adminDevicesTable(items = []) {
   if (!items.length) return '<div class="empty-state compact">Подписанных устройств пока нет.</div>';
+
+  const desktopRows = items.map((item) => `
+    <tr>
+      <td>${escapeHtml(adminProfileIdsText(item))}</td>
+      <td>${escapeHtml(item.userName || item.userEmail || item.userId || '—')}</td>
+      <td>${escapeHtml(item.platform || 'PWA')}</td>
+      <td>${adminDeviceStatusHtml(item)}</td>
+      <td>${escapeHtml(formatDateTime(item.lastSeenAt || item.createdAt))}</td>
+    </tr>
+  `).join('');
+
+  const mobileCards = items.map((item) => adminMobileCardHtml({
+    title: escapeHtml(adminProfileIdsText(item)),
+    meta: 'Профиль партнёра',
+    badge: adminDeviceStatusHtml(item),
+    rows: [
+      { label: 'Пользователь', value: escapeHtml(item.userName || item.userEmail || item.userId || '—') },
+      { label: 'Устройство', value: escapeHtml(item.platform || 'PWA') },
+      { label: 'Тип', value: escapeHtml(adminInstalledText(item)) },
+      { label: 'Разрешение', value: adminPermissionText(item.permission) },
+      { label: 'Последняя активность', value: escapeHtml(formatDateTime(item.lastSeenAt || item.createdAt)) },
+      { label: 'Дата подписки', value: escapeHtml(formatDateTime(item.subscribedAt || item.createdAt)) }
+    ]
+  })).join('');
 
   return `
     <div class="table-wrapper admin-push-table">
@@ -1163,24 +1264,38 @@ function adminDevicesTable(items = []) {
             <th>Последняя активность</th>
           </tr>
         </thead>
-        <tbody>
-          ${items.map((item) => `
-            <tr>
-              <td>${escapeHtml(adminProfileIdsText(item))}</td>
-              <td>${escapeHtml(item.userName || item.userEmail || item.userId || '—')}</td>
-              <td>${escapeHtml(item.platform || 'PWA')}</td>
-              <td>${statusHtml(certificateStatus, item.isActive ? 'paid' : 'canceled', item.isActive ? 'Активна' : 'Отключена')}</td>
-              <td>${escapeHtml(formatDateTime(item.lastSeenAt || item.createdAt))}</td>
-            </tr>
-          `).join('')}
-        </tbody>
+        <tbody>${desktopRows}</tbody>
       </table>
     </div>
+    <div class="mobile-cards admin-mobile-cards">${mobileCards}</div>
   `;
 }
 
 function adminLogsTable(items = []) {
   if (!items.length) return '<div class="empty-state compact">Лог подписок пока пуст.</div>';
+
+  const desktopRows = items.map((item) => `
+    <tr>
+      <td>${escapeHtml(adminEventText(item.eventType))}</td>
+      <td>${escapeHtml(adminProfileIdsText(item))}</td>
+      <td>${escapeHtml(item.userName || item.userEmail || item.userId || '—')}</td>
+      <td>${escapeHtml(item.platform || 'PWA')}</td>
+      <td>${escapeHtml(formatDateTime(item.createdAt))}</td>
+    </tr>
+  `).join('');
+
+  const mobileCards = items.map((item) => adminMobileCardHtml({
+    title: escapeHtml(adminEventText(item.eventType)),
+    meta: escapeHtml(formatDateTime(item.createdAt)),
+    badge: statusHtml(certificateStatus, item.eventType === 'unsubscribe' ? 'canceled' : 'paid', adminEventText(item.eventType)),
+    rows: [
+      { label: 'Профиль', value: escapeHtml(adminProfileIdsText(item)) },
+      { label: 'Пользователь', value: escapeHtml(item.userName || item.userEmail || item.userId || '—') },
+      { label: 'Устройство', value: escapeHtml(item.platform || 'PWA') },
+      { label: 'Тип', value: escapeHtml(adminInstalledText(item)) },
+      { label: 'Разрешение', value: adminPermissionText(item.permission) }
+    ]
+  })).join('');
 
   return `
     <div class="table-wrapper admin-push-table">
@@ -1194,19 +1309,10 @@ function adminLogsTable(items = []) {
             <th>Дата</th>
           </tr>
         </thead>
-        <tbody>
-          ${items.map((item) => `
-            <tr>
-              <td>${escapeHtml(item.eventType === 'unsubscribe' ? 'Отписка' : 'Подписка')}</td>
-              <td>${escapeHtml(adminProfileIdsText(item))}</td>
-              <td>${escapeHtml(item.userName || item.userEmail || item.userId || '—')}</td>
-              <td>${escapeHtml(item.platform || 'PWA')}</td>
-              <td>${escapeHtml(formatDateTime(item.createdAt))}</td>
-            </tr>
-          `).join('')}
-        </tbody>
+        <tbody>${desktopRows}</tbody>
       </table>
     </div>
+    <div class="mobile-cards admin-mobile-cards">${mobileCards}</div>
   `;
 }
 
@@ -1249,6 +1355,32 @@ function adminCampaignResultText(item) {
 function adminCampaignsTable(items = []) {
   if (!items.length) return '<div class="empty-state compact">Рассылок по заданным фильтрам не найдено.</div>';
 
+  const desktopRows = items.map((item) => `
+    <tr>
+      <td>${escapeHtml(formatDateTime(item.createdAt))}</td>
+      <td>
+        <strong>${escapeHtml(item.title || '—')}</strong>
+        <small>${escapeHtml(item.body || '—')}</small>
+      </td>
+      <td>${escapeHtml(adminCampaignProfilesText(item))}</td>
+      <td>${adminCampaignStatusHtml(item.status)}</td>
+      <td>${escapeHtml(adminCampaignResultText(item))}</td>
+    </tr>
+  `).join('');
+
+  const mobileCards = items.map((item) => adminMobileCardHtml({
+    title: escapeHtml(item.title || '—'),
+    meta: escapeHtml(formatDateTime(item.createdAt)),
+    badge: adminCampaignStatusHtml(item.status),
+    subtitle: escapeHtml(item.body || '—'),
+    rows: [
+      { label: 'ID профилей', value: escapeHtml(adminCampaignProfilesText(item)) },
+      { label: 'Результат', value: escapeHtml(adminCampaignResultText(item)) },
+      { label: 'Ссылка', value: escapeHtml(item.url || '—') },
+      { label: 'Установленные PWA', value: item.installedOnly ? 'Да' : 'Нет' }
+    ]
+  })).join('');
+
   return `
     <div class="table-wrapper admin-push-table admin-campaigns-table">
       <table>
@@ -1261,22 +1393,10 @@ function adminCampaignsTable(items = []) {
             <th>Результат</th>
           </tr>
         </thead>
-        <tbody>
-          ${items.map((item) => `
-            <tr>
-              <td>${escapeHtml(formatDateTime(item.createdAt))}</td>
-              <td>
-                <strong>${escapeHtml(item.title || '—')}</strong>
-                <small>${escapeHtml(item.body || '—')}</small>
-              </td>
-              <td>${escapeHtml(adminCampaignProfilesText(item))}</td>
-              <td>${adminCampaignStatusHtml(item.status)}</td>
-              <td>${escapeHtml(adminCampaignResultText(item))}</td>
-            </tr>
-          `).join('')}
-        </tbody>
+        <tbody>${desktopRows}</tbody>
       </table>
     </div>
+    <div class="mobile-cards admin-mobile-cards">${mobileCards}</div>
   `;
 }
 
@@ -1320,7 +1440,7 @@ async function renderAdminPush() {
     return renderAdminSignIn();
   }
 
-  setAdminMode(true);
+  setAdminLayout(ADMIN_PUSH_PATH);
   document.body.classList.remove('is-admin-auth');
   setHeader('Панель администратора');
   setActiveNavigation('');
@@ -1398,7 +1518,7 @@ async function renderAdminPushDevices() {
     return renderAdminSignIn();
   }
 
-  setAdminMode(true);
+  setAdminLayout(ADMIN_PUSH_DEVICES_PATH);
   document.body.classList.remove('is-admin-auth');
   setHeader('Панель администратора');
   setActiveNavigation('');
@@ -1450,7 +1570,7 @@ async function renderAdminPushLogs() {
     return renderAdminSignIn();
   }
 
-  setAdminMode(true);
+  setAdminLayout(ADMIN_PUSH_LOGS_PATH);
   document.body.classList.remove('is-admin-auth');
   setHeader('Панель администратора');
   setActiveNavigation('');
@@ -1494,7 +1614,7 @@ async function renderAdminPushCampaigns() {
     return renderAdminSignIn();
   }
 
-  setAdminMode(true);
+  setAdminLayout(ADMIN_PUSH_CAMPAIGNS_PATH);
   document.body.classList.remove('is-admin-auth');
   setHeader('Панель администратора');
   setActiveNavigation('');
@@ -5045,6 +5165,7 @@ function route() {
     return;
   }
 
+  resetAppNavigation();
   document.body.classList.remove('is-admin', 'is-admin-auth');
 
   if (!currentUser) {
