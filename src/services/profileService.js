@@ -619,6 +619,10 @@ function normalizeProfile(rawProfile) {
       items: normalizedRequisites
     },
     additionalInfo: firstCleanText(profileSearchRoot, ['UF_CRM_1684102959619', 'ADDITIONAL_INFO', 'COMMENTS', 'additionalInfo']),
+    agentReport: {
+      legalAddress: firstCleanText(profileSearchRoot, ['UF_CRM_1756729018221', 'AGENT_LEGAL_ADDRESS', 'agentLegalAddress', 'legalAddress']),
+      contractNumber: firstCleanText(profileSearchRoot, ['UF_CRM_1684102807864', 'AGENT_CONTRACT_NUMBER', 'agentContractNumber', 'contractNumber'])
+    },
     profilePhotoUrl: normalizeProfilePhoto(firstProfileField(profileSearchRoot, ['PROFILE_PHOTO', 'profilePhoto', 'profilePhotoUrl'])),
     modifiedAt: firstProfileField(profileSearchRoot, ['DATE_MODIFY', 'modifiedAt']) || null,
     raw: profileSearchRoot,

@@ -4048,6 +4048,7 @@ function profileRequisiteItemHtml(requisite = {}, index = 0, showTitle = false) 
     profileField('ОГРН', requisite.ogrn),
     requisite.bankName ? profileField('Банк', requisite.bankName) : '',
     requisite.accountNumber ? profileField('Расчетный счет', requisite.accountNumber) : '',
+    profileField('Корр. счет', requisite.correspondentAccount),
     requisite.bik ? profileField('БИК', requisite.bik) : ''
   ].filter(Boolean).join('');
 
@@ -4606,6 +4607,11 @@ async function renderProfile() {
       ${profileDocumentsHtml(profile.documents)}
     `;
     const requisitesBody = profileRequisitesHtml(requisites);
+    const agentReport = profile.agentReport || {};
+    const agentReportBody = `
+      ${profileField('Юридический адрес', agentReport.legalAddress)}
+      ${profileField('Номер договора', agentReport.contractNumber)}
+    `;
 
     app.innerHTML = `
       <div class="profile-page">
@@ -4630,8 +4636,9 @@ async function renderProfile() {
           ${profileSection('Канал связи для уведомлений', profileNotificationChannelsHtml(profile.notificationChannels))}
           ${profileSection('Локация и рабочее время', workItems.length ? workItems.join('') : profileEmpty('Информация не указана'))}
           ${profileSection('Документы', documentsBody)}
-          ${profileSection('Финансовые реквизиты', requisitesBody)}
+          ${profileSection('Реквизиты компании / Банковские реквизиты', requisitesBody)}
           ${profileSection('Дополнительная информация', profile.additionalInfo ? `<p>${profileMultilineText(profile.additionalInfo)}</p>` : profileEmpty('Информация не указана'))}
+          ${profileSection('Отчет агента', agentReportBody)}
         </div>
       </div>
     `;
