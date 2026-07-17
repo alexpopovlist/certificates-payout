@@ -42,6 +42,8 @@ const ADMIN_SIGN_IN_PATH = '/admin/login';
 const ADMIN_REGISTER_PATH = '/admin/register';
 const ADMIN_PUSH_PATH = '/admin/push';
 const ADMIN_PUSH_CAMPAIGNS_PATH = '/admin/push/campaigns';
+const ADMIN_PUSH_DEVICES_PATH = '/admin/push/devices';
+const ADMIN_PUSH_LOGS_PATH = '/admin/push/logs';
 const DEFAULT_APP_PATH = '/redeem';
 const APP_ROUTES = new Set(['redeem', 'services', 'certificates', 'new-requests', 'reconciliations', 'payments', 'profile']);
 
@@ -1104,6 +1106,41 @@ function adminStatCard(label, value) {
   `;
 }
 
+function adminNavigationHtml(activePath = ADMIN_PUSH_PATH) {
+  const items = [
+    { href: ADMIN_PUSH_PATH, label: 'Новая рассылка' },
+    { href: ADMIN_PUSH_CAMPAIGNS_PATH, label: 'Таблица рассылок' },
+    { href: ADMIN_PUSH_DEVICES_PATH, label: 'Подписанные устройства' },
+    { href: ADMIN_PUSH_LOGS_PATH, label: 'Лог подписок' }
+  ];
+
+  return `
+    <aside class="admin-sidebar-panel" aria-label="Навигация администратора">
+      <a class="admin-sidebar-brand" href="${ADMIN_PUSH_PATH}" aria-label="WowLife">
+        <img src="/assets/wowlife-logo.svg" alt="WowLife" />
+      </a>
+      <nav class="admin-sidebar-nav">
+        ${items.map((item) => `
+          <a class="${item.href === activePath ? 'active' : ''}" href="${item.href}" data-admin-route="${item.href}">
+            ${escapeHtml(item.label)}
+          </a>
+        `).join('')}
+      </nav>
+    </aside>
+  `;
+}
+
+function adminShellHtml(activePath, contentHtml) {
+  return `
+    <div class="admin-shell">
+      ${adminNavigationHtml(activePath)}
+      <div class="admin-shell-content">
+        ${contentHtml}
+      </div>
+    </div>
+  `;
+}
+
 function adminProfileIdsText(item) {
   const ids = Array.isArray(item.profileIds) && item.profileIds.length > 0
     ? item.profileIds
@@ -1292,16 +1329,15 @@ async function renderAdminPush() {
   try {
     const data = await api('/api/admin/push/summary');
     const summary = data.summary || {};
-    app.innerHTML = `
-      <div class="stack admin-push-screen">
+    app.innerHTML = adminShellHtml(ADMIN_PUSH_PATH, `
+      <div class="stack admin-push-screen admin-new-broadcast-screen">
         <section class="card pad admin-push-hero">
           <div>
             <p class="eyebrow">PUSH уведомления</p>
-            <h2>Рассылка по PWA-устройствам</h2>
+            <h2>Новая рассылка</h2>
             <p>Отправляйте уведомления всем подписанным устройствам или только партнёрам с указанными ID профилей.</p>
           </div>
           <div class="admin-hero-actions">
-            <a class="button secondary" href="${ADMIN_PUSH_CAMPAIGNS_PATH}">Таблица рассылок</a>
             <button id="adminSignOutButton" class="button secondary" type="button">Выйти</button>
           </div>
         </section>
@@ -1347,6 +1383,49 @@ async function renderAdminPush() {
             <button class="button" type="submit">Отправить PUSH</button>
           </form>
         </section>
+      </div>
+    `);
+
+    document.querySelector('#adminSignOutButton')?.addEventListener('click', signOutAdmin);
+    document.querySelector('#adminPushForm')?.addEventListener('submit', handleAdminPushBroadcastSubmit);
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function renderAdminPushDevices() {
+  if (!currentAdmin) {
+    return renderAdminSignIn();
+  }
+
+  setAdminMode(true);
+  document.body.classList.remove('is-admin-auth');
+  setHeader('Панель администратора');
+  setActiveNavigation('');
+  showLoading();
+
+  try {
+    const data = await api('/api/admin/push/summary');
+    const summary = data.summary || {};
+    app.innerHTML = adminShellHtml(ADMIN_PUSH_DEVICES_PATH, `
+      <div class="stack admin-push-screen admin-devices-screen">
+        <section class="card pad admin-push-hero">
+          <div>
+            <p class="eyebrow">PUSH уведомления</p>
+            <h2>Подписанные устройства</h2>
+            <p>Активные подписки с ID профилей компаний и данными мобильных PWA-устройств.</p>
+          </div>
+          <div class="admin-hero-actions">
+            <button id="adminSignOutButton" class="button secondary" type="button">Выйти</button>
+          </div>
+        </section>
+
+        <section class="admin-stat-grid">
+          ${adminStatCard('Всего устройств', summary.total)}
+          ${adminStatCard('Активных', summary.active)}
+          ${adminStatCard('PWA активных', summary.installed_active)}
+          ${adminStatCard('Профилей', summary.active_profiles)}
+        </section>
 
         <section class="card table-card admin-push-list-card">
           <div class="table-header">
@@ -1356,6 +1435,40 @@ async function renderAdminPush() {
             </div>
           </div>
           ${adminDevicesTable(data.subscriptions || [])}
+        </section>
+      </div>
+    `);
+
+    document.querySelector('#adminSignOutButton')?.addEventListener('click', signOutAdmin);
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function renderAdminPushLogs() {
+  if (!currentAdmin) {
+    return renderAdminSignIn();
+  }
+
+  setAdminMode(true);
+  document.body.classList.remove('is-admin-auth');
+  setHeader('Панель администратора');
+  setActiveNavigation('');
+  showLoading();
+
+  try {
+    const data = await api('/api/admin/push/summary');
+    app.innerHTML = adminShellHtml(ADMIN_PUSH_LOGS_PATH, `
+      <div class="stack admin-push-screen admin-subscription-logs-screen">
+        <section class="card pad admin-push-hero">
+          <div>
+            <p class="eyebrow">PUSH уведомления</p>
+            <h2>Лог подписок</h2>
+            <p>История подписок и отписок по профилям, пользователям и устройствам.</p>
+          </div>
+          <div class="admin-hero-actions">
+            <button id="adminSignOutButton" class="button secondary" type="button">Выйти</button>
+          </div>
         </section>
 
         <section class="card table-card admin-push-list-card">
@@ -1368,10 +1481,9 @@ async function renderAdminPush() {
           ${adminLogsTable(data.logs || [])}
         </section>
       </div>
-    `;
+    `);
 
     document.querySelector('#adminSignOutButton')?.addEventListener('click', signOutAdmin);
-    document.querySelector('#adminPushForm')?.addEventListener('submit', handleAdminPushBroadcastSubmit);
   } catch (error) {
     showError(error);
   }
@@ -1393,16 +1505,14 @@ async function renderAdminPushCampaigns() {
 
   try {
     const data = await api(`/api/admin/push/campaigns${query ? `?${query}` : ''}`);
-    app.innerHTML = `
+    app.innerHTML = adminShellHtml(ADMIN_PUSH_CAMPAIGNS_PATH, `
       <div class="stack admin-push-screen admin-campaigns-screen">
         <section class="card pad admin-push-hero">
           <div>
-            <p class="eyebrow">История PUSH</p>
             <h2>Таблица рассылок</h2>
             <p>Проверяйте, каким профилям была отправка, и отслеживайте статус PUSH уведомления.</p>
           </div>
           <div class="admin-hero-actions">
-            <a class="button secondary" href="${ADMIN_PUSH_PATH}">Новая рассылка</a>
             <button id="adminSignOutButton" class="button secondary" type="button">Выйти</button>
           </div>
         </section>
@@ -1427,7 +1537,7 @@ async function renderAdminPushCampaigns() {
           ${adminCampaignsTable(data.items || [])}
         </section>
       </div>
-    `;
+    `);
 
     document.querySelector('#adminSignOutButton')?.addEventListener('click', signOutAdmin);
     document.querySelector('#adminCampaignFiltersForm')?.addEventListener('submit', handleAdminCampaignFiltersSubmit);
@@ -4927,6 +5037,8 @@ function route() {
     if (!currentAdmin) return renderAdminSignIn();
     if (!id || id === 'push') {
       if (action === 'campaigns') return renderAdminPushCampaigns();
+      if (action === 'devices') return renderAdminPushDevices();
+      if (action === 'logs') return renderAdminPushLogs();
       return renderAdminPush();
     }
     navigate(ADMIN_PUSH_PATH, { replace: true });

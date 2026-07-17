@@ -4749,3 +4749,173 @@ body.is-admin-auth .workspace {
     grid-template-columns: minmax(460px, 560px) minmax(0, 1fr);
   }
 }
+
+/* Admin panel navigation: desktop mirrors the main app sidebar while keeping admin routes isolated. */
+.admin-shell {
+  width: 100%;
+  min-width: 0;
+}
+
+.admin-sidebar-panel {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: none;
+  padding: 20px;
+}
+
+.admin-sidebar-brand {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  text-decoration: none;
+}
+
+.admin-sidebar-brand img {
+  display: block;
+  max-width: 156px;
+  height: auto;
+}
+
+.admin-sidebar-nav {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-sidebar-nav a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  color: #475569;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-decoration: none;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.admin-sidebar-nav a:hover,
+.admin-sidebar-nav a:focus-visible {
+  background: #f8fafc;
+  color: #0f172a;
+  outline: none;
+}
+
+.admin-sidebar-nav a.active {
+  background: #eef6ff;
+  color: #0f172a;
+}
+
+body.is-admin .admin-new-broadcast-screen,
+body.is-admin .admin-devices-screen,
+body.is-admin .admin-subscription-logs-screen {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+body.is-admin .admin-new-broadcast-screen .admin-push-hero,
+body.is-admin .admin-new-broadcast-screen .admin-stat-grid,
+body.is-admin .admin-new-broadcast-screen .admin-broadcast-card,
+body.is-admin .admin-devices-screen .admin-push-hero,
+body.is-admin .admin-devices-screen .admin-stat-grid,
+body.is-admin .admin-devices-screen .admin-push-list-card,
+body.is-admin .admin-subscription-logs-screen .admin-push-hero,
+body.is-admin .admin-subscription-logs-screen .admin-push-list-card {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+}
+
+body.is-admin .admin-new-broadcast-screen .admin-broadcast-card {
+  grid-row: auto;
+  position: static;
+}
+
+@media (min-width: 921px) {
+  body.is-admin .admin-shell {
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+    width: 100%;
+  }
+
+  body.is-admin .admin-sidebar-panel {
+    position: sticky;
+    top: 24px;
+    min-height: calc(100vh - 48px);
+  }
+
+  body.is-admin .admin-shell-content {
+    min-width: 0;
+    width: 100%;
+  }
+
+  body.is-admin .admin-new-broadcast-screen,
+  body.is-admin .admin-devices-screen,
+  body.is-admin .admin-subscription-logs-screen {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  body.is-admin .admin-new-broadcast-screen .admin-push-form {
+    max-width: none;
+  }
+
+  body.is-admin .admin-devices-screen .admin-push-table table,
+  body.is-admin .admin-subscription-logs-screen .admin-push-table table {
+    width: 100%;
+    min-width: 980px;
+  }
+
+  body.is-admin .admin-campaigns-screen {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+}
+
+@media (max-width: 920px) {
+  body.is-admin .admin-shell {
+    display: grid;
+    gap: 16px;
+  }
+
+  body.is-admin .admin-sidebar-panel {
+    padding: 16px;
+  }
+
+  body.is-admin .admin-sidebar-nav {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Final specificity overrides for split admin screens. */
+body.is-admin .admin-push-screen.admin-new-broadcast-screen,
+body.is-admin .admin-push-screen.admin-devices-screen,
+body.is-admin .admin-push-screen.admin-subscription-logs-screen {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+body.is-admin .admin-push-screen.admin-new-broadcast-screen .admin-push-hero,
+body.is-admin .admin-push-screen.admin-new-broadcast-screen .admin-stat-grid,
+body.is-admin .admin-push-screen.admin-new-broadcast-screen .admin-broadcast-card,
+body.is-admin .admin-push-screen.admin-devices-screen .admin-push-hero,
+body.is-admin .admin-push-screen.admin-devices-screen .admin-stat-grid,
+body.is-admin .admin-push-screen.admin-devices-screen .admin-push-list-card,
+body.is-admin .admin-push-screen.admin-subscription-logs-screen .admin-push-hero,
+body.is-admin .admin-push-screen.admin-subscription-logs-screen .admin-push-list-card {
+  grid-column: 1 / -1;
+  grid-row: auto;
+  width: 100%;
+  min-width: 0;
+  position: static;
+}
