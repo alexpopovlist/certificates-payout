@@ -4650,3 +4650,102 @@ body.is-admin .admin-push-form .notice.error {
     grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
   }
 }
+
+/* Admin PUSH desktop full-width correction. Keeps mobile flow unchanged. */
+body.is-admin .layout,
+body.is-admin-auth .layout {
+  grid-template-columns: 1fr;
+}
+
+body.is-admin .workspace,
+body.is-admin-auth .workspace {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+@media (min-width: 921px) {
+  body.is-admin .content {
+    width: 100vw;
+    max-width: none;
+    margin: 0;
+    padding-left: clamp(24px, 3vw, 56px);
+    padding-right: clamp(24px, 3vw, 56px);
+  }
+
+  body.is-admin #app,
+  body.is-admin .admin-push-screen,
+  body.is-admin .admin-campaigns-screen {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+
+  body.is-admin .admin-push-screen:not(.admin-campaigns-screen) {
+    display: grid;
+    grid-template-columns: minmax(420px, 520px) minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+  }
+
+  body.is-admin .admin-push-screen:not(.admin-campaigns-screen) .admin-push-hero,
+  body.is-admin .admin-push-screen:not(.admin-campaigns-screen) .admin-stat-grid {
+    grid-column: 1 / -1;
+  }
+
+  body.is-admin .admin-push-screen:not(.admin-campaigns-screen) .admin-broadcast-card {
+    grid-column: 1;
+    grid-row: 3 / span 2;
+    width: 100%;
+    min-width: 0;
+  }
+
+  body.is-admin .admin-push-screen:not(.admin-campaigns-screen) .admin-push-list-card {
+    grid-column: 2;
+    width: 100%;
+    min-width: 0;
+  }
+
+  body.is-admin .admin-push-screen:not(.admin-campaigns-screen) .admin-push-table table {
+    width: 100%;
+    min-width: 980px;
+  }
+
+  body.is-admin .admin-campaigns-screen {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  body.is-admin .admin-campaigns-screen .admin-push-hero,
+  body.is-admin .admin-campaigns-screen .admin-campaign-filters-card,
+  body.is-admin .admin-campaigns-screen .admin-push-list-card {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+  }
+
+  body.is-admin .admin-campaigns-screen .admin-campaign-filters-card {
+    position: static;
+  }
+
+  body.is-admin .admin-campaigns-screen .admin-campaign-filters {
+    grid-template-columns: repeat(5, minmax(160px, 1fr)) auto;
+    align-items: end;
+  }
+
+  body.is-admin .admin-campaigns-screen .admin-campaign-filter-actions {
+    grid-template-columns: repeat(2, minmax(112px, auto));
+    align-items: end;
+  }
+
+  body.is-admin .admin-campaigns-screen .admin-campaigns-table table {
+    width: 100%;
+    min-width: 1160px;
+  }
+}
+
+@media (min-width: 1440px) {
+  body.is-admin .admin-push-screen:not(.admin-campaigns-screen) {
+    grid-template-columns: minmax(460px, 560px) minmax(0, 1fr);
+  }
+}
