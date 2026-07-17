@@ -1594,7 +1594,11 @@ async function ensurePushSubscription(options = {}) {
   });
 
   await sendPushSubscription(subscription);
-  renderPushPrompt('PUSH уведомления включены для этого ярлыка.', 'success');
+  if (isMobileViewport()) {
+    renderPushPrompt();
+  } else {
+    renderPushPrompt('PUSH уведомления включены для этого ярлыка.', 'success');
+  }
 
   return true;
 }
@@ -1714,6 +1718,12 @@ function renderPushPrompt(message, type = '') {
     }
 
     if (permission === 'granted') {
+      if (installed && isMobileViewport()) {
+        pushPrompt.className = 'push-prompt hidden';
+        pushPrompt.innerHTML = '';
+        return;
+      }
+
       pushPrompt.className = 'push-prompt success';
       pushPrompt.innerHTML = `
         <div>
