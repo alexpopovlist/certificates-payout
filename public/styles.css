@@ -4328,3 +4328,69 @@ body:not(.is-login) .profile-moderation-field textarea {
     grid-template-columns: 1fr;
   }
 }
+
+/* Wide desktop layout for the administrator PUSH panel. Mobile keeps the existing flow. */
+@media (min-width: 1024px) {
+  body.is-admin .content {
+    width: 100%;
+    max-width: none;
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+
+  body.is-admin #app {
+    width: 100%;
+  }
+
+  body.is-admin .admin-push-screen {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+
+  body.is-admin .admin-push-screen:not(.admin-campaigns-screen) {
+    align-items: start;
+    display: grid;
+    gap: 24px;
+    grid-template-columns: minmax(400px, 480px) minmax(0, 1fr);
+  }
+
+  body.is-admin .admin-push-screen:not(.admin-campaigns-screen) .admin-push-hero,
+  body.is-admin .admin-push-screen:not(.admin-campaigns-screen) .admin-stat-grid {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  body.is-admin .admin-push-screen:not(.admin-campaigns-screen) .admin-stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  body.is-admin .admin-push-screen:not(.admin-campaigns-screen) .admin-broadcast-card {
+    grid-column: 1;
+    grid-row: 3 / span 2;
+    min-width: 0;
+    position: sticky;
+    top: 24px;
+    width: 100%;
+  }
+
+  body.is-admin .admin-push-screen:not(.admin-campaigns-screen) .admin-push-list-card {
+    grid-column: 2;
+    min-width: 0;
+    width: 100%;
+  }
+
+  body.is-admin .admin-push-screen:not(.admin-campaigns-screen) .admin-push-table {
+    width: 100%;
+  }
+
+  body.is-admin .admin-push-screen:not(.admin-campaigns-screen) .admin-push-table table {
+    min-width: 920px;
+  }
+}
+
+@media (min-width: 1440px) {
+  body.is-admin .admin-push-screen:not(.admin-campaigns-screen) {
+    grid-template-columns: minmax(440px, 520px) minmax(0, 1fr);
+  }
+}
