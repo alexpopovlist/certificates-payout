@@ -4323,6 +4323,20 @@ function updateProfileAgentReportState(agentReport = {}) {
   profileAgentReportState.contractNumber = String(agentReport.contractNumber || '').trim();
 }
 
+function profileAgentReportBodyHtml(agentReport = profileAgentReportState) {
+  return `
+    ${profileField('Юридический адрес', agentReport.legalAddress)}
+    ${profileField('Номер договора', agentReport.contractNumber)}
+  `;
+}
+
+function updateProfileAgentReportSection(agentReport = profileAgentReportState) {
+  const body = document.querySelector('.profile-agent-report-card .profile-section-body');
+  if (!body) return false;
+  body.innerHTML = profileAgentReportBodyHtml(agentReport);
+  return true;
+}
+
 function profileAgentReportFormHtml({ noticeId = 'profileAgentReportNotice', formId = 'profileAgentReportForm' } = {}) {
   return `
     <form id="${escapeHtml(formId)}" class="schedule-form profile-agent-report-form" novalidate>
@@ -4391,10 +4405,9 @@ async function handleProfileAgentReportSubmit(event, options = {}) {
     });
 
     closeProfileAgentReportDialog();
+    updateProfileAgentReportSection({ legalAddress, contractNumber });
     if (typeof options.onSuccess === 'function') {
-      await options.onSuccess();
-    } else {
-      await renderProfile();
+      await options.onSuccess({ legalAddress, contractNumber });
     }
   } catch (error) {
     if (notice) {
@@ -4774,10 +4787,7 @@ async function renderProfile() {
     const requisitesBody = profileRequisitesHtml(requisites);
     const agentReport = profile.agentReport || {};
     updateProfileAgentReportState(agentReport);
-    const agentReportBody = `
-      ${profileField('Юридический адрес', agentReport.legalAddress)}
-      ${profileField('Номер договора', agentReport.contractNumber)}
-    `;
+    const agentReportBody = profileAgentReportBodyHtml(agentReport);
     const agentReportAction = '<button id="profileAgentReportEditButton" class="button secondary profile-agent-report-edit" type="button">Изменить</button>';
 
     app.innerHTML = `
@@ -4805,7 +4815,7 @@ async function renderProfile() {
           ${profileSection('Документы', documentsBody)}
           ${profileSection('Реквизиты компании / Банковские реквизиты', requisitesBody)}
           ${profileSection('Дополнительная информация', profile.additionalInfo ? `<p>${profileMultilineText(profile.additionalInfo)}</p>` : profileEmpty('Информация не указана'))}
-          ${profileSectionWithAction('Отчет агента', agentReportBody, agentReportAction)}
+          ${profileSectionWithAction('Отчет агента', agentReportBody, agentReportAction, 'profile-agent-report-card')}
         </div>
       </div>
     `;
