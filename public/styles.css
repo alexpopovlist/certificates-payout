@@ -2777,6 +2777,22 @@ body:not(.is-login) .multiselect-option[aria-selected="true"] .multiselect-check
   line-height: 1.2;
 }
 
+.profile-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 18px;
+}
+
+.profile-section-header h2 {
+  margin: 0;
+}
+
+.profile-section-header .profile-agent-report-edit {
+  flex: 0 0 auto;
+}
+
 .profile-section-body {
   color: #64748b;
   font-size: 15px;
@@ -5427,5 +5443,10 @@ body.is-admin .admin-mobile-card-badge .status {
   .profile-agent-report-form-actions {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .profile-section-header .profile-agent-report-edit {
+    width: auto;
+    min-width: 104px;
   }
 }

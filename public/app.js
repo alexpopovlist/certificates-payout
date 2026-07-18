@@ -4148,6 +4148,18 @@ function profileSection(title, body, extraClass = '') {
   `;
 }
 
+function profileSectionWithAction(title, body, actionHtml = '', extraClass = '') {
+  return `
+    <section class="card profile-section ${extraClass}">
+      <div class="profile-section-header">
+        <h2>${escapeHtml(title)}</h2>
+        ${actionHtml || ''}
+      </div>
+      <div class="profile-section-body">${body}</div>
+    </section>
+  `;
+}
+
 function profilePasswordFormHtml({ notice = '' } = {}) {
   return `
     <form id="profilePasswordForm" class="auth-form auth-form-wakesurf profile-password-form">
@@ -4765,10 +4777,8 @@ async function renderProfile() {
     const agentReportBody = `
       ${profileField('Юридический адрес', agentReport.legalAddress)}
       ${profileField('Номер договора', agentReport.contractNumber)}
-      <div class="profile-agent-report-actions">
-        <button id="profileAgentReportEditButton" class="button secondary profile-agent-report-edit" type="button">Изменить</button>
-      </div>
     `;
+    const agentReportAction = '<button id="profileAgentReportEditButton" class="button secondary profile-agent-report-edit" type="button">Изменить</button>';
 
     app.innerHTML = `
       <div class="profile-page">
@@ -4795,7 +4805,7 @@ async function renderProfile() {
           ${profileSection('Документы', documentsBody)}
           ${profileSection('Реквизиты компании / Банковские реквизиты', requisitesBody)}
           ${profileSection('Дополнительная информация', profile.additionalInfo ? `<p>${profileMultilineText(profile.additionalInfo)}</p>` : profileEmpty('Информация не указана'))}
-          ${profileSection('Отчет агента', agentReportBody)}
+          ${profileSectionWithAction('Отчет агента', agentReportBody, agentReportAction)}
         </div>
       </div>
     `;

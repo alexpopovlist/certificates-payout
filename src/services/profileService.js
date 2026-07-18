@@ -243,10 +243,13 @@ function cleanText(value) {
 }
 
 function normalizeAddress(value) {
-  // profile.getProfile returns the address in the same display format that the
-  // existing partner cabinet shows, including any Bitrix geo suffix after `|`.
-  // Keep it as-is for the /profile screen so the field is rendered one-to-one.
-  return cleanText(value);
+  const text = cleanText(value);
+  if (!text) return '';
+
+  // Bitrix service addresses are returned as "display value|lat;lon|id".
+  // The partner profile should show only the human-readable address, matching
+  // the original cabinet: "Адрес 2" instead of "Адрес 2|0;0|31739".
+  return text.split('|')[0].trim();
 }
 
 function collectionToArray(value) {
