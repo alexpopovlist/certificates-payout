@@ -5385,3 +5385,47 @@ body.is-admin .admin-mobile-card-badge .status {
     grid-template-columns: 1fr;
   }
 }
+
+/* Profile agent report editing: compact controls without changing /profile layout. */
+.profile-agent-report-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 18px;
+}
+
+.profile-agent-report-edit {
+  min-width: 118px;
+}
+
+.profile-agent-report-panel {
+  width: min(100%, 560px);
+}
+
+.profile-agent-report-form {
+  gap: 18px;
+}
+
+.profile-agent-report-submit {
+  min-width: 132px;
+}
+
+.profile-agent-report-screen-card {
+  overflow: hidden;
+}
+
+@media (max-width: 680px) {
+  .profile-agent-report-actions {
+    justify-content: stretch;
+  }
+
+  .profile-agent-report-edit,
+  .profile-agent-report-form-actions .button {
+    width: 100%;
+  }
+
+  .profile-agent-report-form-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}

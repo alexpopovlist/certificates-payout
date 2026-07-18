@@ -40,6 +40,11 @@ const profileModerationState = {
   file: null
 };
 
+const profileAgentReportState = {
+  legalAddress: '',
+  contractNumber: ''
+};
+
 
 const SIGN_IN_PATH = '/authentication/sign-in';
 const ADMIN_SIGN_IN_PATH = '/admin/login';
@@ -106,6 +111,11 @@ function serviceScreenBackPath() {
 }
 
 function profileModerationBackPath() {
+  const params = new URLSearchParams(window.location.search);
+  return safeNextPath(params.get('next') || '/profile');
+}
+
+function profileAgentReportBackPath() {
   const params = new URLSearchParams(window.location.search);
   return safeNextPath(params.get('next') || '/profile');
 }
@@ -4296,6 +4306,149 @@ function openProfilePasswordFlow() {
   openProfilePasswordDialog();
 }
 
+function updateProfileAgentReportState(agentReport = {}) {
+  profileAgentReportState.legalAddress = String(agentReport.legalAddress || '').trim();
+  profileAgentReportState.contractNumber = String(agentReport.contractNumber || '').trim();
+}
+
+function profileAgentReportFormHtml({ noticeId = 'profileAgentReportNotice', formId = 'profileAgentReportForm' } = {}) {
+  return `
+    <form id="${escapeHtml(formId)}" class="schedule-form profile-agent-report-form" novalidate>
+      <div class="schedule-field schedule-field-full profile-agent-report-field">
+        <label for="profileAgentReportLegalAddress">Юридический адрес</label>
+        <input id="profileAgentReportLegalAddress" name="legalAddress" autocomplete="off" placeholder="Юридический адрес" value="${escapeHtml(profileAgentReportState.legalAddress)}" />
+      </div>
+      <div class="schedule-field schedule-field-full profile-agent-report-field">
+        <label for="profileAgentReportContractNumber">Номер договора</label>
+        <input id="profileAgentReportContractNumber" name="contractNumber" autocomplete="off" placeholder="Номер договора" value="${escapeHtml(profileAgentReportState.contractNumber)}" />
+      </div>
+      <div id="${escapeHtml(noticeId)}" class="hidden"></div>
+      <div class="schedule-actions profile-agent-report-form-actions">
+        <button class="button secondary schedule-cancel" type="button" data-close-profile-agent-report>Отмена</button>
+        <button class="button schedule-submit profile-agent-report-submit" type="submit">Сохранить</button>
+      </div>
+    </form>
+  `;
+}
+
+function closeProfileAgentReportDialog() {
+  document.querySelector('#profileAgentReportModal')?.remove();
+}
+
+function profileAgentReportDialogHtml() {
+  return `
+    <div id="profileAgentReportModal" class="schedule-modal profile-agent-report-modal" role="dialog" aria-modal="true" aria-labelledby="profileAgentReportTitle">
+      <button class="schedule-modal-backdrop" type="button" data-close-profile-agent-report aria-label="Закрыть"></button>
+      <section class="schedule-panel profile-agent-report-panel">
+        <header class="schedule-header">
+          <h2 id="profileAgentReportTitle">Отчет агента</h2>
+          <button class="icon-button schedule-close" type="button" data-close-profile-agent-report aria-label="Закрыть">×</button>
+        </header>
+        ${profileAgentReportFormHtml()}
+      </section>
+    </div>
+  `;
+}
+
+async function handleProfileAgentReportSubmit(event, options = {}) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const notice = form.querySelector('#profileAgentReportNotice, #profileAgentReportScreenNotice');
+  const submit = form.querySelector('[type="submit"]');
+  const formData = new FormData(form);
+  const legalAddress = String(formData.get('legalAddress') || '').trim();
+  const contractNumber = String(formData.get('contractNumber') || '').trim();
+
+  profileAgentReportState.legalAddress = legalAddress;
+  profileAgentReportState.contractNumber = contractNumber;
+
+  if (notice) {
+    notice.className = 'hidden';
+    notice.textContent = '';
+  }
+
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = 'Сохраняем...';
+  }
+
+  try {
+    await api('/api/profile/agent-report', {
+      method: 'POST',
+      body: JSON.stringify({ legalAddress, contractNumber })
+    });
+
+    closeProfileAgentReportDialog();
+    if (typeof options.onSuccess === 'function') {
+      await options.onSuccess();
+    } else {
+      await renderProfile();
+    }
+  } catch (error) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = error.message || 'Не удалось сохранить отчет агента.';
+    }
+  } finally {
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = 'Сохранить';
+    }
+  }
+}
+
+function setupProfileAgentReportForm(options = {}) {
+  const form = document.querySelector('#profileAgentReportForm');
+  form?.addEventListener('submit', (event) => handleProfileAgentReportSubmit(event, options));
+}
+
+function openProfileAgentReportDialog(agentReport = {}) {
+  updateProfileAgentReportState(agentReport);
+
+  if (shouldUseDialogScreen()) {
+    navigate(`/profile/agent-report?next=${encodeURIComponent('/profile')}`);
+    return;
+  }
+
+  closeProfileAgentReportDialog();
+  document.body.insertAdjacentHTML('beforeend', profileAgentReportDialogHtml());
+  document.querySelectorAll('[data-close-profile-agent-report]').forEach((button) => {
+    button.addEventListener('click', closeProfileAgentReportDialog);
+  });
+  setupProfileAgentReportForm();
+  document.querySelector('#profileAgentReportLegalAddress')?.focus();
+}
+
+async function renderProfileAgentReportScreen() {
+  const backTo = profileAgentReportBackPath();
+  setHeader('Отчет агента', { backTo });
+  setActiveNavigation('profile');
+  showLoading();
+
+  try {
+    const { item } = await api('/api/profile?refresh=1');
+    updateProfileAgentReportState(item?.agentReport || {});
+
+    app.innerHTML = `
+      <section class="card schedule-screen-card service-dialog-screen-card profile-agent-report-screen-card">
+        <header class="schedule-header schedule-screen-header">
+          <h2>Отчет агента</h2>
+        </header>
+        ${profileAgentReportFormHtml({ noticeId: 'profileAgentReportScreenNotice' })}
+      </section>
+    `;
+
+    document.querySelectorAll('[data-close-profile-agent-report]').forEach((button) => {
+      button.addEventListener('click', () => navigate(backTo));
+    });
+    setupProfileAgentReportForm({
+      onSuccess: () => navigate(backTo, { replace: true })
+    });
+  } catch (error) {
+    showError(error);
+  }
+}
+
 
 function profileModerationAttachIconSvg() {
   return `
@@ -4608,9 +4761,13 @@ async function renderProfile() {
     `;
     const requisitesBody = profileRequisitesHtml(requisites);
     const agentReport = profile.agentReport || {};
+    updateProfileAgentReportState(agentReport);
     const agentReportBody = `
       ${profileField('Юридический адрес', agentReport.legalAddress)}
       ${profileField('Номер договора', agentReport.contractNumber)}
+      <div class="profile-agent-report-actions">
+        <button id="profileAgentReportEditButton" class="button secondary profile-agent-report-edit" type="button">Изменить</button>
+      </div>
     `;
 
     app.innerHTML = `
@@ -4645,6 +4802,7 @@ async function renderProfile() {
 
     document.querySelector('#profileModerationButton')?.addEventListener('click', openProfileModerationDialog);
     document.querySelector('#profileSetPasswordButton')?.addEventListener('click', openProfilePasswordFlow);
+    document.querySelector('#profileAgentReportEditButton')?.addEventListener('click', () => openProfileAgentReportDialog(agentReport));
   } catch (error) {
     showError(error);
   }
@@ -5251,6 +5409,7 @@ function route() {
   if (root === 'reconciliations') return renderReconciliations();
   if (root === 'profile' && id === 'moderation') return renderProfileModerationScreen();
   if (root === 'profile' && id === 'password') return renderProfilePasswordScreen();
+  if (root === 'profile' && id === 'agent-report') return renderProfileAgentReportScreen();
   if (root === 'profile') return renderProfile();
   if (root === 'payments' && id === 'create') return renderCreatePayment();
   if (root === 'payments' && id) return renderPaymentDetail(id);

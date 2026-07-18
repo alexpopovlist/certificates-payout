@@ -1,5 +1,5 @@
 const express = require('express');
-const { fetchPartnerProfile, setPartnerPassword, createProfileModerationRequest } = require('../services/profileService');
+const { fetchPartnerProfile, setPartnerPassword, setPartnerAgentReport, createProfileModerationRequest } = require('../services/profileService');
 const { setSessionCookie } = require('../services/authService');
 
 const router = express.Router();
@@ -38,6 +38,22 @@ router.post('/moderation', async (request, response, next) => {
     });
 
     response.json({ result: true, item: result.item || null });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+router.post('/agent-report', async (request, response, next) => {
+  try {
+    const body = request.body || {};
+    const result = await setPartnerAgentReport({
+      session: request.auth,
+      legalAddress: body.legalAddress ?? body.UF_CRM_1756729018221,
+      contractNumber: body.contractNumber ?? body.UF_CRM_1684102807864
+    });
+
+    response.json({ result: true, item: result.request || null });
   } catch (error) {
     next(error);
   }

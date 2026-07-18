@@ -5,6 +5,7 @@ const DEFAULT_PROFILE_PATH = '/restapi/profile.getProfile';
 const DEFAULT_NOTIFICATION_CHANNELS_PATH = '/restapi/profile.getNotificationChannels';
 const DEFAULT_SET_PASSWORD_PATH = '/restapi/auth.setPassword';
 const DEFAULT_SET_PARTNER_PROFILE_PATH = '/restapi/profile.setPartnerProfile';
+const DEFAULT_SET_AGENT_REPORT_PATH = '/restapi/profile.setAgentReport';
 
 function normalizeBaseUrl() {
   return String(process.env.AUTH_BASE_URL || DEFAULT_AUTH_BASE_URL).replace(/\/+$/, '');
@@ -46,6 +47,14 @@ function getSetPartnerProfileUrl() {
     process.env.PROFILE_SET_PARTNER_PROFILE_URL || process.env.PROFILE_MODERATION_URL,
     process.env.PROFILE_SET_PARTNER_PROFILE_PATH || process.env.PROFILE_MODERATION_PATH,
     DEFAULT_SET_PARTNER_PROFILE_PATH
+  );
+}
+
+function getSetAgentReportUrl() {
+  return resolveUrl(
+    process.env.PROFILE_SET_AGENT_REPORT_URL || process.env.PROFILE_AGENT_REPORT_URL,
+    process.env.PROFILE_SET_AGENT_REPORT_PATH || process.env.PROFILE_AGENT_REPORT_PATH,
+    DEFAULT_SET_AGENT_REPORT_PATH
   );
 }
 
@@ -694,6 +703,15 @@ function postToSetPartnerProfileService(session, body) {
   );
 }
 
+function postToSetAgentReportService(session, body) {
+  return postToProfileEndpoint(
+    session,
+    body,
+    getSetAgentReportUrl(),
+    'Не удалось обновить отчет агента через сервис WOWlife.'
+  );
+}
+
 function getProfileRequestCredentials(session) {
   const contactId = getSessionContactId(session);
   const token = getSessionToken(session);
@@ -956,6 +974,35 @@ async function createProfileModerationRequest({ session, name, info, file } = {}
   };
 }
 
+
+async function setPartnerAgentReport({ session, legalAddress, contractNumber } = {}) {
+  const credentials = getProfileRequestCredentials(session);
+  const requestPayload = {
+    contactId: credentials.contactId,
+    token: credentials.token,
+    UF_CRM_1756729018221: String(legalAddress ?? '').trim(),
+    UF_CRM_1684102807864: String(contractNumber ?? '').trim()
+  };
+
+  const { payload } = await postToSetAgentReportService(session, requestPayload);
+  const result = payload?.result ?? payload?.data?.result ?? payload?.response?.result;
+
+  if (result !== true && result !== 'true') {
+    const error = new Error('WOWlife profile.setAgentReport returned unsuccessful result');
+    error.statusCode = 502;
+    error.publicMessage = getServiceErrorMessage(payload) || 'Сервис WOWlife не подтвердил обновление отчета агента.';
+    error.upstreamPayload = payload;
+    throw error;
+  }
+
+  profileResponseCache.clear();
+
+  return {
+    ok: true,
+    request: requestPayload
+  };
+}
+
 async function setPartnerPassword({ session, profile, password } = {}) {
   const normalizedPassword = String(password || '').trim();
   if (!normalizedPassword) {
@@ -1094,6 +1141,7 @@ module.exports = {
   fetchPartnerProfile,
   fetchProfileNotificationChannels,
   setPartnerPassword,
+  setPartnerAgentReport,
   createProfileModerationRequest,
   normalizeProfile
 };
