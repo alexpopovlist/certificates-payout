@@ -45,6 +45,11 @@ const profileAgentReportState = {
   contractNumber: ''
 };
 
+const profileNotificationChannelsState = {
+  channels: [],
+  isEditing: false
+};
+
 
 const SIGN_IN_PATH = '/authentication/sign-in';
 const ADMIN_SIGN_IN_PATH = '/admin/login';
@@ -4120,23 +4125,179 @@ function profileNotificationChannelNoteHtml(channel = {}) {
   return escapeHtml(note);
 }
 
-function profileNotificationChannelsHtml(channels = []) {
+function profileNotificationChannelKey(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return '';
+  if (['telegram', 'телеграм', 'тг'].includes(normalized)) return 'tg';
+  if (['mail', 'e-mail', 'email', 'почта'].includes(normalized)) return 'email';
+  if (normalized === 'max' || normalized === 'макс') return 'max';
+  if (['whatsapp', 'wa', 'ватсап', 'вацап', 'вотсап'].includes(normalized)) return 'wa';
+  if (normalized === 'sms' || normalized === 'смс') return 'sms';
+  return normalized.replace(/[^a-zа-я0-9]/gi, '');
+}
+
+function profileNotificationChannelPayloadName(channel = {}) {
+  const key = profileNotificationChannelKey(channel.id || channel.title || channel.name);
+  const names = {
+    max: 'Max',
+    wa: 'WA',
+    tg: 'TG',
+    sms: 'SMS',
+    email: 'email'
+  };
+  return names[key] || String(channel.title || channel.id || '').trim();
+}
+
+function cloneProfileNotificationChannels(channels = []) {
+  return (Array.isArray(channels) ? channels : []).map((channel) => ({
+    ...channel,
+    enabled: Boolean(channel?.enabled)
+  }));
+}
+
+function updateProfileNotificationChannelsState(channels = []) {
+  profileNotificationChannelsState.channels = cloneProfileNotificationChannels(channels);
+  profileNotificationChannelsState.isEditing = false;
+}
+
+function profileNotificationChannelsActionHtml(isEditing = false) {
+  if (isEditing) {
+    return '<button id="profileNotificationChannelsSaveButton" class="button secondary profile-notification-channels-action" type="submit" form="profileNotificationChannelsForm">Сохранить</button>';
+  }
+
+  return '<button id="profileNotificationChannelsEditButton" class="button secondary profile-notification-channels-action" type="button">Изменить</button>';
+}
+
+function profileNotificationChannelsHtml(channels = [], options = {}) {
   const items = Array.isArray(channels) ? channels : [];
   if (items.length === 0) return profileEmpty('Каналы не настроены');
 
-  return `
-    <div class="profile-channels">
-      ${items.map((channel) => `
-        <label class="profile-channel ${channel.enabled ? 'active' : ''}">
-          <span class="profile-checkbox" aria-hidden="true">${channel.enabled ? '✓' : ''}</span>
-          <span class="profile-channel-body">
-            <strong>${escapeHtml(channel.title || '')}</strong>
-            ${channel.note ? `<small>${profileNotificationChannelNoteHtml(channel)}</small>` : ''}
-          </span>
-        </label>
-      `).join('')}
+  const editable = Boolean(options.editable);
+  const listHtml = `
+    <div class="profile-channels ${editable ? 'profile-channels-editing' : ''}">
+      ${items.map((channel, index) => {
+        const key = profileNotificationChannelKey(channel.id || channel.title || channel.name) || `channel-${index}`;
+        const title = channel.title || channel.name || channel.id || '';
+        const inputId = `profileNotificationChannel-${key}`;
+        const activeClass = channel.enabled ? 'active' : '';
+        const noteHtml = channel.note ? `<small>${profileNotificationChannelNoteHtml(channel)}</small>` : '';
+
+        if (editable) {
+          return `
+            <div class="profile-channel profile-channel-editable ${activeClass}">
+              <input
+                id="${escapeHtml(inputId)}"
+                class="profile-channel-input"
+                type="checkbox"
+                name="channels"
+                value="${escapeHtml(profileNotificationChannelPayloadName(channel))}"
+                ${channel.enabled ? 'checked' : ''}
+                aria-label="${escapeHtml(title)}"
+              />
+              <label class="profile-channel-body" for="${escapeHtml(inputId)}">
+                <strong>${escapeHtml(title)}</strong>
+                ${noteHtml}
+              </label>
+            </div>
+          `;
+        }
+
+        return `
+          <label class="profile-channel ${activeClass}">
+            <span class="profile-checkbox" aria-hidden="true">${channel.enabled ? '✓' : ''}</span>
+            <span class="profile-channel-body">
+              <strong>${escapeHtml(title)}</strong>
+              ${noteHtml}
+            </span>
+          </label>
+        `;
+      }).join('')}
     </div>
   `;
+
+  if (!editable) return listHtml;
+
+  return `
+    <form id="profileNotificationChannelsForm" class="profile-notification-channels-form" novalidate>
+      ${listHtml}
+      <div id="profileNotificationChannelsNotice" class="hidden"></div>
+    </form>
+  `;
+}
+
+function updateProfileNotificationChannelsSection() {
+  const card = document.querySelector('.profile-notification-channels-card');
+  if (!card) return false;
+
+  const action = card.querySelector('.profile-notification-channels-action');
+  const body = card.querySelector('.profile-section-body');
+  if (action) action.outerHTML = profileNotificationChannelsActionHtml(profileNotificationChannelsState.isEditing);
+  if (body) {
+    body.innerHTML = profileNotificationChannelsHtml(profileNotificationChannelsState.channels, {
+      editable: profileNotificationChannelsState.isEditing
+    });
+  }
+  setupProfileNotificationChannelsPanel();
+  return true;
+}
+
+async function handleProfileNotificationChannelsSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const notice = form.querySelector('#profileNotificationChannelsNotice');
+  const submit = document.querySelector('#profileNotificationChannelsSaveButton');
+  const checkedValues = Array.from(form.querySelectorAll('input[name="channels"]:checked'))
+    .map((input) => String(input.value || '').trim())
+    .filter(Boolean);
+  const selectedKeys = new Set(checkedValues.map(profileNotificationChannelKey).filter(Boolean));
+
+  profileNotificationChannelsState.channels = profileNotificationChannelsState.channels.map((channel) => ({
+    ...channel,
+    enabled: selectedKeys.has(profileNotificationChannelKey(channel.id || channel.title || channel.name))
+  }));
+
+  if (notice) {
+    notice.className = 'hidden';
+    notice.textContent = '';
+  }
+
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = 'Сохраняем...';
+  }
+
+  try {
+    const result = await api('/api/profile/notification-channels', {
+      method: 'POST',
+      body: JSON.stringify({ channels: checkedValues })
+    });
+
+    if (result?.result === false) {
+      throw new Error(result.error || 'Сервис WOWlife не подтвердил сохранение каналов уведомлений.');
+    }
+
+    profileNotificationChannelsState.isEditing = false;
+    updateProfileNotificationChannelsSection();
+  } catch (error) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = error.message || 'Не удалось сохранить каналы уведомлений.';
+    }
+  } finally {
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = 'Сохранить';
+    }
+  }
+}
+
+function setupProfileNotificationChannelsPanel() {
+  document.querySelector('#profileNotificationChannelsEditButton')?.addEventListener('click', () => {
+    profileNotificationChannelsState.isEditing = true;
+    updateProfileNotificationChannelsSection();
+  });
+
+  document.querySelector('#profileNotificationChannelsForm')?.addEventListener('submit', handleProfileNotificationChannelsSubmit);
 }
 
 function profileSection(title, body, extraClass = '') {
@@ -4785,6 +4946,9 @@ async function renderProfile() {
       ${profileDocumentsHtml(profile.documents)}
     `;
     const requisitesBody = profileRequisitesHtml(requisites);
+    const notificationChannels = profile.notificationChannels || [];
+    updateProfileNotificationChannelsState(notificationChannels);
+    const notificationChannelsAction = profileNotificationChannelsActionHtml(false);
     const agentReport = profile.agentReport || {};
     updateProfileAgentReportState(agentReport);
     const agentReportBody = profileAgentReportBodyHtml(agentReport);
@@ -4810,7 +4974,7 @@ async function renderProfile() {
 
         <div class="profile-grid">
           ${profileSection('Контакты', contactsBody)}
-          ${profileSection('Канал связи для уведомлений', profileNotificationChannelsHtml(profile.notificationChannels))}
+          ${profileSectionWithAction('Канал связи для уведомлений', profileNotificationChannelsHtml(profileNotificationChannelsState.channels), notificationChannelsAction, 'profile-notification-channels-card')}
           ${profileSection('Локация и рабочее время', workItems.length ? workItems.join('') : profileEmpty('Информация не указана'))}
           ${profileSection('Документы', documentsBody)}
           ${profileSection('Реквизиты компании / Банковские реквизиты', requisitesBody)}
@@ -4822,6 +4986,7 @@ async function renderProfile() {
 
     document.querySelector('#profileModerationButton')?.addEventListener('click', openProfileModerationDialog);
     document.querySelector('#profileSetPasswordButton')?.addEventListener('click', openProfilePasswordFlow);
+    setupProfileNotificationChannelsPanel();
     document.querySelector('#profileAgentReportEditButton')?.addEventListener('click', () => openProfileAgentReportDialog(agentReport));
   } catch (error) {
     showError(error);

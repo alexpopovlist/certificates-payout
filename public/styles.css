@@ -5450,3 +5450,46 @@ body.is-admin .admin-mobile-card-badge .status {
     min-width: 104px;
   }
 }
+
+/* Profile notification channels editing: inline action in the existing card header. */
+.profile-section-header .profile-notification-channels-action {
+  flex: 0 0 auto;
+  min-width: 104px;
+}
+
+.profile-notification-channels-form {
+  display: grid;
+  gap: 12px;
+}
+
+.profile-channel-editable {
+  align-items: start;
+}
+
+.profile-channel-input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: #1d6ff2;
+  cursor: pointer;
+}
+
+.profile-channel-editable .profile-channel-body {
+  cursor: pointer;
+}
+
+.profile-channel-input:focus-visible {
+  outline: 3px solid rgba(29, 111, 242, 0.2);
+  outline-offset: 3px;
+}
+
+#profileNotificationChannelsNotice {
+  margin-top: 4px;
+}
+
+@media (max-width: 680px) {
+  .profile-section-header .profile-notification-channels-action {
+    width: auto;
+    min-width: 104px;
+  }
+}

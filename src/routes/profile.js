@@ -1,5 +1,5 @@
 const express = require('express');
-const { fetchPartnerProfile, setPartnerPassword, setPartnerAgentReport, createProfileModerationRequest } = require('../services/profileService');
+const { fetchPartnerProfile, setPartnerPassword, setPartnerAgentReport, setPartnerNotificationChannels, createProfileModerationRequest } = require('../services/profileService');
 const { setSessionCookie } = require('../services/authService');
 
 const router = express.Router();
@@ -43,6 +43,21 @@ router.post('/moderation', async (request, response, next) => {
   }
 });
 
+
+
+router.post('/notification-channels', async (request, response, next) => {
+  try {
+    const body = request.body || {};
+    const result = await setPartnerNotificationChannels({
+      session: request.auth,
+      channels: body.channels
+    });
+
+    response.json({ result: true, channels: result.channels || [] });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.post('/agent-report', async (request, response, next) => {
   try {
