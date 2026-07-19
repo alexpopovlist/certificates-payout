@@ -15,8 +15,33 @@ const {
 
 const router = express.Router();
 
-function sendPushInBackground(payload) {
-  broadcastPush(payload).catch((error) => {
+function normalizePushProfileIds(value) {
+  const values = Array.isArray(value) ? value : [value];
+  return Array.from(new Set(values
+    .flatMap((item) => Array.isArray(item) ? item : [item])
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)));
+}
+
+function getRedeemPushProfileIds(session = {}) {
+  return normalizePushProfileIds([
+    session?.upstream?.allIds,
+    session?.upstream?.contactId,
+    session?.user?.id
+  ]);
+}
+
+function sendPushInBackground(payload, options = {}) {
+  const profileIds = normalizePushProfileIds(options.profileIds);
+
+  if (profileIds.length === 0) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('Push notification skipped: no profile id for targeted redeem notification');
+    }
+    return;
+  }
+
+  broadcastPush(payload, { ...options, profileIds }).catch((error) => {
     if (process.env.NODE_ENV !== 'test') {
       console.warn('Push notification skipped:', error.publicMessage || error.message);
     }
@@ -348,11 +373,14 @@ router.post('/redeem', async (request, response, next) => {
         body: request.body
       });
 
-      sendPushInBackground({
-        title: 'Сертификат погашен',
-        body: `${result.item.certificateNumber} · ${result.item.title}`,
-        url: `/certificates/${result.item.id}`
-      });
+      sendPushInBackground(
+        {
+          title: 'Сертификат погашен',
+          body: `${result.item.certificateNumber} · ${result.item.title}`,
+          url: `/certificates/${result.item.id}`
+        },
+        { profileIds: getRedeemPushProfileIds(request.auth) }
+      );
 
       return response.status(201).json(result);
     }
@@ -409,11 +437,14 @@ router.post('/redeem', async (request, response, next) => {
 
     const item = toCertificateDto(certificate);
 
-    sendPushInBackground({
-      title: 'Сертификат погашен',
-      body: `${item.certificateNumber} · ${item.title}`,
-      url: `/certificates/${item.id}`
-    });
+    sendPushInBackground(
+      {
+        title: 'Сертификат погашен',
+        body: `${item.certificateNumber} · ${item.title}`,
+        url: `/certificates/${item.id}`
+      },
+      { profileIds: getRedeemPushProfileIds(request.auth) }
+    );
 
     response.status(201).json({ item });
   } catch (error) {
