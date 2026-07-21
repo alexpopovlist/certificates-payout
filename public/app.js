@@ -5281,7 +5281,7 @@ function yclientsDirectLoginDocumentHtml({ loginUrl, bookingUrl, email, password
           } catch (_error) {
             try { window.location.replace(bookingUrl); } catch (_replaceError) { window.location.href = bookingUrl; }
           }
-        }, ${showScreen ? 450 : 60});
+        }, ${showScreen ? 250 : 0});
       })();
     </script>
   </body>
@@ -5367,7 +5367,9 @@ function scheduleYclientsBookingRedirect(bookingWindow, result = {}, options = {
   const helperWindow = options.helperWindow || null;
   const messageSourceWindow = options.messageSourceWindow || bookingWindow;
   const shouldWriteBusyAfterSubmit = options.writeBusyAfterSubmit !== false;
-  const afterFormSubmitDelayMs = Number(result.browserAuthRedirectAfterSubmitMs || 3500);
+  const configuredRedirectDelay = options.afterFormSubmitDelayMs ?? result.browserAuthRedirectAfterSubmitMs ?? 3500;
+  const afterFormSubmitDelayMs = Math.max(150, Number(configuredRedirectDelay) || 3500);
+  const focusAfterRedirect = options.focusAfterRedirect === true;
 
   function cleanup() {
     window.removeEventListener('message', handleBridgeMessage);
@@ -5389,6 +5391,11 @@ function scheduleYclientsBookingRedirect(bookingWindow, result = {}, options = {
     try {
       if (bookingWindow && !bookingWindow.closed) {
         bookingWindow.location.replace(result.externalUrl);
+        if (focusAfterRedirect) {
+          window.setTimeout(() => {
+            try { bookingWindow.focus?.(); } catch (_focusError) {}
+          }, 180);
+        }
         window.setTimeout(() => {
           try { bookingWindow.opener = null; } catch (_error) {}
         }, 1000);
@@ -5434,6 +5441,10 @@ async function openCrmBookingExternal() {
   let bookingWindow = null;
   try {
     bookingWindow = window.open('', '_blank');
+    if (needsYclientsHelper) {
+      try { bookingWindow?.blur?.(); } catch (_blurError) {}
+      try { window.focus?.(); } catch (_focusError) {}
+    }
     if (showYclientsOpeningScreen) {
       writeOpeningPlaceholder(bookingWindow);
     } else if (needsYclientsHelper) {
@@ -5488,23 +5499,19 @@ async function openCrmBookingExternal() {
 
   if (bookingWindow && !bookingWindow.closed) {
     if (isYclientsLoginBridgeResult(result)) {
-      const bypassBridgeRoute = needsYclientsHelper && !showYclientsOpeningScreen;
-
       scheduleYclientsBookingRedirect(bookingWindow, result, {
         messageSourceWindow: bookingWindow,
-        writeBusyAfterSubmit: false
+        writeBusyAfterSubmit: false,
+        afterFormSubmitDelayMs: 650,
+        focusAfterRedirect: true
       });
 
-      if (bypassBridgeRoute) {
-        const directLoginStarted = writeYclientsDirectLoginDocument(bookingWindow, result, payload, {
-          mode: 'open-booking-direct',
-          showScreen: true
-        });
+      const directLoginStarted = writeYclientsDirectLoginDocument(bookingWindow, result, payload, {
+        mode: 'open-booking-fast-silent',
+        showScreen: false
+      });
 
-        if (!directLoginStarted) {
-          bookingWindow.location.replace(targetUrl);
-        }
-      } else {
+      if (!directLoginStarted) {
         bookingWindow.location.replace(targetUrl);
       }
     } else {
