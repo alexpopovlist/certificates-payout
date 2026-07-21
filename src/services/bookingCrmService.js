@@ -553,7 +553,7 @@ function formatYclientsWebLoginStatus(result = null) {
   };
 }
 
-function renderYclientsLoginBridgePage(ticket) {
+function renderYclientsLoginBridgePage(ticket, options = {}) {
   const loginUrl = normalizeBookingUrl(ticket.loginUrl || getYclientsWebLoginUrl());
   const bookingUrl = normalizeBookingUrl(ticket.bookingUrl);
   const email = normalizeText(ticket.login);
@@ -562,7 +562,8 @@ function renderYclientsLoginBridgePage(ticket) {
   const webLoginStatus = formatYclientsWebLoginStatus(ticket.apiAuthResult?.webLoginResult);
   const yclientsCompanyId = normalizeYclientsCompanyId(ticket.apiAuthResult?.yclientsCompanyId);
   const yclientsCompanyIdSource = normalizeText(ticket.apiAuthResult?.yclientsCompanyIdSource);
-  const autoBrowserLoginDelayMs = email && password ? 900 : 0;
+  const forceTopLevelLogin = Boolean(options.forceTopLevel);
+  const autoBrowserLoginDelayMs = email && password ? (forceTopLevelLogin ? 250 : 900) : 0;
 
   return `<!doctype html>
 <html lang="ru">
@@ -605,10 +606,10 @@ function renderYclientsLoginBridgePage(ticket) {
   <body>
     <main>
       <h1>Открываем YCLIENTS</h1>
-      <p>Сначала показываем серверную проверку, затем пробуем скрытую отправку формы. Для гарантированного получения cookies браузером после скрытой попытки автоматически выполняется прямой вход через домен yclients.com и только потом открывается расписание.</p>
+      <p>${forceTopLevelLogin ? 'Выполняем прямой вход через домен yclients.com, чтобы браузер получил cookies YCLIENTS, затем открываем расписание.' : 'Сначала показываем серверную проверку, затем пробуем скрытую отправку формы. Для гарантированного получения cookies браузером после скрытой попытки автоматически выполняется прямой вход через домен yclients.com и только потом открывается расписание.'}</p>
       <div class="status" aria-live="polite">
         <strong id="statusTitle">Запрос авторизации выполнен сервером</strong>
-        <span id="statusText">POST ${escapeHtml(loginUrl)} с email и password уже выполнен на backend. Следующий шаг — браузерная авторизация: сначала скрытая попытка, затем надёжный top-level вход через домен YCLIENTS.</span>
+        <span id="statusText">${forceTopLevelLogin ? `POST ${escapeHtml(loginUrl)} с email и password уже выполнен на backend. Сейчас откроем top-level вход через домен YCLIENTS, чтобы браузер установил cookies для iframe.` : `POST ${escapeHtml(loginUrl)} с email и password уже выполнен на backend. Следующий шаг — браузерная авторизация: сначала скрытая попытка, затем надёжный top-level вход через домен YCLIENTS.`}</span>
         ${apiMessage ? `<span class="muted">${escapeHtml(apiMessage)}</span>` : ''}
         <div class="service-status ${escapeHtml(webLoginStatus.tone)}">
           <div class="service-row">
@@ -633,7 +634,7 @@ function renderYclientsLoginBridgePage(ticket) {
             <strong>Передача cookies в браузер</strong>
             <span class="badge" id="browserStatusBadge">ожидание</span>
           </div>
-          <span id="browserStatusText">Через несколько секунд будет выполнена скрытая отправка формы в iframe. После неё вкладка автоматически выполнит прямой вход через yclients.com/auth/login/1, чтобы cookies точно попали в браузерную сессию YCLIENTS.</span>
+          <span id="browserStatusText">${forceTopLevelLogin ? 'Сейчас будет выполнен прямой вход через yclients.com/auth/login/1. Этот режим используется перед открытием YCLIENTS внутри iframe.' : 'Через несколько секунд будет выполнена скрытая отправка формы в iframe. После неё вкладка автоматически выполнит прямой вход через yclients.com/auth/login/1, чтобы cookies точно попали в браузерную сессию YCLIENTS.'}</span>
           <pre id="browserResponseText">Скрытый iframe не позволяет прочитать текст ответа YCLIENTS из-за cross-origin политики браузера. Серверный ответ показан выше.</pre>
         </div>
       </div>
@@ -795,11 +796,17 @@ function renderYclientsLoginBridgePage(ticket) {
         });
         openNowButton.addEventListener('click', openBooking);
 
+        var forceTopLevelLogin = ${forceTopLevelLogin ? 'true' : 'false'};
         var autoDelay = ${autoBrowserLoginDelayMs};
         if (autoDelay > 0) {
-          statusText.textContent = 'Серверный ответ показан ниже. Сейчас попробуем скрытую авторизацию через iframe, затем автоматически выполним прямой вход через домен YCLIENTS для установки cookies.';
+          statusText.textContent = forceTopLevelLogin
+            ? 'Серверный ответ показан ниже. Сейчас сразу выполним прямой вход через домен YCLIENTS для установки cookies перед загрузкой iFrame.'
+            : 'Серверный ответ показан ниже. Сейчас попробуем скрытую авторизацию через iframe, затем автоматически выполним прямой вход через домен YCLIENTS для установки cookies.';
           window.setTimeout(function () {
-            if (!finished) submitHiddenLogin();
+            if (!finished) {
+              if (forceTopLevelLogin) submitTopLevelLogin();
+              else submitHiddenLogin();
+            }
           }, autoDelay);
         } else {
           setBrowserStatus('error', 'нет данных', 'Логин или пароль не заполнены. Заполните их на экране «Данные CRM».', '');

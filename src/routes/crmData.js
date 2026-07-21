@@ -41,7 +41,9 @@ router.get('/yclients-login/:ticketId', (request, response, next) => {
       .set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
       .set('Pragma', 'no-cache')
       .set('Expires', '0')
-      .send(renderYclientsLoginBridgePage(ticket));
+      .send(renderYclientsLoginBridgePage(ticket, {
+        forceTopLevel: request.query.mode === 'top-level'
+      }));
   } catch (error) {
     next(error);
   }
