@@ -5366,6 +5366,7 @@ function scheduleYclientsBookingRedirect(bookingWindow, result = {}, options = {
   let cleanupTimer = null;
   const helperWindow = options.helperWindow || null;
   const messageSourceWindow = options.messageSourceWindow || bookingWindow;
+  const shouldWriteBusyAfterSubmit = options.writeBusyAfterSubmit !== false;
   const afterFormSubmitDelayMs = Number(result.browserAuthRedirectAfterSubmitMs || 3500);
 
   function cleanup() {
@@ -5406,11 +5407,13 @@ function scheduleYclientsBookingRedirect(bookingWindow, result = {}, options = {
     if (event.origin !== window.location.origin) return;
     if (event.data?.type !== 'wowlife-yclients-login-submitted') return;
 
-    writeYclientsAuthBusyPlaceholder(bookingWindow, {
-      title: 'Вход в YCLIENTS отправлен',
-      message: 'Ждём завершения запроса auth/login/1 и сохранения cookies браузером. После этого откроем расписание YCLIENTS.',
-      detail: `Переход на расписание будет выполнен примерно через ${Math.round(afterFormSubmitDelayMs / 1000)} сек.`
-    });
+    if (shouldWriteBusyAfterSubmit) {
+      writeYclientsAuthBusyPlaceholder(bookingWindow, {
+        title: 'Вход в YCLIENTS отправлен',
+        message: 'Ждём завершения запроса auth/login/1 и сохранения cookies браузером. После этого откроем расписание YCLIENTS.',
+        detail: `Переход на расписание будет выполнен примерно через ${Math.round(afterFormSubmitDelayMs / 1000)} сек.`
+      });
+    }
     window.setTimeout(redirectOpenedWindow, afterFormSubmitDelayMs);
   }
 
@@ -5427,10 +5430,8 @@ async function openCrmBookingExternal() {
   const payload = buildCrmBookingRequestPayload();
   const needsYclientsHelper = crmDataIsYclientsBasicPayload(payload);
   const showYclientsOpeningScreen = crmDataState.showYclientsOpeningScreen !== false;
-  const yclientsHelperWindowName = 'wowlifeYclientsBookingAuthHelper';
 
   let bookingWindow = null;
-  let yclientsHelperWindow = null;
   try {
     bookingWindow = window.open('', '_blank');
     if (showYclientsOpeningScreen) {
@@ -5438,16 +5439,12 @@ async function openCrmBookingExternal() {
     } else if (needsYclientsHelper) {
       writeYclientsAuthBusyPlaceholder(bookingWindow, {
         title: 'Авторизуемся в YCLIENTS',
-        message: 'Открыли служебное окно для запроса auth/login/1. После завершения входа эта вкладка автоматически перейдёт на расписание YCLIENTS.',
-        detail: 'Пока запрос авторизации не отправлен, не переводим вкладку на about:blank или YCLIENTS.'
+        message: 'Отправляем запрос auth/login/1 в этой же вкладке. После завершения входа она автоматически перейдёт на расписание YCLIENTS.',
+        detail: 'Не открываем отдельное служебное окно и не переводим вкладку на about:blank.'
       });
-    }
-    if (needsYclientsHelper) {
-      yclientsHelperWindow = openYclientsAuthHelperWindow(yclientsHelperWindowName, { showPlaceholder: showYclientsOpeningScreen });
     }
   } catch (_error) {
     bookingWindow = null;
-    yclientsHelperWindow = null;
   }
 
   if (openButton) {
@@ -5463,7 +5460,6 @@ async function openCrmBookingExternal() {
     });
   } catch (error) {
     try { bookingWindow?.close(); } catch (_closeError) {}
-    try { yclientsHelperWindow?.close(); } catch (_closeError) {}
     setCrmDataNotice('error', error.message || 'Не удалось открыть Booking сервис.');
     if (openButton) {
       openButton.disabled = false;
@@ -5482,7 +5478,6 @@ async function openCrmBookingExternal() {
   const targetUrl = result.openUrl || result.externalUrl;
   if (!targetUrl) {
     try { bookingWindow?.close(); } catch (_closeError) {}
-    try { yclientsHelperWindow?.close(); } catch (_closeError) {}
     setCrmDataNotice('error', 'Не удалось получить ссылку Booking сервиса.');
     if (openButton) {
       openButton.disabled = false;
@@ -5493,36 +5488,26 @@ async function openCrmBookingExternal() {
 
   if (bookingWindow && !bookingWindow.closed) {
     if (isYclientsLoginBridgeResult(result)) {
-      const helperReady = yclientsHelperWindow && !yclientsHelperWindow.closed;
       const bypassBridgeRoute = needsYclientsHelper && !showYclientsOpeningScreen;
 
-      if (bypassBridgeRoute) {
-        const loginSourceWindow = helperReady ? yclientsHelperWindow : bookingWindow;
-        scheduleYclientsBookingRedirect(bookingWindow, result, {
-          helperWindow: helperReady ? yclientsHelperWindow : null,
-          messageSourceWindow: loginSourceWindow
-        });
+      scheduleYclientsBookingRedirect(bookingWindow, result, {
+        messageSourceWindow: bookingWindow,
+        writeBusyAfterSubmit: false
+      });
 
-        const directLoginStarted = writeYclientsDirectLoginDocument(loginSourceWindow, result, payload, {
-          mode: helperReady ? 'helper-window-direct' : 'top-level-direct',
+      if (bypassBridgeRoute) {
+        const directLoginStarted = writeYclientsDirectLoginDocument(bookingWindow, result, payload, {
+          mode: 'open-booking-direct',
           showScreen: true
         });
 
         if (!directLoginStarted) {
-          const bridgeUrl = helperReady
-            ? appendQueryParam(targetUrl, 'helperWindow', yclientsHelperWindowName)
-            : targetUrl;
-          bookingWindow.location.replace(bridgeUrl);
+          bookingWindow.location.replace(targetUrl);
         }
       } else {
-        scheduleYclientsBookingRedirect(bookingWindow, result, { helperWindow: helperReady ? yclientsHelperWindow : null });
-        const bridgeUrl = helperReady
-          ? appendQueryParam(targetUrl, 'helperWindow', yclientsHelperWindowName)
-          : targetUrl;
-        bookingWindow.location.replace(bridgeUrl);
+        bookingWindow.location.replace(targetUrl);
       }
     } else {
-      try { yclientsHelperWindow?.close(); } catch (_closeError) {}
       bookingWindow.location.replace(targetUrl);
       try { bookingWindow.opener = null; } catch (_error) {}
     }
