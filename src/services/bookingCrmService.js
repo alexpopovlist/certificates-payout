@@ -221,12 +221,39 @@ function takeYclientsLoginTicket(ticketId) {
   return ticket;
 }
 
+
+function formatYclientsWebLoginStatus(result = null) {
+  if (!result) {
+    return {
+      label: 'Ответ web-авторизации не получен',
+      tone: 'warning',
+      httpStatus: 'нет данных',
+      responseText: 'Сервер не вернул ответ от YCLIENTS auth/login/1.'
+    };
+  }
+
+  const status = Number(result.status || 0);
+  const ok = Boolean(result.ok);
+  const warning = normalizeText(result.warning);
+  const rawText = normalizeText(result.rawText || result.responseText);
+  const payloadText = rawText || JSON.stringify(result.payload ?? {}, null, 2);
+
+  return {
+    label: ok ? 'Авторизация отправлена успешно' : 'Авторизация не подтверждена',
+    tone: ok ? 'success' : 'error',
+    httpStatus: status ? `HTTP ${status}` : 'HTTP статус не получен',
+    responseText: warning || payloadText || 'Пустой ответ сервиса.'
+  };
+}
+
 function renderYclientsLoginBridgePage(ticket) {
   const loginUrl = normalizeBookingUrl(ticket.loginUrl || getYclientsWebLoginUrl());
   const bookingUrl = normalizeBookingUrl(ticket.bookingUrl);
   const email = normalizeText(ticket.login);
   const password = normalizeText(ticket.password);
   const apiMessage = normalizeText(ticket.apiAuthResult?.message);
+  const webLoginStatus = formatYclientsWebLoginStatus(ticket.apiAuthResult?.webLoginResult);
+  const redirectDelayMs = webLoginStatus.tone === 'success' ? 6000 : 0;
 
   return `<!doctype html>
 <html lang="ru">
@@ -243,6 +270,14 @@ function renderYclientsLoginBridgePage(ticket) {
       h1 { margin: 0 0 10px; font-size: 28px; line-height: 1.2; }
       p { margin: 0 0 16px; color: #64748b; line-height: 1.5; font-size: 16px; }
       .status { display: grid; gap: 10px; margin: 22px 0; padding: 18px; border-radius: 18px; background: #f8fafc; border: 1px solid #e2e8f0; color: #334155; }
+      .service-status { display: grid; gap: 12px; margin: 18px 0 0; padding: 16px; border-radius: 18px; border: 1px solid #e2e8f0; background: #fff; }
+      .service-status.success { border-color: #bbf7d0; background: #f0fdf4; }
+      .service-status.error { border-color: #fecaca; background: #fef2f2; }
+      .service-status.warning { border-color: #fde68a; background: #fffbeb; }
+      .service-status strong { color: #0f172a; }
+      .service-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+      .badge { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 10px; border-radius: 999px; background: rgba(15, 23, 42, .08); color: #0f172a; font-size: 13px; font-weight: 800; }
+      pre { max-height: 260px; overflow: auto; margin: 0; padding: 14px; border-radius: 14px; background: rgba(15, 23, 42, .06); color: #0f172a; white-space: pre-wrap; word-break: break-word; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
       .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
       button, a { min-height: 46px; padding: 12px 18px; border-radius: 14px; border: 1px solid #dbe3ef; font: inherit; font-weight: 700; cursor: pointer; text-decoration: none; }
       .primary { border-color: #0f172a; background: #0f172a; color: #fff; }
@@ -256,9 +291,18 @@ function renderYclientsLoginBridgePage(ticket) {
       <h1>Открываем YCLIENTS</h1>
       <p>Выполняем вход через сохранённые логин и пароль, затем откроем Booking-ссылку.</p>
       <div class="status" aria-live="polite">
-        <strong id="statusTitle">Отправляем запрос авторизации...</strong>
+        <strong id="statusTitle">Запрос авторизации выполнен</strong>
         <span id="statusText">POST ${escapeHtml(loginUrl)} с email и password.</span>
         ${apiMessage ? `<span class="muted">${escapeHtml(apiMessage)}</span>` : ''}
+        <div class="service-status ${escapeHtml(webLoginStatus.tone)}">
+          <div class="service-row">
+            <strong>Статус авторизации</strong>
+            <span class="badge">${escapeHtml(webLoginStatus.httpStatus)}</span>
+          </div>
+          <span>${escapeHtml(webLoginStatus.label)}</span>
+          <strong>Ответ сервиса</strong>
+          <pre>${escapeHtml(webLoginStatus.responseText)}</pre>
+        </div>
       </div>
       <div class="actions">
         <button class="primary" id="openNowButton" type="button">Открыть Booking сейчас</button>
@@ -293,14 +337,20 @@ function renderYclientsLoginBridgePage(ticket) {
 
         openNowButton.addEventListener('click', openBooking);
         frame.addEventListener('load', function () {
-          statusTitle.textContent = 'Авторизация отправлена';
-          statusText.textContent = 'Открываем Booking-ссылку.';
-          setTimeout(openBooking, 350);
+          statusTitle.textContent = 'Браузерная отправка авторизации выполнена';
+          statusText.textContent = 'Статус и текст ответа сервиса показаны ниже. Booking можно открыть вручную.';
         });
 
         try {
           form.submit();
-          setTimeout(openBooking, 1800);
+          var redirectDelayMs = ${redirectDelayMs};
+          if (redirectDelayMs > 0) {
+            statusText.textContent = 'Статус и текст ответа сервиса показаны ниже. Автопереход к Booking через ' + Math.round(redirectDelayMs / 1000) + ' сек.';
+            setTimeout(openBooking, redirectDelayMs);
+          } else {
+            statusTitle.textContent = 'Авторизация не подтверждена';
+            statusText.textContent = 'Проверьте статус и ответ сервиса ниже. Booking можно открыть вручную.';
+          }
         } catch (error) {
           statusTitle.textContent = 'Не удалось автоматически отправить авторизацию';
           statusText.textContent = 'Нажмите «Открыть Booking сейчас» и войдите вручную.';
@@ -343,7 +393,9 @@ async function postYclientsWebLoginJson({ login, password } = {}) {
     return {
       ok: response.ok || (response.status >= 300 && response.status < 400),
       status: response.status,
+      statusText: response.statusText || '',
       redirected: response.status >= 300 && response.status < 400,
+      rawText: text,
       payload: parseJsonSafe(text)
     };
   } finally {
