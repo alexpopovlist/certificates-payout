@@ -5026,9 +5026,15 @@ function updateCrmBookingUrlField(value) {
 }
 
 function writeOpeningPlaceholder(bookingWindow) {
-  if (!bookingWindow?.document) return;
-  bookingWindow.document.open();
-  bookingWindow.document.write(`
+  let bookingDocument = null;
+  try {
+    bookingDocument = bookingWindow?.document || null;
+  } catch (_error) {
+    return;
+  }
+  if (!bookingDocument) return;
+  bookingDocument.open();
+  bookingDocument.write(`
     <!doctype html>
     <html lang="ru">
       <head>
@@ -5049,7 +5055,59 @@ function writeOpeningPlaceholder(bookingWindow) {
       </body>
     </html>
   `);
-  bookingWindow.document.close();
+  bookingDocument.close();
+}
+
+function getCrmBookingPopupGeometry() {
+  const availableWidth = Math.max(360, Number(window.screen?.availWidth || window.innerWidth || 1180));
+  const availableHeight = Math.max(520, Number(window.screen?.availHeight || window.innerHeight || 940));
+  const viewportWidth = Math.max(360, Number(window.innerWidth || availableWidth));
+  const viewportHeight = Math.max(520, Number(window.innerHeight || availableHeight));
+  const width = Math.floor(Math.min(1180, viewportWidth - 40, availableWidth - 40));
+  const height = Math.floor(Math.min(940, viewportHeight - 40, availableHeight - 80));
+  const safeWidth = Math.max(560, width);
+  const safeHeight = Math.max(640, height);
+  const screenLeft = Number(window.screenX ?? window.screenLeft ?? 0);
+  const screenTop = Number(window.screenY ?? window.screenTop ?? 0);
+  const outerWidth = Math.max(safeWidth, Number(window.outerWidth || viewportWidth));
+  const outerHeight = Math.max(safeHeight, Number(window.outerHeight || viewportHeight));
+  const left = Math.max(0, Math.floor(screenLeft + ((outerWidth - safeWidth) / 2)));
+  const top = Math.max(0, Math.floor(screenTop + ((outerHeight - safeHeight) / 2)));
+
+  return { width: safeWidth, height: safeHeight, left, top };
+}
+
+function crmBookingPopupFeatures() {
+  const geometry = getCrmBookingPopupGeometry();
+  return [
+    'popup=yes',
+    'resizable=yes',
+    'scrollbars=yes',
+    `width=${geometry.width}`,
+    `height=${geometry.height}`,
+    `left=${geometry.left}`,
+    `top=${geometry.top}`
+  ].join(',');
+}
+
+function moveCrmBookingPopupToModalPlace(bookingWindow) {
+  if (!bookingWindow || bookingWindow.closed) return;
+  const geometry = getCrmBookingPopupGeometry();
+  try { bookingWindow.resizeTo(geometry.width, geometry.height); } catch (_error) {}
+  try { bookingWindow.moveTo(geometry.left, geometry.top); } catch (_error) {}
+  try { bookingWindow.focus?.(); } catch (_error) {}
+}
+
+function openCrmBookingPopup(name = '_blank') {
+  let bookingWindow = null;
+  try {
+    bookingWindow = window.open('', name, crmBookingPopupFeatures());
+    moveCrmBookingPopupToModalPlace(bookingWindow);
+    writeOpeningPlaceholder(bookingWindow);
+  } catch (_error) {
+    bookingWindow = null;
+  }
+  return bookingWindow && !bookingWindow.closed ? bookingWindow : null;
 }
 
 function crmBookingSuccessMessage(result = {}) {
@@ -5403,15 +5461,12 @@ function renderCrmBookingIframeModal(result = {}, payload = {}, iframeLoginWindo
   }
 
   function ensureIframeLoginWindow() {
-    if (iframeLoginWindow && !iframeLoginWindow.closed) return iframeLoginWindow;
-
-    try {
-      iframeLoginWindow = window.open('', 'wowlifeYclientsIframeAuth', 'popup,width=560,height=720,left=120,top=80');
-      writeOpeningPlaceholder(iframeLoginWindow);
-    } catch (_error) {
-      iframeLoginWindow = null;
+    if (iframeLoginWindow && !iframeLoginWindow.closed) {
+      moveCrmBookingPopupToModalPlace(iframeLoginWindow);
+      return iframeLoginWindow;
     }
 
+    iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth');
     return iframeLoginWindow && !iframeLoginWindow.closed ? iframeLoginWindow : null;
   }
 
@@ -5519,21 +5574,20 @@ async function openCrmBookingIframe() {
   let iframeLoginWindow = null;
 
   if (isYclientsIframe) {
-    try {
-      iframeLoginWindow = window.open('', 'wowlifeYclientsIframeAuth', 'popup,width=560,height=720,left=120,top=80');
-      writeOpeningPlaceholder(iframeLoginWindow);
-    } catch (_error) {
-      iframeLoginWindow = null;
+    iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth');
+    if (!iframeLoginWindow) {
+      setCrmDataNotice('error', 'Браузер заблокировал окно YCLIENTS. Разрешите всплывающие окна и нажмите «iFrame» ещё раз.');
+      return;
     }
   }
 
   if (iframeButton) {
     iframeButton.disabled = true;
-    iframeButton.textContent = 'Открываем iFrame...';
+    iframeButton.textContent = isYclientsIframe ? 'Открываем YCLIENTS...' : 'Открываем iFrame...';
   }
 
   setCrmDataNotice('success', isYclientsIframe
-    ? 'Готовим экспериментальный iFrame: сначала выполним top-level вход YCLIENTS, затем проверим загрузку внутри iFrame.'
+    ? 'Открываем отдельное окно YCLIENTS на месте iFrame. Окно останется открытым для проверки авторизации и cookies.'
     : 'Готовим iFrame для Booking сервиса.');
 
   let result;
@@ -5544,7 +5598,7 @@ async function openCrmBookingIframe() {
     });
   } catch (error) {
     try { iframeLoginWindow?.close(); } catch (_closeError) {}
-    setCrmDataNotice('error', error.message || 'Не удалось подготовить iFrame для Booking сервиса.');
+    setCrmDataNotice('error', error.message || 'Не удалось подготовить Booking сервис.');
     if (iframeButton) {
       iframeButton.disabled = false;
       iframeButton.textContent = 'iFrame';
@@ -5559,10 +5613,50 @@ async function openCrmBookingIframe() {
     updateCrmBookingUrlField(result.savedBookingUrl || result.externalUrl);
   }
 
+  if (isYclientsIframe) {
+    const loginBridgeUrl = yclientsLoginBridgeUrlForIframe(result.openUrl);
+    if (!loginBridgeUrl) {
+      setCrmDataNotice('error', 'Не удалось подготовить ссылку авторизации YCLIENTS. Используйте кнопку «Открыть Booking».');
+      if (iframeButton) {
+        iframeButton.disabled = false;
+        iframeButton.textContent = 'iFrame';
+      }
+      return;
+    }
+
+    if (!iframeLoginWindow || iframeLoginWindow.closed) {
+      iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth');
+    } else {
+      moveCrmBookingPopupToModalPlace(iframeLoginWindow);
+    }
+
+    if (!iframeLoginWindow || iframeLoginWindow.closed) {
+      setCrmDataNotice('error', 'Браузер заблокировал окно YCLIENTS. Разрешите всплывающие окна и нажмите «iFrame» ещё раз.');
+      if (iframeButton) {
+        iframeButton.disabled = false;
+        iframeButton.textContent = 'iFrame';
+      }
+      return;
+    }
+
+    try {
+      iframeLoginWindow.location.replace(loginBridgeUrl);
+      moveCrmBookingPopupToModalPlace(iframeLoginWindow);
+      iframeLoginWindow.focus?.();
+      setCrmDataNotice('success', 'Окно YCLIENTS открыто вместо iFrame. Оно не будет закрываться автоматически; после авторизации в нём можно проверить ответ и cookies.');
+    } catch (error) {
+      setCrmDataNotice('error', error?.message || 'Не удалось открыть окно YCLIENTS.');
+    }
+
+    if (iframeButton) {
+      iframeButton.disabled = false;
+      iframeButton.textContent = 'iFrame';
+    }
+    return;
+  }
+
   renderCrmBookingIframeModal(result, payload, iframeLoginWindow);
-  setCrmDataNotice('success', isYclientsIframe
-    ? 'Пробуем открыть YCLIENTS в iFrame. Если браузер блокирует third-party cookies, используйте основную кнопку «Открыть Booking».'
-    : 'Открываем Booking в iFrame.');
+  setCrmDataNotice('success', 'Открываем Booking в iFrame.');
 
   if (iframeButton) {
     iframeButton.disabled = false;
