@@ -282,7 +282,9 @@ async function authorizeYclientsForExternalOpen(data = {}) {
         authMode: 'yclients-api-crm-login-password',
         partnerTokenSource: 'env',
         userTokenSource: 'crm-data-login-password',
-        message: 'YCLIENTS API-проверка выполнена по логину и паролю из экрана «Данные CRM». Web-кабинет открыт в новой вкладке.'
+        webLoginRequired: true,
+        requiresManualWebLogin: true,
+        message: 'YCLIENTS API-проверка выполнена по логину и паролю из экрана «Данные CRM». Web-кабинет YCLIENTS требует ручной вход: API не создаёт браузерную сессию.'
       };
     } catch (error) {
       return {
@@ -290,7 +292,9 @@ async function authorizeYclientsForExternalOpen(data = {}) {
         authMode: 'yclients-api-crm-login-password-failed',
         partnerTokenSource: 'env',
         userTokenSource: 'crm-data-login-password',
-        message: `YCLIENTS открыт в новой вкладке. API-проверка по данным экрана «Данные CRM» не выполнена: ${yclientsOpenWarning(error)}.`
+        webLoginRequired: true,
+        requiresManualWebLogin: true,
+        message: `YCLIENTS требует ручной вход. API-проверка по данным экрана «Данные CRM» не выполнена: ${yclientsOpenWarning(error)}.`
       };
     }
   }
@@ -303,7 +307,9 @@ async function authorizeYclientsForExternalOpen(data = {}) {
         authMode: 'yclients-api-env-user-token',
         partnerTokenSource: 'env',
         userTokenSource: 'env',
-        message: 'YCLIENTS API-проверка по YCLIENTS_PARTNER_TOKEN и YCLIENTS_USER_TOKEN выполнена. Web-кабинет открыт в новой вкладке.'
+        webLoginRequired: true,
+        requiresManualWebLogin: true,
+        message: 'YCLIENTS API-проверка по YCLIENTS_PARTNER_TOKEN и YCLIENTS_USER_TOKEN выполнена. Web-кабинет YCLIENTS требует ручной вход: API не создаёт браузерную сессию.'
       };
     } catch (error) {
       return {
@@ -311,7 +317,9 @@ async function authorizeYclientsForExternalOpen(data = {}) {
         authMode: 'yclients-api-env-user-token-failed',
         partnerTokenSource: 'env',
         userTokenSource: 'env',
-        message: `YCLIENTS открыт в новой вкладке. API-проверка по env-токенам не выполнена: ${yclientsOpenWarning(error)}.`
+        webLoginRequired: true,
+        requiresManualWebLogin: true,
+        message: `YCLIENTS требует ручной вход. API-проверка по env-токенам не выполнена: ${yclientsOpenWarning(error)}.`
       };
     }
   }
@@ -321,14 +329,18 @@ async function authorizeYclientsForExternalOpen(data = {}) {
       apiAuthorized: false,
       authMode: 'yclients-login-password-only',
       userTokenSource: 'crm-data-login-password',
-      message: 'YCLIENTS открыт в новой вкладке. Для API-проверки добавьте YCLIENTS_PARTNER_TOKEN; логин и пароль берутся с экрана «Данные CRM».'
+      webLoginRequired: true,
+      requiresManualWebLogin: true,
+      message: 'YCLIENTS требует ручной вход. Для API-проверки добавьте YCLIENTS_PARTNER_TOKEN; логин и пароль берутся с экрана «Данные CRM».'
     };
   }
 
   return {
     apiAuthorized: false,
     authMode: 'yclients-no-auth-data',
-    message: 'YCLIENTS открыт в новой вкладке без API-проверки: заполните логин и пароль на экране «Данные CRM» или задайте YCLIENTS_USER_TOKEN в env.'
+    webLoginRequired: true,
+    requiresManualWebLogin: true,
+    message: 'YCLIENTS требует ручной вход. Заполните логин и пароль на экране «Данные CRM» или задайте YCLIENTS_USER_TOKEN в env для API-проверки.'
   };
 }
 
