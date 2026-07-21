@@ -684,12 +684,25 @@ function renderYclientsLoginBridgePage(ticket) {
           window.location.replace(bookingUrl);
         }
 
+        function notifyOpenerLoginSubmitted() {
+          try {
+            if (window.opener && !window.opener.closed) {
+              window.opener.postMessage({
+                type: 'wowlife-yclients-login-submitted',
+                bookingUrl: bookingUrl,
+                loginUrl: loginUrl
+              }, window.location.origin);
+            }
+          } catch (_error) {}
+        }
+
         function submitTopLevelLogin() {
           if (finished) return;
           finished = true;
           statusTitle.textContent = 'Передаём cookies в браузер YCLIENTS...';
-          statusText.textContent = 'Вкладка сейчас перейдёт на yclients.com и отправит логин/пароль напрямую. Ответ YCLIENTS сможет установить cookies своего домена.';
-          setBrowserStatus('info', 'переход на yclients.com', 'Отправляем форму напрямую на домен YCLIENTS. После этого страница будет принадлежать yclients.com.', browserResponseText.textContent);
+          statusText.textContent = 'Вкладка сейчас перейдёт на yclients.com/auth/login/1 и отправит логин/пароль напрямую. После получения cookies исходная вкладка приложения автоматически переведёт это окно на Booking.';
+          setBrowserStatus('info', 'переход на yclients.com', 'Отправляем форму напрямую на домен YCLIENTS. После ответа YCLIENTS это же окно будет автоматически переведено на итоговую ссылку Booking.', browserResponseText.textContent);
+          notifyOpenerLoginSubmitted();
           form.submit();
         }
 
@@ -1096,6 +1109,8 @@ async function createBookingOpenTarget({ session, data } = {}) {
         payloadFields: ['email', 'password'],
         contentType: 'application/json'
       },
+      browserAuthRedirectAfterSubmitMs: 3500,
+      browserAuthFallbackRedirectMs: 14000,
       webLoginResult,
       sessionUpdated: Boolean(webLoginResult?.cookies?.updated || authResult?.cookies?.updated),
       ...authResult,

@@ -5060,12 +5060,69 @@ function crmBookingSuccessMessage(result = {}) {
     return 'YCLIENTS API-авторизация выполнена по логину и паролю с экрана «Данные CRM». Booking открыт в новой вкладке.';
   }
   if (result.authMode === 'yclients-web-login-post') {
-    return 'Открываем YCLIENTS в новой вкладке: вкладка передаст cookies браузеру через прямой запрос к YCLIENTS.';
+    return 'Открываем YCLIENTS в новой вкладке: сначала выполняется вход на yclients.com, затем эта же вкладка перейдёт на расписание.';
   }
   if (result.authMode === 'yclients-login-password-only') {
     return 'YCLIENTS открыт в новой вкладке.';
   }
   return 'Booking открыт в новой вкладке.';
+}
+
+
+function isYclientsLoginBridgeResult(result = {}) {
+  return typeof result.openUrl === 'string'
+    && result.openUrl.includes('/api/crm-data/yclients-login/')
+    && Boolean(result.externalUrl);
+}
+
+function scheduleYclientsBookingRedirect(bookingWindow, result = {}) {
+  if (!bookingWindow || bookingWindow.closed || !result.externalUrl) return null;
+
+  let redirected = false;
+  let fallbackTimer = null;
+  const fallbackDelayMs = Number(result.browserAuthFallbackRedirectMs || 14000);
+  const afterFormSubmitDelayMs = Number(result.browserAuthRedirectAfterSubmitMs || 3500);
+
+  function cleanup() {
+    window.removeEventListener('message', handleBridgeMessage);
+    if (fallbackTimer) {
+      clearTimeout(fallbackTimer);
+      fallbackTimer = null;
+    }
+  }
+
+  function redirectOpenedWindow() {
+    if (redirected) return;
+    redirected = true;
+    cleanup();
+    try {
+      if (bookingWindow && !bookingWindow.closed) {
+        bookingWindow.location.replace(result.externalUrl);
+        window.setTimeout(() => {
+          try { bookingWindow.opener = null; } catch (_error) {}
+        }, 1000);
+      }
+    } catch (_error) {
+      try {
+        if (bookingWindow && !bookingWindow.closed) {
+          bookingWindow.location.href = result.externalUrl;
+        }
+      } catch (_hrefError) {}
+    }
+  }
+
+  function handleBridgeMessage(event) {
+    if (event.source !== bookingWindow) return;
+    if (event.origin !== window.location.origin) return;
+    if (event.data?.type !== 'wowlife-yclients-login-submitted') return;
+
+    window.setTimeout(redirectOpenedWindow, afterFormSubmitDelayMs);
+  }
+
+  window.addEventListener('message', handleBridgeMessage);
+  fallbackTimer = window.setTimeout(redirectOpenedWindow, fallbackDelayMs);
+
+  return cleanup;
 }
 
 async function openCrmBookingExternal() {
@@ -5121,8 +5178,13 @@ async function openCrmBookingExternal() {
   }
 
   if (bookingWindow && !bookingWindow.closed) {
-    bookingWindow.location.replace(targetUrl);
-    try { bookingWindow.opener = null; } catch (_error) {}
+    if (isYclientsLoginBridgeResult(result)) {
+      scheduleYclientsBookingRedirect(bookingWindow, result);
+      bookingWindow.location.replace(targetUrl);
+    } else {
+      bookingWindow.location.replace(targetUrl);
+      try { bookingWindow.opener = null; } catch (_error) {}
+    }
     setCrmDataNotice('success', crmBookingSuccessMessage(result));
   } else {
     setCrmDataNotice('error', 'Браузер заблокировал новую вкладку. Разрешите всплывающие окна и нажмите «Открыть Booking» ещё раз.');
