@@ -5076,6 +5076,26 @@ function isYclientsLoginBridgeResult(result = {}) {
     && Boolean(result.externalUrl);
 }
 
+function normalizeYclientsIframeUrl(value = '') {
+  const rawValue = String(value || '').trim();
+  if (!rawValue) return '';
+
+  try {
+    const parsed = new URL(rawValue, window.location.origin);
+    const host = parsed.hostname.toLowerCase();
+    if (host === 'yclients.com' || host.endsWith('.yclients.com')) {
+      // Web-login is executed on www.yclients.com. For the experimental iframe mode
+      // we keep the timetable on the same host as the login endpoint to avoid
+      // losing host-only auth cookies before the browser applies third-party rules.
+      parsed.protocol = 'https:';
+      parsed.hostname = 'www.yclients.com';
+      return parsed.toString();
+    }
+  } catch (_error) {}
+
+  return rawValue;
+}
+
 function scheduleYclientsBookingRedirect(bookingWindow, result = {}) {
   if (!bookingWindow || bookingWindow.closed || !result.externalUrl) return null;
 
@@ -5252,12 +5272,13 @@ function yclientsLoginBridgeUrlForIframe(openUrl = '') {
 function renderCrmBookingIframeModal(result = {}, payload = {}, iframeLoginWindow = null) {
   closeCrmBookingIframeModal();
 
-  const targetUrl = result.externalUrl || payload.bookingUrl || '';
+  const rawTargetUrl = result.externalUrl || payload.bookingUrl || '';
   const isYclients = result.authMode === 'yclients-web-login-post' || isYclientsLoginBridgeResult(result);
+  const targetUrl = isYclients ? normalizeYclientsIframeUrl(rawTargetUrl) : rawTargetUrl;
   const iframeTitle = isYclients ? 'YCLIENTS в iFrame' : 'Booking в iFrame';
   const loginBridgeUrl = isYclients ? yclientsLoginBridgeUrlForIframe(result.openUrl) : '';
   const intro = isYclients
-    ? 'Для iFrame сначала открываем служебное окно YCLIENTS как top-level страницу: только так браузер получает cookies домена yclients.com. После этого расписание загружается внутри iFrame.'
+    ? 'Экспериментальный режим: сначала выполняем top-level вход в YCLIENTS для получения cookies, затем открываем расписание внутри iFrame. Работа iFrame зависит от настроек third-party cookies в браузере.'
     : 'Открываем Booking сервис внутри iFrame.';
 
   document.body.insertAdjacentHTML('beforeend', `
@@ -5283,18 +5304,19 @@ function renderCrmBookingIframeModal(result = {}, payload = {}, iframeLoginWindo
           </div>
 
           <div class="crm-booking-iframe-target-row">
-            <span>Итоговая ссылка</span>
+            <span>${isYclients ? 'Ссылка для iFrame' : 'Итоговая ссылка'}</span>
             <code>${escapeHtml(targetUrl || 'ссылка не получена')}</code>
           </div>
+          ${isYclients && rawTargetUrl && rawTargetUrl !== targetUrl ? `<div class="crm-booking-iframe-target-row"><span>Ссылка в новой вкладке</span><code>${escapeHtml(rawTargetUrl)}</code></div>` : ''}
 
           <div class="crm-booking-iframe-frame-wrap">
             <iframe id="crmBookingIframeFrame" class="crm-booking-iframe-frame" title="${escapeHtml(iframeTitle)}" src="about:blank" allow="clipboard-read; clipboard-write"></iframe>
           </div>
 
           <div class="crm-booking-iframe-actions">
-            <button id="crmBookingIframeRetry" class="button secondary" type="button">Повторить вход для iFrame</button>
-            <button id="crmBookingIframeExternal" class="button secondary" type="button">Открыть в новой вкладке</button>
-            ${targetUrl ? `<a class="button secondary" href="${escapeHtml(targetUrl)}" target="_blank" rel="noreferrer">Открыть ссылку</a>` : ''}
+            <button id="crmBookingIframeRetry" class="button secondary" type="button">Повторить top-level вход</button>
+            <button id="crmBookingIframeExternal" class="button primary" type="button">Открыть в новой вкладке</button>
+            ${rawTargetUrl ? `<a class="button secondary" href="${escapeHtml(rawTargetUrl)}" target="_blank" rel="noreferrer">Открыть ссылку</a>` : ''}
           </div>
         </div>
       </div>
@@ -5369,10 +5391,12 @@ function renderCrmBookingIframeModal(result = {}, payload = {}, iframeLoginWindo
     }
 
     setCrmIframeStatus(
-      'info',
-      'загрузка',
-      'Открываем YCLIENTS внутри iFrame после top-level авторизации.',
-      source ? `Источник перехода: ${source}. Если внутри снова появится экран входа, браузер блокирует third-party cookies для iframe — используйте кнопку «Открыть в новой вкладке».` : ''
+      'warning',
+      'iframe test',
+      'Пробуем открыть YCLIENTS внутри iFrame после top-level авторизации.',
+      source
+        ? `Источник перехода: ${source}. Для iFrame используется хост www.yclients.com, чтобы совпасть с auth/login/1. Если внутри появится экран входа, браузер не отправляет cookies YCLIENTS как third-party cookies; это ограничение браузера, а не ошибка логина.`
+        : 'Если внутри появится экран входа, браузер не отправляет cookies YCLIENTS как third-party cookies.'
     );
     bookingFrameHasTarget = true;
     bookingFrame.src = targetUrl;
@@ -5474,10 +5498,10 @@ function renderCrmBookingIframeModal(result = {}, payload = {}, iframeLoginWindo
   bookingFrame?.addEventListener('load', () => {
     if (!bookingFrameHasTarget) return;
     setCrmIframeStatus(
-      'success',
-      'iframe loaded',
-      'iFrame загрузился после top-level авторизации.',
-      'Из-за cross-origin политики браузер не даёт проверить содержимое YCLIENTS. Если внутри отображается экран входа, значит браузер блокирует third-party cookies для iframe — используйте «Открыть в новой вкладке».'
+      'warning',
+      'iframe загружен',
+      'iFrame загружен, но авторизацию внутри него проверить нельзя из-за cross-origin политики.',
+      'Если внутри отображается расписание — режим сработал. Если отображается экран входа, браузер блокирует third-party cookies для iframe. Кодом приложения это не обойти: откройте YCLIENTS в новой вкладке или разрешите third-party cookies для yclients.com в настройках браузера.'
     );
   });
 
@@ -5509,7 +5533,7 @@ async function openCrmBookingIframe() {
   }
 
   setCrmDataNotice('success', isYclientsIframe
-    ? 'Готовим iFrame: сначала нужна короткая top-level авторизация YCLIENTS для cookies браузера.'
+    ? 'Готовим экспериментальный iFrame: сначала выполним top-level вход YCLIENTS, затем проверим загрузку внутри iFrame.'
     : 'Готовим iFrame для Booking сервиса.');
 
   let result;
@@ -5536,7 +5560,9 @@ async function openCrmBookingIframe() {
   }
 
   renderCrmBookingIframeModal(result, payload, iframeLoginWindow);
-  setCrmDataNotice('success', 'Открываем Booking в iFrame. Для YCLIENTS служебное окно сначала установит cookies браузера, затем расписание загрузится внутри iFrame.');
+  setCrmDataNotice('success', isYclientsIframe
+    ? 'Пробуем открыть YCLIENTS в iFrame. Если браузер блокирует third-party cookies, используйте основную кнопку «Открыть Booking».'
+    : 'Открываем Booking в iFrame.');
 
   if (iframeButton) {
     iframeButton.disabled = false;
