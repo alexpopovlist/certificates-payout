@@ -5231,7 +5231,7 @@ function yclientsDirectLoginDocumentHtml({ loginUrl, bookingUrl, email, password
   const safeMode = String(mode || 'direct').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48) || 'direct';
   const bodyClass = showScreen ? '' : ' class="silent"';
   const visibleContent = showScreen
-    ? '<main><div class="row"><span class="spin"></span><strong id="yclientsLoginTitle">Авторизуемся в YCLIENTS</strong></div><p id="yclientsLoginText">Отправляем запрос входа без перехода на экран auth/login/1. После завершения откроем расписание.</p><small id="yclientsLoginDetail">Окно останется на этом экране, пока запрос авторизации не завершится или не истечёт таймаут.</small></main>'
+    ? '<main><div class="row"><span class="spin"></span><strong>Готовим авторизацию YCLIENTS</strong></div><p>Отправляем вход на yclients.com/auth/login/1, затем откроем расписание.</p></main>'
     : '<main aria-hidden="true"></main>';
 
   return `<!doctype html>
@@ -5245,9 +5245,9 @@ function yclientsDirectLoginDocumentHtml({ loginUrl, bookingUrl, email, password
       body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#f8fafc;color:#0f172a}
       body.silent{display:block;background:#fff}
       body.silent main{display:none}
-      main{width:min(460px,calc(100vw - 32px));padding:24px;border:1px solid #dbe3ef;border-radius:20px;background:#fff;box-shadow:0 16px 42px rgba(15,23,42,.12)}
-      .row{display:flex;align-items:center;gap:12px}.spin{width:26px;height:26px;border-radius:50%;border:3px solid rgba(37,99,235,.18);border-top-color:#2563eb;animation:spin .8s linear infinite;flex:0 0 auto}
-      p{margin:10px 0 0;color:#64748b;line-height:1.45}small{display:block;margin-top:12px;color:#94a3b8;line-height:1.4}@keyframes spin{to{transform:rotate(360deg)}}
+      main{width:min(420px,calc(100vw - 32px));padding:24px;border:1px solid #dbe3ef;border-radius:20px;background:#fff;box-shadow:0 16px 42px rgba(15,23,42,.12)}
+      .row{display:flex;align-items:center;gap:12px}.spin{width:26px;height:26px;border-radius:50%;border:3px solid rgba(37,99,235,.18);border-top-color:#2563eb;animation:spin .8s linear infinite}
+      p{margin:10px 0 0;color:#64748b;line-height:1.45}@keyframes spin{to{transform:rotate(360deg)}}
     </style>
   </head>
   <body${bodyClass}>
@@ -5260,85 +5260,27 @@ function yclientsDirectLoginDocumentHtml({ loginUrl, bookingUrl, email, password
       (function () {
         var bookingUrl = ${JSON.stringify(String(bookingUrl || ''))};
         var loginUrl = ${JSON.stringify(String(loginUrl || ''))};
-        var email = ${JSON.stringify(String(email || ''))};
-        var password = ${JSON.stringify(String(password || ''))};
         var targetOrigin = ${JSON.stringify(String(targetOrigin || window.location.origin))};
         var loginMode = ${JSON.stringify(safeMode)};
-        var redirected = false;
-        var titleNode = document.getElementById('yclientsLoginTitle');
-        var textNode = document.getElementById('yclientsLoginText');
-        var detailNode = document.getElementById('yclientsLoginDetail');
-
-        function setText(title, text, detail) {
-          if (titleNode && title) titleNode.textContent = title;
-          if (textNode && text) textNode.textContent = text;
-          if (detailNode && detail) detailNode.textContent = detail;
-        }
-
-        function notifyOpener(status) {
+        function notifyOpenerLoginSubmitted() {
           try {
             if (window.opener && !window.opener.closed) {
               window.opener.postMessage({
                 type: 'wowlife-yclients-login-submitted',
                 bookingUrl: bookingUrl,
                 loginUrl: loginUrl,
-                loginMode: loginMode,
-                status: status || 'submitted'
+                loginMode: loginMode
               }, targetOrigin);
             }
           } catch (_error) {}
         }
-
-        function openBooking() {
-          if (redirected) return;
-          redirected = true;
-          setText('Открываем YCLIENTS', 'Авторизация отправлена. Переходим к расписанию.', 'Если расписание попросит войти повторно, нажмите «Открыть Booking» ещё раз или разрешите cookies для yclients.com.');
-          try { window.location.replace(bookingUrl); } catch (_replaceError) { window.location.href = bookingUrl; }
-        }
-
-
-        async function submitLoginWithoutShowingAuthPage() {
-          if (!loginUrl || !bookingUrl || !email || !password) {
-            setText('Не хватает данных', 'Логин, пароль или ссылка YCLIENTS не заполнены.', 'Вернитесь на экран «Данные CRM» и проверьте поля.');
-            return;
-          }
-
-          setText('Авторизуемся в YCLIENTS', 'Отправляем запрос auth/login/1 в фоне. Экран с JSON-ответом пользователю не показывается.', 'После завершения запроса автоматически откроем расписание YCLIENTS.');
-
-          var controller = null;
-          var timeoutId = null;
-          try {
-            if ('AbortController' in window) {
-              controller = new AbortController();
-              timeoutId = window.setTimeout(function () {
-                try { controller.abort(); } catch (_abortError) {}
-              }, 6500);
-            }
-
-            var body = new URLSearchParams();
-            body.set('email', email);
-            body.set('password', password);
-
-            await fetch(loginUrl, {
-              method: 'POST',
-              mode: 'no-cors',
-              credentials: 'include',
-              body: body,
-              signal: controller ? controller.signal : undefined
-            });
-            if (timeoutId) window.clearTimeout(timeoutId);
-            notifyOpener('background-post-finished');
-            window.setTimeout(openBooking, 700);
-          } catch (error) {
-            if (timeoutId) window.clearTimeout(timeoutId);
-            notifyOpener('background-post-error');
-            setText('Переходим к YCLIENTS', 'Фоновый запрос не подтвердил ответ, но экран auth/login/1 не будет показан.', error && error.name === 'AbortError' ? 'Истёк таймаут ожидания. Открываем расписание.' : 'Открываем расписание. При необходимости YCLIENTS попросит войти вручную.');
-            window.setTimeout(openBooking, 700);
-          }
-        }
-
         window.setTimeout(function () {
-          submitLoginWithoutShowingAuthPage();
+          notifyOpenerLoginSubmitted();
+          try {
+            document.getElementById('yclientsTopLevelLoginForm').submit();
+          } catch (_error) {
+            try { window.location.replace(bookingUrl); } catch (_replaceError) { window.location.href = bookingUrl; }
+          }
         }, ${showScreen ? 450 : 60});
       })();
     </script>
@@ -5546,13 +5488,24 @@ async function openCrmBookingExternal() {
 
   if (bookingWindow && !bookingWindow.closed) {
     if (isYclientsLoginBridgeResult(result)) {
-      const directLoginStarted = writeYclientsDirectLoginDocument(bookingWindow, result, payload, {
-        mode: 'open-booking-background-post',
-        showScreen: true
+      const bypassBridgeRoute = needsYclientsHelper && !showYclientsOpeningScreen;
+
+      scheduleYclientsBookingRedirect(bookingWindow, result, {
+        messageSourceWindow: bookingWindow,
+        writeBusyAfterSubmit: false
       });
 
-      if (!directLoginStarted) {
-        bookingWindow.location.replace(result.externalUrl || targetUrl);
+      if (bypassBridgeRoute) {
+        const directLoginStarted = writeYclientsDirectLoginDocument(bookingWindow, result, payload, {
+          mode: 'open-booking-direct',
+          showScreen: true
+        });
+
+        if (!directLoginStarted) {
+          bookingWindow.location.replace(targetUrl);
+        }
+      } else {
+        bookingWindow.location.replace(targetUrl);
       }
     } else {
       bookingWindow.location.replace(targetUrl);
