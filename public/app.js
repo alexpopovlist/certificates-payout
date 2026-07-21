@@ -4976,25 +4976,6 @@ function crmDataFormHtml() {
         <button id="crmDataSaveButton" class="button schedule-submit" type="submit">Сохранить</button>
       </div>
     </form>
-
-    <div id="crmBookingDialog" class="schedule-modal crm-booking-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="crmBookingDialogTitle">
-      <button class="schedule-modal-backdrop" type="button" data-close-crm-booking aria-label="Закрыть Booking"></button>
-      <div class="schedule-panel crm-booking-dialog-panel">
-        <header class="schedule-header crm-booking-dialog-header">
-          <div>
-            <h2 id="crmBookingDialogTitle">Booking</h2>
-            <p id="crmBookingDialogMeta">Данные будут показаны после открытия сервиса.</p>
-          </div>
-          <div class="crm-booking-dialog-header-actions">
-            <a id="crmBookingExternalLink" class="button secondary hidden" href="#" target="_blank" rel="noopener noreferrer">Открыть в новой вкладке</a>
-            <button class="icon-button schedule-close" type="button" data-close-crm-booking aria-label="Закрыть">×</button>
-          </div>
-        </header>
-        <div class="crm-booking-frame-wrap">
-          <iframe id="crmBookingFrame" title="Booking сервис" loading="lazy" referrerpolicy="no-referrer"></iframe>
-        </div>
-      </div>
-    </div>
   `;
 }
 
@@ -5034,30 +5015,73 @@ function setCrmDataNotice(type, message) {
   notice.textContent = message;
 }
 
-function closeCrmBookingDialog() {
-  const dialog = document.querySelector('#crmBookingDialog');
-  const frame = document.querySelector('#crmBookingFrame');
-  if (frame) frame.src = 'about:blank';
-  dialog?.classList.add('hidden');
+function writeOpeningPlaceholder(bookingWindow) {
+  if (!bookingWindow?.document) return;
+  bookingWindow.document.open();
+  bookingWindow.document.write(`
+    <!doctype html>
+    <html lang="ru">
+      <head>
+        <meta charset="utf-8" />
+        <title>Открытие Booking</title>
+        <style>
+          body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: Inter, Arial, sans-serif; color: #101828; background: #f5f7fb; }
+          main { width: min(520px, calc(100vw - 40px)); padding: 28px; border: 1px solid #dbe3ef; border-radius: 24px; background: #fff; box-shadow: 0 18px 50px rgba(15, 23, 42, .12); }
+          h1 { margin: 0 0 10px; font-size: 24px; }
+          p { margin: 0; color: #64748b; line-height: 1.5; }
+        </style>
+      </head>
+      <body>
+        <main>
+          <h1>Открываем Booking</h1>
+          <p>Проверяем данные авторизации и переходим к сервису.</p>
+        </main>
+      </body>
+    </html>
+  `);
+  bookingWindow.document.close();
 }
 
-async function openCrmBookingDialog() {
+function crmBookingSuccessMessage(result = {}) {
+  if (result.message) return result.message;
+  if (result.authMode === 'yclients-api-env-user-token') {
+    return 'YCLIENTS проверен через API по env-токенам и открыт в новой вкладке.';
+  }
+  if (result.authMode === 'yclients-api-crm-login-password') {
+    return 'YCLIENTS проверен через API по логину и паролю с экрана «Данные CRM» и открыт в новой вкладке.';
+  }
+  if (result.authMode === 'yclients-login-password-only') {
+    return 'YCLIENTS открыт в новой вкладке. Для web-кабинета выполните вход на стороне YCLIENTS.';
+  }
+  return 'Booking открыт в новой вкладке.';
+}
+
+async function openCrmBookingExternal() {
   const form = document.querySelector('#crmDataForm');
   const openButton = document.querySelector('#crmDataOpenBookingButton');
   updateCrmDataStateFromForm(form);
+
+  let bookingWindow = null;
+  try {
+    bookingWindow = window.open('', '_blank');
+    writeOpeningPlaceholder(bookingWindow);
+  } catch (_error) {
+    bookingWindow = null;
+  }
 
   if (openButton) {
     openButton.disabled = true;
     openButton.textContent = 'Открываем...';
   }
 
-  let frameResult;
+  let result;
   try {
-    frameResult = await api('/api/crm-data/open-booking', {
+    result = await api('/api/crm-data/open-booking', {
       method: 'POST',
       body: JSON.stringify(buildCrmBookingRequestPayload())
     });
   } catch (error) {
+    try { bookingWindow?.close(); } catch (_closeError) {}
     setCrmDataNotice('error', error.message || 'Не удалось открыть Booking сервис.');
     if (openButton) {
       openButton.disabled = false;
@@ -5066,12 +5090,10 @@ async function openCrmBookingDialog() {
     return;
   }
 
-  const dialog = document.querySelector('#crmBookingDialog');
-  const frame = document.querySelector('#crmBookingFrame');
-  const externalLink = document.querySelector('#crmBookingExternalLink');
-  const meta = document.querySelector('#crmBookingDialogMeta');
-
-  if (!dialog || !frame) {
+  const targetUrl = result.openUrl || result.externalUrl;
+  if (!targetUrl) {
+    try { bookingWindow?.close(); } catch (_closeError) {}
+    setCrmDataNotice('error', 'Не удалось получить ссылку Booking сервиса.');
     if (openButton) {
       openButton.disabled = false;
       openButton.textContent = 'Открыть Booking';
@@ -5079,25 +5101,12 @@ async function openCrmBookingDialog() {
     return;
   }
 
-  setCrmDataNotice('', '');
-  frame.src = frameResult.iframeUrl;
-  dialog.classList.remove('hidden');
-
-  if (externalLink) {
-    externalLink.href = frameResult.externalUrl || frameResult.iframeUrl;
-    externalLink.classList.remove('hidden');
-  }
-
-  if (meta) {
-    if (frameResult.authMode === 'yclients-api') {
-      meta.textContent = 'YCLIENTS открыт в iframe после авторизации через API по сохранённым логину и паролю.';
-    } else if (frameResult.authMode === 'yclients-login-only') {
-      meta.textContent = 'YCLIENTS открыт без API-авторизации: доступны только login/password. Войдите вручную в iframe или откройте сервис в новой вкладке.';
-    } else if (frameResult.authMode === 'basic-url') {
-      meta.textContent = 'Сервис открыт в iframe с базовой авторизацией по сохранённым логину и паролю.';
-    } else {
-      meta.textContent = 'Сервис открыт в iframe без подстановки авторизации.';
-    }
+  if (bookingWindow && !bookingWindow.closed) {
+    bookingWindow.location.replace(targetUrl);
+    try { bookingWindow.opener = null; } catch (_error) {}
+    setCrmDataNotice('success', crmBookingSuccessMessage(result));
+  } else {
+    setCrmDataNotice('error', 'Браузер заблокировал новую вкладку. Разрешите всплывающие окна и нажмите «Открыть Booking» ещё раз.');
   }
 
   if (openButton) {
@@ -5155,10 +5164,7 @@ async function handleCrmDataSubmit(event) {
 
 function setupCrmDataForm() {
   document.querySelector('#crmDataForm')?.addEventListener('submit', handleCrmDataSubmit);
-  document.querySelector('#crmDataOpenBookingButton')?.addEventListener('click', openCrmBookingDialog);
-  document.querySelectorAll('[data-close-crm-booking]').forEach((button) => {
-    button.addEventListener('click', closeCrmBookingDialog);
-  });
+  document.querySelector('#crmDataOpenBookingButton')?.addEventListener('click', openCrmBookingExternal);
 }
 
 async function renderCrmData() {

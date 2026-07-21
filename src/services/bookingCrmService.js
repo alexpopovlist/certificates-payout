@@ -1,12 +1,9 @@
-const { randomUUID } = require('crypto');
 const { query } = require('../db');
 
 const BOOKING_NAME_OPTIONS = ['yclients', 'dikidi Business', 'Собственная', 'Отсутствует', 'Нет данных'];
 const AUTH_TYPE_OPTIONS = ['Базовый', 'Нет данных'];
 const DEFAULT_YCLIENTS_API_BASE_URL = 'https://api.yclients.com/api/v1';
 const DEFAULT_YCLIENTS_AUTH_PATH = '/auth';
-const BOOKING_FRAME_SESSION_TTL_MS = 5 * 60 * 1000;
-const bookingFrameSessions = new Map();
 
 function normalizeText(value) {
   return String(value ?? '').trim();
@@ -131,12 +128,20 @@ function buildBasicAuthUrl(data) {
   return url.toString();
 }
 
+function getYclientsApiBaseUrl() {
+  return String(process.env.YCLIENTS_API_BASE_URL || DEFAULT_YCLIENTS_API_BASE_URL).replace(/\/+$/, '');
+}
+
 function getYclientsAuthUrl() {
   if (process.env.YCLIENTS_AUTH_URL) return process.env.YCLIENTS_AUTH_URL;
 
-  const baseUrl = String(process.env.YCLIENTS_API_BASE_URL || DEFAULT_YCLIENTS_API_BASE_URL).replace(/\/+$/, '');
+  const baseUrl = getYclientsApiBaseUrl();
   const path = String(process.env.YCLIENTS_AUTH_PATH || DEFAULT_YCLIENTS_AUTH_PATH);
   return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+function getYclientsCompaniesUrl() {
+  return process.env.YCLIENTS_COMPANIES_URL || `${getYclientsApiBaseUrl()}/companies`;
 }
 
 function getYclientsPartnerToken() {
@@ -161,10 +166,10 @@ function getYclientsUserTokenFromPayload(payload = {}) {
     .find(Boolean) || '';
 }
 
-async function fetchYclientsUserToken({ login, password } = {}) {
+async function fetchYclientsUserToken({ login, password, partnerToken: providedPartnerToken } = {}) {
   const normalizedLogin = normalizeText(login);
   const normalizedPassword = normalizeText(password);
-  const partnerToken = getYclientsPartnerToken();
+  const partnerToken = normalizeText(providedPartnerToken) || getYclientsPartnerToken();
 
   if (!normalizedLogin || !normalizedPassword) {
     throw buildServiceError('Для авторизации в YCLIENTS заполните логин и пароль.');
@@ -176,7 +181,7 @@ async function fetchYclientsUserToken({ login, password } = {}) {
       partnerToken: '',
       payload: {},
       skipped: true,
-      message: 'YCLIENTS API token не настроен. Автоматическая авторизация по API пропущена.'
+      message: 'YCLIENTS partner token не настроен. API-проверка авторизации пропущена.'
     };
   }
 
@@ -214,176 +219,81 @@ async function fetchYclientsUserToken({ login, password } = {}) {
   };
 }
 
+function getYclientsEnvUserToken() {
+  return normalizeText(process.env.YCLIENTS_USER_TOKEN || process.env.YCLIENTS_SYSTEM_USER_TOKEN);
+}
+
+async function verifyYclientsUserToken({ partnerToken, userToken } = {}) {
+  const response = await fetch(getYclientsCompaniesUrl(), {
+    method: 'GET',
+    headers: {
+      'Accept': 'application/vnd.yclients.v2+json, application/json, text/plain, */*',
+      'Authorization': yclientsAuthorizationHeader({ partnerToken, userToken })
+    }
+  });
+
+  if (!response.ok) {
+    const payload = parseJsonSafe(await response.text());
+    const message = payload?.meta?.message
+      || payload?.message
+      || payload?.error
+      || payload?.errors?.[0]?.message
+      || 'YCLIENTS не подтвердил доступ по YCLIENTS_PARTNER_TOKEN и YCLIENTS_USER_TOKEN.';
+    throw buildServiceError(message, response.status, payload);
+  }
+
+  return true;
+}
+
+async function authorizeYclientsForExternalOpen(data = {}) {
+  const partnerToken = getYclientsPartnerToken();
+  const envUserToken = getYclientsEnvUserToken();
+  const login = normalizeText(data.login);
+  const password = normalizeText(data.password);
+
+  if (partnerToken && login && password) {
+    await fetchYclientsUserToken({ login, password, partnerToken });
+    return {
+      apiAuthorized: true,
+      authMode: 'yclients-api-crm-login-password',
+      partnerTokenSource: 'env',
+      userTokenSource: 'crm-data-login-password',
+      message: 'YCLIENTS API-авторизация выполнена по логину и паролю из экрана «Данные CRM». Web-кабинет открыт в новой вкладке.'
+    };
+  }
+
+  if (partnerToken && envUserToken) {
+    await verifyYclientsUserToken({ partnerToken, userToken: envUserToken });
+    return {
+      apiAuthorized: true,
+      authMode: 'yclients-api-env-user-token',
+      partnerTokenSource: 'env',
+      userTokenSource: 'env',
+      message: 'YCLIENTS API-авторизация по YCLIENTS_PARTNER_TOKEN и YCLIENTS_USER_TOKEN выполнена. Web-кабинет открыт в новой вкладке.'
+    };
+  }
+
+  if (login && password) {
+    return {
+      apiAuthorized: false,
+      authMode: 'yclients-login-password-only',
+      userTokenSource: 'crm-data-login-password',
+      message: 'YCLIENTS открыт в новой вкладке. Для автоматической API-проверки добавьте YCLIENTS_PARTNER_TOKEN; логин и пароль берутся с экрана «Данные CRM».'
+    };
+  }
+
+  return {
+    apiAuthorized: false,
+    authMode: 'yclients-no-auth-data',
+    message: 'YCLIENTS открыт в новой вкладке без API-проверки: заполните логин и пароль на экране «Данные CRM» или задайте YCLIENTS_USER_TOKEN в env.'
+  };
+}
+
 function yclientsAuthorizationHeader({ partnerToken, userToken } = {}) {
   return `Bearer ${partnerToken}, User ${userToken}`;
 }
 
-function createYclientsLoginOnlyFrame({ targetUrl } = {}) {
-  return {
-    result: true,
-    iframeUrl: targetUrl,
-    externalUrl: targetUrl,
-    authMode: 'yclients-login-only',
-    message: 'YCLIENTS открыт без API-авторизации: доступны только login/password, поэтому автоматический вход через API не выполняется.'
-  };
-}
-
-function cleanupBookingFrameSessions() {
-  const now = Date.now();
-  for (const [id, frameSession] of bookingFrameSessions.entries()) {
-    if (!frameSession || frameSession.expiresAt <= now) {
-      bookingFrameSessions.delete(id);
-    }
-  }
-}
-
-function createLocalFrameSession({ targetUrl, headers = {}, externalUrl, authMode = 'none' } = {}) {
-  cleanupBookingFrameSessions();
-  const id = randomUUID();
-  bookingFrameSessions.set(id, {
-    id,
-    targetUrl,
-    headers,
-    externalUrl: externalUrl || targetUrl,
-    authMode,
-    createdAt: Date.now(),
-    expiresAt: Date.now() + BOOKING_FRAME_SESSION_TTL_MS
-  });
-  return id;
-}
-
-function getBookingFrameSession(id) {
-  cleanupBookingFrameSessions();
-  const frameSession = bookingFrameSessions.get(normalizeText(id));
-  if (!frameSession) {
-    throw buildServiceError('Сессия открытия Booking истекла. Нажмите «Открыть Booking» ещё раз.', 404);
-  }
-  return frameSession;
-}
-
-function getProxyBasePath(frameSession) {
-  return `/api/crm-data/booking-frame/${encodeURIComponent(frameSession.id)}`;
-}
-
-function getTargetDirectoryPath(targetUrl) {
-  const url = new URL(targetUrl);
-  return new URL('.', url).pathname || '/';
-}
-
-function normalizeProxyPath(value = '') {
-  const text = normalizeText(value);
-  if (!text || text === '/') return '';
-  return text.startsWith('/') ? text : `/${text}`;
-}
-
-function buildProxyUrl(frameSession, targetUrl) {
-  const url = new URL(targetUrl);
-  return `${getProxyBasePath(frameSession)}${url.pathname}${url.search}${url.hash}`;
-}
-
-function buildFrameTargetUrl(frameSession, proxiedPath = '', queryString = '') {
-  const initialUrl = new URL(frameSession.targetUrl);
-  const path = normalizeProxyPath(proxiedPath);
-
-  if (!path) {
-    return initialUrl.toString();
-  }
-
-  const targetUrl = new URL(frameSession.targetUrl);
-  targetUrl.pathname = path;
-  targetUrl.search = queryString ? (queryString.startsWith('?') ? queryString : `?${queryString}`) : '';
-  targetUrl.hash = '';
-  return targetUrl.toString();
-}
-
-function rewriteRootRelativeUrls(html, frameSession) {
-  const proxyBase = getProxyBasePath(frameSession);
-  return html
-    .replace(/\b(src|href|action)=(["'])\/(?!\/|api\/crm-data\/booking-frame\/)([^"']*)\2/gi, (_match, attr, quote, path) => {
-      return `${attr}=${quote}${proxyBase}/${path}${quote}`;
-    })
-    .replace(/url\((['"]?)\/(?!\/|api\/crm-data\/booking-frame\/)([^)'"]+)\1\)/gi, (_match, quote, path) => {
-      return `url(${quote}${proxyBase}/${path}${quote})`;
-    });
-}
-
-function buildYclientsProxyScript(frameSession) {
-  const proxyBase = getProxyBasePath(frameSession);
-  const targetOrigin = new URL(frameSession.targetUrl).origin;
-
-  return `<script>
-(function () {
-  var proxyBase = ${JSON.stringify(proxyBase)};
-  var targetOrigin = ${JSON.stringify(targetOrigin)};
-
-  function proxifyUrl(inputUrl) {
-    if (!inputUrl) return inputUrl;
-    try {
-      var url = new URL(String(inputUrl), document.baseURI || window.location.href);
-      if (url.pathname.indexOf(proxyBase + '/') === 0 || url.pathname === proxyBase) {
-        return url.href;
-      }
-      if (url.origin === targetOrigin || (url.origin === window.location.origin && url.pathname.charAt(0) === '/')) {
-        return window.location.origin + proxyBase + url.pathname + url.search + url.hash;
-      }
-    } catch (_error) {}
-    return inputUrl;
-  }
-
-  if (window.fetch) {
-    var originalFetch = window.fetch.bind(window);
-    window.fetch = function (input, init) {
-      if (input && typeof Request !== 'undefined' && input instanceof Request) {
-        var proxiedRequest = new Request(proxifyUrl(input.url), input);
-        return originalFetch(proxiedRequest, init);
-      }
-      return originalFetch(proxifyUrl(input), init);
-    };
-  }
-
-  if (window.XMLHttpRequest) {
-    var originalOpen = window.XMLHttpRequest.prototype.open;
-    window.XMLHttpRequest.prototype.open = function (method, url) {
-      arguments[1] = proxifyUrl(url);
-      return originalOpen.apply(this, arguments);
-    };
-  }
-})();
-</script>`;
-}
-
-function injectHtmlBase(html, targetUrl, frameSession) {
-  const directoryPath = getTargetDirectoryPath(targetUrl);
-  const baseHref = `${getProxyBasePath(frameSession)}${directoryPath}`;
-  const baseTag = `<base href="${baseHref}">`;
-  const proxyScript = buildYclientsProxyScript(frameSession);
-  let preparedHtml = rewriteRootRelativeUrls(html, frameSession);
-
-  if (/<base\s/i.test(preparedHtml)) {
-    preparedHtml = preparedHtml.replace(/<base\s[^>]*>/i, baseTag);
-  } else if (/<head[^>]*>/i.test(preparedHtml)) {
-    preparedHtml = preparedHtml.replace(/<head([^>]*)>/i, `<head$1>${baseTag}`);
-  } else {
-    preparedHtml = `${baseTag}${preparedHtml}`;
-  }
-
-  if (/<head[^>]*>/i.test(preparedHtml)) {
-    return preparedHtml.replace(/<head([^>]*)>/i, `<head$1>${proxyScript}`);
-  }
-
-  return `${proxyScript}${preparedHtml}`;
-}
-
-function isYclientsBooking(data = {}) {
-  return normalizeText(data.bookingName).toLowerCase() === 'yclients';
-}
-function isAllowedYclientsHost(url) {
-  const hostname = url.hostname.toLowerCase();
-  return hostname === 'yclients.com' || hostname.endsWith('.yclients.com');
-}
-
-
-async function createBookingOpenFrame({ session, data } = {}) {
+async function createBookingOpenTarget({ session, data } = {}) {
   getSessionProfileId(session);
   const normalized = normalizeBookingCrmData(data || {});
   const parsedTargetUrl = parseBookingUrl(normalized.bookingUrl);
@@ -394,43 +304,25 @@ async function createBookingOpenFrame({ session, data } = {}) {
       throw buildServiceError('Для авторизации YCLIENTS укажите ссылку на домене yclients.com.');
     }
 
-    const { userToken, partnerToken, skipped } = await fetchYclientsUserToken({
-      login: normalized.login,
-      password: normalized.password
-    });
-
-    if (skipped || !userToken || !partnerToken) {
-      return createYclientsLoginOnlyFrame({ targetUrl });
-    }
-
-    const frameId = createLocalFrameSession({
-      targetUrl,
-      externalUrl: targetUrl,
-      authMode: 'yclients-api',
-      headers: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7',
-        'Authorization': yclientsAuthorizationHeader({ partnerToken, userToken })
-      }
-    });
-
+    const authResult = await authorizeYclientsForExternalOpen(normalized);
     return {
       result: true,
-      iframeUrl: `/api/crm-data/booking-frame/${encodeURIComponent(frameId)}`,
+      openUrl: targetUrl,
       externalUrl: targetUrl,
-      authMode: 'yclients-api',
-      message: 'YCLIENTS авторизован через API, данные открываются в iframe через защищённый локальный proxy.'
+      ...authResult
     };
   }
 
-  const iframeUrl = buildBasicAuthUrl(normalized);
+  const externalUrl = buildBasicAuthUrl(normalized);
   return {
     result: true,
-    iframeUrl,
-    externalUrl: iframeUrl,
+    openUrl: externalUrl,
+    externalUrl,
     authMode: normalized.authType === 'Базовый' ? 'basic-url' : 'none',
+    apiAuthorized: false,
     message: normalized.authType === 'Базовый'
-      ? 'Booking открыт в iframe с базовой авторизацией по сохранённым логину и паролю.'
-      : 'Booking открыт в iframe без подстановки авторизации.'
+      ? 'Booking открыт в новой вкладке с базовой авторизацией в URL.'
+      : 'Booking открыт в новой вкладке без подстановки авторизации.'
   };
 }
 
@@ -487,8 +379,5 @@ module.exports = {
   getBookingCrmData,
   saveBookingCrmData,
   normalizeBookingCrmData,
-  createBookingOpenFrame,
-  getBookingFrameSession,
-  buildFrameTargetUrl,
-  injectHtmlBase
+  createBookingOpenTarget
 };
