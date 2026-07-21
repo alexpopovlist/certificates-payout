@@ -5180,6 +5180,94 @@ function appendQueryParam(url, name, value) {
   return `${rawUrl}${separator}${encodeURIComponent(name)}=${encodeURIComponent(String(value))}`;
 }
 
+function yclientsDirectLoginDocumentHtml({ loginUrl, bookingUrl, email, password, targetOrigin, mode = 'direct', showScreen = false } = {}) {
+  const safeMode = String(mode || 'direct').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48) || 'direct';
+  const bodyClass = showScreen ? '' : ' class="silent"';
+  const visibleContent = showScreen
+    ? '<main><div class="row"><span class="spin"></span><strong>Готовим авторизацию YCLIENTS</strong></div><p>Отправляем вход на yclients.com/auth/login/1, затем откроем расписание.</p></main>'
+    : '<main aria-hidden="true"></main>';
+
+  return `<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>YCLIENTS</title>
+    <style>
+      body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#f8fafc;color:#0f172a}
+      body.silent{display:block;background:#fff}
+      body.silent main{display:none}
+      main{width:min(420px,calc(100vw - 32px));padding:24px;border:1px solid #dbe3ef;border-radius:20px;background:#fff;box-shadow:0 16px 42px rgba(15,23,42,.12)}
+      .row{display:flex;align-items:center;gap:12px}.spin{width:26px;height:26px;border-radius:50%;border:3px solid rgba(37,99,235,.18);border-top-color:#2563eb;animation:spin .8s linear infinite}
+      p{margin:10px 0 0;color:#64748b;line-height:1.45}@keyframes spin{to{transform:rotate(360deg)}}
+    </style>
+  </head>
+  <body${bodyClass}>
+    ${visibleContent}
+    <form id="yclientsTopLevelLoginForm" method="post" action="${escapeHtml(loginUrl)}" target="_self" style="display:none">
+      <input type="hidden" name="email" value="${escapeHtml(email)}" />
+      <input type="hidden" name="password" value="${escapeHtml(password)}" />
+    </form>
+    <script>
+      (function () {
+        var bookingUrl = ${JSON.stringify(String(bookingUrl || ''))};
+        var loginUrl = ${JSON.stringify(String(loginUrl || ''))};
+        var targetOrigin = ${JSON.stringify(String(targetOrigin || window.location.origin))};
+        var loginMode = ${JSON.stringify(safeMode)};
+        function notifyOpenerLoginSubmitted() {
+          try {
+            if (window.opener && !window.opener.closed) {
+              window.opener.postMessage({
+                type: 'wowlife-yclients-login-submitted',
+                bookingUrl: bookingUrl,
+                loginUrl: loginUrl,
+                loginMode: loginMode
+              }, targetOrigin);
+            }
+          } catch (_error) {}
+        }
+        window.setTimeout(function () {
+          notifyOpenerLoginSubmitted();
+          try {
+            document.getElementById('yclientsTopLevelLoginForm').submit();
+          } catch (_error) {
+            try { window.location.replace(bookingUrl); } catch (_replaceError) { window.location.href = bookingUrl; }
+          }
+        }, ${showScreen ? 450 : 60});
+      })();
+    </script>
+  </body>
+</html>`;
+}
+
+function writeYclientsDirectLoginDocument(targetWindow, result = {}, payload = {}, options = {}) {
+  if (!targetWindow || targetWindow.closed) return false;
+  const loginUrl = result.loginUrl || 'https://www.yclients.com/auth/login/1';
+  const bookingUrl = result.externalUrl || result.openUrl || payload.bookingUrl || '';
+  const email = payload.login || crmDataState.login || '';
+  const password = payload.password || crmDataState.password || '';
+
+  if (!loginUrl || !bookingUrl || !email || !password) return false;
+
+  try {
+    targetWindow.document.open();
+    targetWindow.document.write(yclientsDirectLoginDocumentHtml({
+      loginUrl,
+      bookingUrl,
+      email,
+      password,
+      targetOrigin: window.location.origin,
+      mode: options.mode || 'direct',
+      showScreen: options.showScreen === true
+    }));
+    targetWindow.document.close();
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
 function crmBookingSuccessMessage(result = {}) {
   if (result.message) return result.message;
   if (result.authMode === 'yclients-api-env-user-token') {
@@ -5230,6 +5318,7 @@ function scheduleYclientsBookingRedirect(bookingWindow, result = {}, options = {
   let redirected = false;
   let cleanupTimer = null;
   const helperWindow = options.helperWindow || null;
+  const messageSourceWindow = options.messageSourceWindow || bookingWindow;
   const afterFormSubmitDelayMs = Number(result.browserAuthRedirectAfterSubmitMs || 3500);
 
   function cleanup() {
@@ -5266,7 +5355,7 @@ function scheduleYclientsBookingRedirect(bookingWindow, result = {}, options = {
   }
 
   function handleBridgeMessage(event) {
-    if (event.source !== bookingWindow) return;
+    if (event.source !== messageSourceWindow) return;
     if (event.origin !== window.location.origin) return;
     if (event.data?.type !== 'wowlife-yclients-login-submitted') return;
 
@@ -5345,11 +5434,33 @@ async function openCrmBookingExternal() {
   if (bookingWindow && !bookingWindow.closed) {
     if (isYclientsLoginBridgeResult(result)) {
       const helperReady = yclientsHelperWindow && !yclientsHelperWindow.closed;
-      scheduleYclientsBookingRedirect(bookingWindow, result, { helperWindow: helperReady ? yclientsHelperWindow : null });
-      const bridgeUrl = helperReady
-        ? appendQueryParam(targetUrl, 'helperWindow', yclientsHelperWindowName)
-        : targetUrl;
-      bookingWindow.location.replace(bridgeUrl);
+      const bypassBridgeRoute = needsYclientsHelper && !showYclientsOpeningScreen;
+
+      if (bypassBridgeRoute) {
+        const loginSourceWindow = helperReady ? yclientsHelperWindow : bookingWindow;
+        scheduleYclientsBookingRedirect(bookingWindow, result, {
+          helperWindow: helperReady ? yclientsHelperWindow : null,
+          messageSourceWindow: loginSourceWindow
+        });
+
+        const directLoginStarted = writeYclientsDirectLoginDocument(loginSourceWindow, result, payload, {
+          mode: helperReady ? 'helper-window-direct' : 'top-level-direct',
+          showScreen: false
+        });
+
+        if (!directLoginStarted) {
+          const bridgeUrl = helperReady
+            ? appendQueryParam(targetUrl, 'helperWindow', yclientsHelperWindowName)
+            : targetUrl;
+          bookingWindow.location.replace(bridgeUrl);
+        }
+      } else {
+        scheduleYclientsBookingRedirect(bookingWindow, result, { helperWindow: helperReady ? yclientsHelperWindow : null });
+        const bridgeUrl = helperReady
+          ? appendQueryParam(targetUrl, 'helperWindow', yclientsHelperWindowName)
+          : targetUrl;
+        bookingWindow.location.replace(bridgeUrl);
+      }
     } else {
       try { yclientsHelperWindow?.close(); } catch (_closeError) {}
       bookingWindow.location.replace(targetUrl);
@@ -5732,15 +5843,30 @@ async function openCrmBookingIframe() {
     }
 
     try {
-      // The iFrame mode now mirrors the reliable "Open Booking" flow:
-      // open the YCLIENTS login bridge in the service window, wait until the
-      // bridge reports that auth/login/1 was submitted as a top-level request,
-      // then redirect that same window to the final timetable URL.
-      scheduleYclientsBookingRedirect(iframeLoginWindow, result);
-      iframeLoginWindow.location.replace(loginBridgeUrl);
+      // The iFrame mode mirrors the reliable "Open Booking" flow. When the
+      // opening screen is disabled, do not navigate through our
+      // /api/crm-data/yclients-login route: write the top-level login form
+      // directly into the service window and let it post to YCLIENTS.
+      const showYclientsOpeningScreen = crmDataState.showYclientsOpeningScreen !== false;
+      scheduleYclientsBookingRedirect(iframeLoginWindow, result, { messageSourceWindow: iframeLoginWindow });
+
+      if (showYclientsOpeningScreen) {
+        iframeLoginWindow.location.replace(loginBridgeUrl);
+      } else {
+        const directLoginStarted = writeYclientsDirectLoginDocument(iframeLoginWindow, result, payload, {
+          mode: 'iframe-popup-direct',
+          showScreen: false
+        });
+        if (!directLoginStarted) {
+          iframeLoginWindow.location.replace(loginBridgeUrl);
+        }
+      }
+
       moveCrmBookingPopupToModalPlace(iframeLoginWindow);
       iframeLoginWindow.focus?.();
-      setCrmDataNotice('success', 'Окно YCLIENTS открыто вместо iFrame. После auth/login/1 оно автоматически перейдёт на расписание, как кнопка «Открыть Booking».');
+      setCrmDataNotice('success', showYclientsOpeningScreen
+        ? 'Окно YCLIENTS открыто вместо iFrame. После auth/login/1 оно автоматически перейдёт на расписание, как кнопка «Открыть Booking».'
+        : 'Окно YCLIENTS открыто без служебного экрана. После auth/login/1 оно автоматически перейдёт на расписание, как кнопка «Открыть Booking».');
     } catch (error) {
       setCrmDataNotice('error', error?.message || 'Не удалось открыть окно YCLIENTS.');
     }
