@@ -563,6 +563,8 @@ function renderYclientsLoginBridgePage(ticket, options = {}) {
   const yclientsCompanyId = normalizeYclientsCompanyId(ticket.apiAuthResult?.yclientsCompanyId);
   const yclientsCompanyIdSource = normalizeText(ticket.apiAuthResult?.yclientsCompanyIdSource);
   const forceTopLevelLogin = Boolean(options.forceTopLevel);
+  const helperWindowName = normalizeText(options.helperWindowName).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+  const useHelperWindow = Boolean(helperWindowName) && !forceTopLevelLogin;
   const autoBrowserLoginDelayMs = email && password ? (forceTopLevelLogin ? 250 : 900) : 0;
 
   return `<!doctype html>
@@ -600,16 +602,20 @@ function renderYclientsLoginBridgePage(ticket, options = {}) {
       .primary { border-color: #0f172a; background: #0f172a; color: #fff; }
       .secondary { background: #fff; color: #0f172a; }
       .muted { font-size: 13px; color: #94a3b8; }
+      .busy-indicator { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 14px; border-radius: 16px; background: #f8fafc; border: 1px solid #dbeafe; color: #1e3a8a; font-weight: 700; }
+      .spinner { width: 22px; height: 22px; border-radius: 999px; border: 3px solid rgba(37, 99, 235, .18); border-top-color: #2563eb; animation: spin .8s linear infinite; flex: 0 0 auto; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .spinner { animation: none; border-top-color: rgba(37, 99, 235, .18); } }
       .hidden { display: none !important; }
     </style>
   </head>
   <body>
     <main>
       <h1>Открываем YCLIENTS</h1>
-      <p>${forceTopLevelLogin ? 'Выполняем прямой вход через домен yclients.com, чтобы браузер получил cookies YCLIENTS, затем открываем расписание.' : 'Сначала показываем серверную проверку, затем пробуем скрытую отправку формы. Для гарантированного получения cookies браузером после скрытой попытки автоматически выполняется прямой вход через домен yclients.com и только потом открывается расписание.'}</p>
+      <p>${forceTopLevelLogin ? 'Выполняем прямой вход через домен yclients.com, чтобы браузер получил cookies YCLIENTS, затем открываем расписание.' : useHelperWindow ? 'Сначала показываем серверную проверку, затем отправляем вход YCLIENTS в служебное окно. В этой вкладке остаётся индикатор загрузки до перехода на расписание.' : 'Сначала показываем серверную проверку, затем пробуем скрытую отправку формы. Для гарантированного получения cookies браузером после скрытой попытки автоматически выполняется прямой вход через домен yclients.com и только потом открывается расписание.'}</p>
       <div class="status" aria-live="polite">
         <strong id="statusTitle">Запрос авторизации выполнен сервером</strong>
-        <span id="statusText">${forceTopLevelLogin ? `POST ${escapeHtml(loginUrl)} с email и password уже выполнен на backend. Сейчас откроем top-level вход через домен YCLIENTS, чтобы браузер установил cookies для iframe.` : `POST ${escapeHtml(loginUrl)} с email и password уже выполнен на backend. Следующий шаг — браузерная авторизация: сначала скрытая попытка, затем надёжный top-level вход через домен YCLIENTS.`}</span>
+        <span id="statusText">${forceTopLevelLogin ? `POST ${escapeHtml(loginUrl)} с email и password уже выполнен на backend. Сейчас откроем top-level вход через домен YCLIENTS, чтобы браузер установил cookies для iframe.` : useHelperWindow ? `POST ${escapeHtml(loginUrl)} с email и password уже выполнен на backend. Следующий шаг — отправить браузерный вход в служебное окно, а в этой вкладке показывать загрузку до перехода на расписание.` : `POST ${escapeHtml(loginUrl)} с email и password уже выполнен на backend. Следующий шаг — браузерная авторизация: сначала скрытая попытка, затем надёжный top-level вход через домен YCLIENTS.`}</span>
         ${apiMessage ? `<span class="muted">${escapeHtml(apiMessage)}</span>` : ''}
         <div class="service-status ${escapeHtml(webLoginStatus.tone)}">
           <div class="service-row">
@@ -634,8 +640,12 @@ function renderYclientsLoginBridgePage(ticket, options = {}) {
             <strong>Передача cookies в браузер</strong>
             <span class="badge" id="browserStatusBadge">ожидание</span>
           </div>
-          <span id="browserStatusText">${forceTopLevelLogin ? 'Сейчас будет выполнен прямой вход через yclients.com/auth/login/1. Этот режим используется перед открытием YCLIENTS внутри iframe.' : 'Через несколько секунд будет выполнена скрытая отправка формы в iframe. После неё вкладка автоматически выполнит прямой вход через yclients.com/auth/login/1, чтобы cookies точно попали в браузерную сессию YCLIENTS.'}</span>
+          <span id="browserStatusText">${forceTopLevelLogin ? 'Сейчас будет выполнен прямой вход через yclients.com/auth/login/1. Этот режим используется перед открытием YCLIENTS внутри iframe.' : useHelperWindow ? 'Через несколько секунд служебное окно выполнит вход на yclients.com/auth/login/1. Здесь будет показан индикатор до редиректа на расписание.' : 'Через несколько секунд будет выполнена скрытая отправка формы в iframe. После неё вкладка автоматически выполнит прямой вход через yclients.com/auth/login/1, чтобы cookies точно попали в браузерную сессию YCLIENTS.'}</span>
           <pre id="browserResponseText">Скрытый iframe не позволяет прочитать текст ответа YCLIENTS из-за cross-origin политики браузера. Серверный ответ показан выше.</pre>
+          <div id="busyIndicator" class="busy-indicator hidden" role="status" aria-live="polite">
+            <span class="spinner" aria-hidden="true"></span>
+            <span id="busyText">Ожидаем переход на расписание YCLIENTS...</span>
+          </div>
         </div>
       </div>
       <div class="actions">
@@ -643,7 +653,7 @@ function renderYclientsLoginBridgePage(ticket, options = {}) {
         <button class="secondary" id="openNowButton" type="button">Открыть Booking без ожидания</button>
         <a class="secondary" href="${escapeHtml(bookingUrl)}" rel="noreferrer">Открыть вручную</a>
       </div>
-      <p class="muted" style="margin-top:18px">Скрытый вход используется только как мягкая попытка. Надёжный шаг — короткий прямой переход через auth/login/1: именно он позволяет браузеру получить cookies YCLIENTS, после чего исходная вкладка приложения автоматически откроет расписание.</p>
+      <p class="muted" style="margin-top:18px">${useHelperWindow ? 'Служебное окно нужно только для получения cookies YCLIENTS. Основная вкладка остаётся на странице ожидания и автоматически перейдёт на расписание.' : 'Скрытый вход используется только как мягкая попытка. Надёжный шаг — короткий прямой переход через auth/login/1: именно он позволяет браузеру получить cookies YCLIENTS, после чего исходная вкладка приложения автоматически откроет расписание.'}</p>
     </main>
 
     <form id="yclientsHiddenLoginForm" method="post" action="${escapeHtml(loginUrl)}" target="yclientsHiddenLoginFrame" style="display:none">
@@ -671,9 +681,13 @@ function renderYclientsLoginBridgePage(ticket, options = {}) {
         var browserResponseText = document.getElementById('browserResponseText');
         var browserLoginButton = document.getElementById('browserLoginButton');
         var openNowButton = document.getElementById('openNowButton');
+        var busyIndicator = document.getElementById('busyIndicator');
+        var busyText = document.getElementById('busyText');
         var hiddenForm = document.getElementById('yclientsHiddenLoginForm');
         var hiddenFrame = document.getElementById('yclientsHiddenLoginFrame');
         var form = document.getElementById('yclientsTopLevelLoginForm');
+        var helperWindowName = ${escapeJsString(helperWindowName)};
+        var useHelperWindow = ${useHelperWindow ? 'true' : 'false'};
         var finished = false;
         var hiddenAttemptStarted = false;
         var hiddenAttemptCompleted = false;
@@ -687,6 +701,12 @@ function renderYclientsLoginBridgePage(ticket, options = {}) {
           if (typeof responseText === 'string') {
             browserResponseText.textContent = responseText;
           }
+        }
+
+        function setBusy(active, text) {
+          if (!busyIndicator) return;
+          busyIndicator.classList.toggle('hidden', !active);
+          if (busyText && text) busyText.textContent = text;
         }
 
         function openBooking() {
@@ -703,7 +723,8 @@ function renderYclientsLoginBridgePage(ticket, options = {}) {
               window.opener.postMessage({
                 type: 'wowlife-yclients-login-submitted',
                 bookingUrl: bookingUrl,
-                loginUrl: loginUrl
+                loginUrl: loginUrl,
+                loginMode: useHelperWindow ? 'helper-window' : 'top-level'
               }, window.location.origin);
             }
           } catch (_error) {}
@@ -711,7 +732,6 @@ function renderYclientsLoginBridgePage(ticket, options = {}) {
 
         function submitTopLevelLogin() {
           if (finished) return;
-          finished = true;
           if (hiddenTimeoutId) {
             clearTimeout(hiddenTimeoutId);
             hiddenTimeoutId = null;
@@ -720,10 +740,34 @@ function renderYclientsLoginBridgePage(ticket, options = {}) {
             clearTimeout(directLoginTimerId);
             directLoginTimerId = null;
           }
+
+          if (useHelperWindow && helperWindowName) {
+            statusTitle.textContent = 'Авторизуемся в YCLIENTS...';
+            statusText.textContent = 'Служебное окно выполняет POST на yclients.com/auth/login/1. Эта вкладка остаётся на экране ожидания и перейдёт на расписание после получения cookies.';
+            setBrowserStatus('info', 'вход в окне', 'Отправляем форму в служебное окно YCLIENTS. В этой вкладке показываем индикатор, пока идёт редирект на расписание.', 'Ответ auth/login/1 откроется в служебном окне. После короткой паузы эта вкладка перейдёт на расписание YCLIENTS.');
+            setBusy(true, 'Авторизуемся в YCLIENTS и ждём редирект на расписание...');
+            browserLoginButton.disabled = true;
+            openNowButton.disabled = true;
+            form.target = helperWindowName;
+            notifyOpenerLoginSubmitted();
+            try {
+              form.submit();
+            } catch (error) {
+              browserLoginButton.disabled = false;
+              openNowButton.disabled = false;
+              setBusy(false);
+              setBrowserStatus('error', 'ошибка', 'Не удалось отправить вход в служебное окно YCLIENTS.', error && error.message ? error.message : String(error));
+            }
+            return;
+          }
+
+          finished = true;
           statusTitle.textContent = 'Выполняем прямой вход через YCLIENTS...';
           statusText.textContent = 'Вкладка ненадолго перейдёт на yclients.com/auth/login/1, чтобы ответ пришёл от домена YCLIENTS и браузер сохранил его cookies. После этого исходная вкладка приложения переведёт это окно на расписание.';
           setBrowserStatus('info', 'прямой вход', 'Отправляем форму напрямую на домен YCLIENTS. Этот шаг обязателен для гарантированной установки cookies в браузерную сессию YCLIENTS.', browserResponseText.textContent);
+          setBusy(true, 'Выполняем вход и ждём редирект на расписание...');
           notifyOpenerLoginSubmitted();
+          form.target = '_self';
           form.submit();
         }
 
@@ -801,10 +845,12 @@ function renderYclientsLoginBridgePage(ticket, options = {}) {
         if (autoDelay > 0) {
           statusText.textContent = forceTopLevelLogin
             ? 'Серверный ответ показан ниже. Сейчас сразу выполним прямой вход через домен YCLIENTS для установки cookies перед загрузкой iFrame.'
-            : 'Серверный ответ показан ниже. Сейчас попробуем скрытую авторизацию через iframe, затем автоматически выполним прямой вход через домен YCLIENTS для установки cookies.';
+            : useHelperWindow
+              ? 'Серверный ответ показан ниже. Сейчас отправим вход YCLIENTS в служебное окно и покажем индикатор до перехода на расписание.'
+              : 'Серверный ответ показан ниже. Сейчас попробуем скрытую авторизацию через iframe, затем автоматически выполним прямой вход через домен YCLIENTS для установки cookies.';
           window.setTimeout(function () {
             if (!finished) {
-              if (forceTopLevelLogin) submitTopLevelLogin();
+              if (forceTopLevelLogin || useHelperWindow) submitTopLevelLogin();
               else submitHiddenLogin();
             }
           }, autoDelay);

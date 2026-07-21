@@ -42,7 +42,8 @@ router.get('/yclients-login/:ticketId', (request, response, next) => {
       .set('Pragma', 'no-cache')
       .set('Expires', '0')
       .send(renderYclientsLoginBridgePage(ticket, {
-        forceTopLevel: request.query.mode === 'top-level'
+        forceTopLevel: request.query.mode === 'top-level',
+        helperWindowName: request.query.helperWindow || ''
       }));
   } catch (error) {
     next(error);

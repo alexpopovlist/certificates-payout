@@ -5110,6 +5110,56 @@ function openCrmBookingPopup(name = '_blank') {
   return bookingWindow && !bookingWindow.closed ? bookingWindow : null;
 }
 
+function crmDataIsYclientsBasicPayload(payload = {}) {
+  return String(payload.bookingName || '').trim().toLowerCase() === 'yclients'
+    && String(payload.authType || '').trim() === 'Базовый';
+}
+
+function crmBookingAuthHelperFeatures() {
+  const screenLeft = Number(window.screenX ?? window.screenLeft ?? 0);
+  const screenTop = Number(window.screenY ?? window.screenTop ?? 0);
+  const left = Math.max(0, Math.floor(screenLeft + 24));
+  const top = Math.max(0, Math.floor(screenTop + 80));
+  return [
+    'popup=yes',
+    'resizable=yes',
+    'scrollbars=yes',
+    'width=520',
+    'height=360',
+    `left=${left}`,
+    `top=${top}`
+  ].join(',');
+}
+
+function writeYclientsAuthHelperPlaceholder(targetWindow) {
+  if (!targetWindow || targetWindow.closed) return;
+  try {
+    targetWindow.document.open();
+    targetWindow.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Авторизация YCLIENTS</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#f8fafc;color:#0f172a}.card{width:min(420px,calc(100vw - 32px));padding:24px;border:1px solid #dbe3ef;border-radius:20px;background:#fff;box-shadow:0 16px 42px rgba(15,23,42,.12)}.spin{width:26px;height:26px;border-radius:50%;border:3px solid rgba(37,99,235,.18);border-top-color:#2563eb;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.row{display:flex;gap:12px;align-items:center}p{margin:10px 0 0;color:#64748b;line-height:1.45}</style></head><body><div class="card"><div class="row"><span class="spin"></span><strong>Готовим авторизацию YCLIENTS</strong></div><p>Это служебное окно нужно только для получения cookies YCLIENTS. Основная вкладка покажет индикатор и откроет расписание.</p></div></body></html>`);
+    targetWindow.document.close();
+  } catch (_error) {}
+}
+
+function openYclientsAuthHelperWindow(name = 'wowlifeYclientsBookingAuthHelper') {
+  let helperWindow = null;
+  try {
+    helperWindow = window.open('', name, crmBookingAuthHelperFeatures());
+    writeYclientsAuthHelperPlaceholder(helperWindow);
+    try { helperWindow.blur?.(); } catch (_blurError) {}
+    try { window.focus?.(); } catch (_focusError) {}
+  } catch (_error) {
+    helperWindow = null;
+  }
+  return helperWindow && !helperWindow.closed ? helperWindow : null;
+}
+
+function appendQueryParam(url, name, value) {
+  const rawUrl = String(url || '');
+  if (!rawUrl || !name || value === undefined || value === null || value === '') return rawUrl;
+  const separator = rawUrl.includes('?') ? '&' : '?';
+  return `${rawUrl}${separator}${encodeURIComponent(name)}=${encodeURIComponent(String(value))}`;
+}
+
 function crmBookingSuccessMessage(result = {}) {
   if (result.message) return result.message;
   if (result.authMode === 'yclients-api-env-user-token') {
@@ -5154,11 +5204,12 @@ function normalizeYclientsIframeUrl(value = '') {
   return rawValue;
 }
 
-function scheduleYclientsBookingRedirect(bookingWindow, result = {}) {
+function scheduleYclientsBookingRedirect(bookingWindow, result = {}, options = {}) {
   if (!bookingWindow || bookingWindow.closed || !result.externalUrl) return null;
 
   let redirected = false;
   let cleanupTimer = null;
+  const helperWindow = options.helperWindow || null;
   const afterFormSubmitDelayMs = Number(result.browserAuthRedirectAfterSubmitMs || 3500);
 
   function cleanup() {
@@ -5173,6 +5224,11 @@ function scheduleYclientsBookingRedirect(bookingWindow, result = {}) {
     if (redirected) return;
     redirected = true;
     cleanup();
+    try {
+      if (helperWindow && !helperWindow.closed) {
+        helperWindow.close();
+      }
+    } catch (_helperCloseError) {}
     try {
       if (bookingWindow && !bookingWindow.closed) {
         bookingWindow.location.replace(result.externalUrl);
@@ -5207,13 +5263,21 @@ async function openCrmBookingExternal() {
   const form = document.querySelector('#crmDataForm');
   const openButton = document.querySelector('#crmDataOpenBookingButton');
   updateCrmDataStateFromForm(form);
+  const payload = buildCrmBookingRequestPayload();
+  const needsYclientsHelper = crmDataIsYclientsBasicPayload(payload);
+  const yclientsHelperWindowName = 'wowlifeYclientsBookingAuthHelper';
 
   let bookingWindow = null;
+  let yclientsHelperWindow = null;
   try {
     bookingWindow = window.open('', '_blank');
     writeOpeningPlaceholder(bookingWindow);
+    if (needsYclientsHelper) {
+      yclientsHelperWindow = openYclientsAuthHelperWindow(yclientsHelperWindowName);
+    }
   } catch (_error) {
     bookingWindow = null;
+    yclientsHelperWindow = null;
   }
 
   if (openButton) {
@@ -5225,10 +5289,11 @@ async function openCrmBookingExternal() {
   try {
     result = await api('/api/crm-data/open-booking', {
       method: 'POST',
-      body: JSON.stringify(buildCrmBookingRequestPayload())
+      body: JSON.stringify(payload)
     });
   } catch (error) {
     try { bookingWindow?.close(); } catch (_closeError) {}
+    try { yclientsHelperWindow?.close(); } catch (_closeError) {}
     setCrmDataNotice('error', error.message || 'Не удалось открыть Booking сервис.');
     if (openButton) {
       openButton.disabled = false;
@@ -5247,6 +5312,7 @@ async function openCrmBookingExternal() {
   const targetUrl = result.openUrl || result.externalUrl;
   if (!targetUrl) {
     try { bookingWindow?.close(); } catch (_closeError) {}
+    try { yclientsHelperWindow?.close(); } catch (_closeError) {}
     setCrmDataNotice('error', 'Не удалось получить ссылку Booking сервиса.');
     if (openButton) {
       openButton.disabled = false;
@@ -5257,9 +5323,14 @@ async function openCrmBookingExternal() {
 
   if (bookingWindow && !bookingWindow.closed) {
     if (isYclientsLoginBridgeResult(result)) {
-      scheduleYclientsBookingRedirect(bookingWindow, result);
-      bookingWindow.location.replace(targetUrl);
+      const helperReady = yclientsHelperWindow && !yclientsHelperWindow.closed;
+      scheduleYclientsBookingRedirect(bookingWindow, result, { helperWindow: helperReady ? yclientsHelperWindow : null });
+      const bridgeUrl = helperReady
+        ? appendQueryParam(targetUrl, 'helperWindow', yclientsHelperWindowName)
+        : targetUrl;
+      bookingWindow.location.replace(bridgeUrl);
     } else {
+      try { yclientsHelperWindow?.close(); } catch (_closeError) {}
       bookingWindow.location.replace(targetUrl);
       try { bookingWindow.opener = null; } catch (_error) {}
     }
