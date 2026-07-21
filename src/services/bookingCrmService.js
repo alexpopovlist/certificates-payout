@@ -402,7 +402,7 @@ function renderYclientsLoginBridgePage(ticket) {
   const password = normalizeText(ticket.password);
   const apiMessage = normalizeText(ticket.apiAuthResult?.message);
   const webLoginStatus = formatYclientsWebLoginStatus(ticket.apiAuthResult?.webLoginResult);
-  const redirectDelayMs = webLoginStatus.tone === 'success' ? 6000 : 0;
+  const autoBrowserLoginDelayMs = email && password ? 6500 : 0;
 
   return `<!doctype html>
 <html lang="ru">
@@ -415,15 +415,16 @@ function renderYclientsLoginBridgePage(ticket) {
       :root { color-scheme: light; }
       * { box-sizing: border-box; }
       body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: #101828; background: #f3f6fb; }
-      main { width: min(620px, calc(100vw - 40px)); padding: 32px; border: 1px solid #dbe3ef; border-radius: 28px; background: #fff; box-shadow: 0 20px 60px rgba(15, 23, 42, .14); }
+      main { width: min(680px, calc(100vw - 40px)); padding: 32px; border: 1px solid #dbe3ef; border-radius: 28px; background: #fff; box-shadow: 0 20px 60px rgba(15, 23, 42, .14); }
       h1 { margin: 0 0 10px; font-size: 28px; line-height: 1.2; }
       p { margin: 0 0 16px; color: #64748b; line-height: 1.5; font-size: 16px; }
       .status { display: grid; gap: 10px; margin: 22px 0; padding: 18px; border-radius: 18px; background: #f8fafc; border: 1px solid #e2e8f0; color: #334155; }
-      .service-status { display: grid; gap: 12px; margin: 18px 0 0; padding: 16px; border-radius: 18px; border: 1px solid #e2e8f0; background: #fff; }
-      .service-status.success { border-color: #bbf7d0; background: #f0fdf4; }
-      .service-status.error { border-color: #fecaca; background: #fef2f2; }
-      .service-status.warning { border-color: #fde68a; background: #fffbeb; }
-      .service-status strong { color: #0f172a; }
+      .service-status, .browser-status { display: grid; gap: 12px; margin: 18px 0 0; padding: 16px; border-radius: 18px; border: 1px solid #e2e8f0; background: #fff; }
+      .service-status.success, .browser-status.success { border-color: #bbf7d0; background: #f0fdf4; }
+      .service-status.error, .browser-status.error { border-color: #fecaca; background: #fef2f2; }
+      .service-status.warning, .browser-status.warning { border-color: #fde68a; background: #fffbeb; }
+      .service-status.info, .browser-status.info { border-color: #bfdbfe; background: #eff6ff; }
+      .service-status strong, .browser-status strong { color: #0f172a; }
       .service-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
       .badge { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 10px; border-radius: 999px; background: rgba(15, 23, 42, .08); color: #0f172a; font-size: 13px; font-weight: 800; }
       pre { max-height: 260px; overflow: auto; margin: 0; padding: 14px; border-radius: 14px; background: rgba(15, 23, 42, .06); color: #0f172a; white-space: pre-wrap; word-break: break-word; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
@@ -431,21 +432,21 @@ function renderYclientsLoginBridgePage(ticket) {
       button, a { min-height: 46px; padding: 12px 18px; border-radius: 14px; border: 1px solid #dbe3ef; font: inherit; font-weight: 700; cursor: pointer; text-decoration: none; }
       .primary { border-color: #0f172a; background: #0f172a; color: #fff; }
       .secondary { background: #fff; color: #0f172a; }
-      iframe { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; border: 0; }
       .muted { font-size: 13px; color: #94a3b8; }
+      .hidden { display: none !important; }
     </style>
   </head>
   <body>
     <main>
       <h1>Открываем YCLIENTS</h1>
-      <p>Выполняем вход через сохранённые логин и пароль, затем откроем Booking-ссылку.</p>
+      <p>Сначала показываем серверный ответ авторизации, затем эта же вкладка отправит вход напрямую на домен yclients.com, чтобы браузер мог получить cookies YCLIENTS.</p>
       <div class="status" aria-live="polite">
-        <strong id="statusTitle">Запрос авторизации выполнен</strong>
-        <span id="statusText">POST ${escapeHtml(loginUrl)} с email и password.</span>
+        <strong id="statusTitle">Запрос авторизации выполнен сервером</strong>
+        <span id="statusText">POST ${escapeHtml(loginUrl)} с email и password уже выполнен на backend. Следующий шаг — браузерная авторизация на домене YCLIENTS.</span>
         ${apiMessage ? `<span class="muted">${escapeHtml(apiMessage)}</span>` : ''}
         <div class="service-status ${escapeHtml(webLoginStatus.tone)}">
           <div class="service-row">
-            <strong>Статус авторизации</strong>
+            <strong>Серверный статус авторизации</strong>
             <span class="badge">${escapeHtml(webLoginStatus.httpStatus)}</span>
           </div>
           <span>${escapeHtml(webLoginStatus.label)}</span>
@@ -453,16 +454,24 @@ function renderYclientsLoginBridgePage(ticket) {
           <pre>${escapeHtml(webLoginStatus.responseText)}</pre>
           <span class="muted">${escapeHtml(webLoginStatus.cookieMessage)}</span>
         </div>
+        <div class="browser-status info" id="browserStatusBox">
+          <div class="service-row">
+            <strong>Передача cookies в браузер</strong>
+            <span class="badge" id="browserStatusBadge">ожидание</span>
+          </div>
+          <span id="browserStatusText">Через несколько секунд вкладка отправит login-запрос напрямую на yclients.com. Если YCLIENTS вернёт Set-Cookie, браузер сохранит их для домена yclients.com.</span>
+          <pre id="browserResponseText">Браузерный ответ появится здесь, если YCLIENTS разрешит прочитать его через CORS. Если CORS заблокирует чтение ответа, будет выполнена прямая отправка формы на yclients.com.</pre>
+        </div>
       </div>
       <div class="actions">
-        <button class="primary" id="openNowButton" type="button">Открыть Booking сейчас</button>
+        <button class="primary" id="browserLoginButton" type="button">Передать cookies в браузер YCLIENTS сейчас</button>
+        <button class="secondary" id="openNowButton" type="button">Открыть Booking без ожидания</button>
         <a class="secondary" href="${escapeHtml(bookingUrl)}" rel="noreferrer">Открыть вручную</a>
       </div>
-      <p class="muted" style="margin-top:18px">Если YCLIENTS всё равно показывает форму входа, значит web-сессия не была создана браузером. В этом случае выполните вход на странице YCLIENTS вручную.</p>
+      <p class="muted" style="margin-top:18px">Установить cookie домена yclients.com из ответа нашего домена нельзя: браузер принимает такие cookies только из ответа самого yclients.com. Поэтому вкладка выполняет прямой браузерный запрос к YCLIENTS.</p>
     </main>
 
-    <iframe id="yclientsAuthFrame" name="yclientsAuthFrame" title="YCLIENTS authorization"></iframe>
-    <form id="yclientsLoginForm" method="post" action="${escapeHtml(loginUrl)}" target="yclientsAuthFrame" style="display:none">
+    <form id="yclientsTopLevelLoginForm" method="post" action="${escapeHtml(loginUrl)}" target="_self" style="display:none">
       <input type="hidden" name="email" value="${escapeHtml(email)}" />
       <input type="hidden" name="password" value="${escapeHtml(password)}" />
     </form>
@@ -470,47 +479,112 @@ function renderYclientsLoginBridgePage(ticket) {
     <script>
       (function () {
         var bookingUrl = ${escapeJsString(bookingUrl)};
+        var loginUrl = ${escapeJsString(loginUrl)};
+        var email = ${escapeJsString(email)};
+        var password = ${escapeJsString(password)};
         var statusTitle = document.getElementById('statusTitle');
         var statusText = document.getElementById('statusText');
+        var browserStatusBox = document.getElementById('browserStatusBox');
+        var browserStatusBadge = document.getElementById('browserStatusBadge');
+        var browserStatusText = document.getElementById('browserStatusText');
+        var browserResponseText = document.getElementById('browserResponseText');
+        var browserLoginButton = document.getElementById('browserLoginButton');
         var openNowButton = document.getElementById('openNowButton');
-        var form = document.getElementById('yclientsLoginForm');
-        var frame = document.getElementById('yclientsAuthFrame');
-        var redirected = false;
+        var form = document.getElementById('yclientsTopLevelLoginForm');
+        var finished = false;
+
+        function setBrowserStatus(tone, badge, text, responseText) {
+          browserStatusBox.className = 'browser-status ' + tone;
+          browserStatusBadge.textContent = badge;
+          browserStatusText.textContent = text;
+          if (typeof responseText === 'string') {
+            browserResponseText.textContent = responseText;
+          }
+        }
 
         function openBooking() {
-          if (redirected) return;
-          redirected = true;
+          if (finished) return;
+          finished = true;
           statusTitle.textContent = 'Открываем Booking...';
           statusText.textContent = 'Переходим к сохранённой ссылке YCLIENTS.';
           window.location.replace(bookingUrl);
         }
 
-        openNowButton.addEventListener('click', openBooking);
-        frame.addEventListener('load', function () {
-          statusTitle.textContent = 'Браузерная отправка авторизации выполнена';
-          statusText.textContent = 'Статус и текст ответа сервиса показаны ниже. Booking можно открыть вручную.';
-        });
-
-        try {
+        function submitTopLevelLogin() {
+          if (finished) return;
+          finished = true;
+          statusTitle.textContent = 'Передаём cookies в браузер YCLIENTS...';
+          statusText.textContent = 'Вкладка сейчас перейдёт на yclients.com и отправит логин/пароль напрямую. Ответ YCLIENTS сможет установить cookies своего домена.';
+          setBrowserStatus('info', 'переход на yclients.com', 'Отправляем форму напрямую на домен YCLIENTS. После этого страница будет принадлежать yclients.com.', browserResponseText.textContent);
           form.submit();
-          var redirectDelayMs = ${redirectDelayMs};
-          if (redirectDelayMs > 0) {
-            statusText.textContent = 'Статус и текст ответа сервиса показаны ниже. Автопереход к Booking через ' + Math.round(redirectDelayMs / 1000) + ' сек.';
-            setTimeout(openBooking, redirectDelayMs);
-          } else {
-            statusTitle.textContent = 'Авторизация не подтверждена';
-            statusText.textContent = 'Проверьте статус и ответ сервиса ниже. Booking можно открыть вручную.';
+        }
+
+        async function tryBrowserJsonLogin() {
+          if (!email || !password) {
+            setBrowserStatus('error', 'нет данных', 'Логин или пароль не заполнены. Передать cookies в браузер нельзя.', '');
+            return;
           }
-        } catch (error) {
-          statusTitle.textContent = 'Не удалось автоматически отправить авторизацию';
-          statusText.textContent = 'Нажмите «Открыть Booking сейчас» и войдите вручную.';
+
+          browserLoginButton.disabled = true;
+          setBrowserStatus('info', 'fetch', 'Пробуем выполнить браузерный POST с JSON и credentials: include.', 'Ожидаем ответ YCLIENTS...');
+
+          try {
+            var response = await fetch(loginUrl, {
+              method: 'POST',
+              credentials: 'include',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json, text/plain, */*'
+              },
+              body: JSON.stringify({ email: email, password: password })
+            });
+            var text = await response.text();
+            setBrowserStatus(
+              response.ok ? 'success' : 'warning',
+              'HTTP ' + response.status,
+              response.ok
+                ? 'Браузерный запрос выполнен. Если YCLIENTS вернул Set-Cookie, браузер сохранил cookies для yclients.com. Открываем Booking.'
+                : 'YCLIENTS вернул неуспешный HTTP-статус. Ответ показан ниже.',
+              text || 'Пустой ответ сервиса.'
+            );
+            if (response.ok) {
+              window.setTimeout(openBooking, 2200);
+              return;
+            }
+            finished = false;
+            browserLoginButton.disabled = false;
+          } catch (error) {
+            setBrowserStatus(
+              'warning',
+              'CORS',
+              'Браузер не дал прочитать ответ YCLIENTS через fetch. Сейчас выполнится прямая отправка формы на yclients.com, чтобы ответ пришёл от самого домена YCLIENTS и смог установить cookies.',
+              error && error.message ? error.message : String(error)
+            );
+            browserLoginButton.disabled = false;
+            window.setTimeout(submitTopLevelLogin, 1600);
+          }
+        }
+
+        browserLoginButton.addEventListener('click', function () {
+          if (finished) return;
+          tryBrowserJsonLogin();
+        });
+        openNowButton.addEventListener('click', openBooking);
+
+        var autoDelay = ${autoBrowserLoginDelayMs};
+        if (autoDelay > 0) {
+          statusText.textContent = 'Серверный ответ показан ниже. Через ' + Math.round(autoDelay / 1000) + ' сек. начнётся браузерная передача cookies в YCLIENTS.';
+          window.setTimeout(function () {
+            if (!finished) tryBrowserJsonLogin();
+          }, autoDelay);
+        } else {
+          setBrowserStatus('error', 'нет данных', 'Логин или пароль не заполнены. Заполните их на экране «Данные CRM».', '');
         }
       })();
     </script>
   </body>
 </html>`;
 }
-
 
 async function postYclientsWebLoginJson({ login, password, session } = {}) {
   const normalizedLogin = normalizeText(login);
@@ -796,7 +870,7 @@ async function createBookingOpenTarget({ session, data } = {}) {
       webLoginResult,
       sessionUpdated: Boolean(webLoginResult?.cookies?.updated || authResult?.cookies?.updated),
       ...authResult,
-      message: 'Открываем YCLIENTS в новой вкладке: сначала отправляется POST /auth/login/1, затем открывается Booking-ссылка.'
+      message: 'Открываем YCLIENTS в новой вкладке: сначала показывается серверный ответ авторизации, затем вкладка выполняет браузерный POST на yclients.com для установки cookies.'
     };
   }
 
