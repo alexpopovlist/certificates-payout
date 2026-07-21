@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS profile_booking_crm_data (
   login TEXT NOT NULL DEFAULT '',
   password TEXT NOT NULL DEFAULT '',
   yclients_partner_token TEXT NOT NULL DEFAULT '',
+  show_yclients_opening_screen BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

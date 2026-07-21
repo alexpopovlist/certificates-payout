@@ -56,7 +56,8 @@ const crmDataState = {
   authType: 'Нет данных',
   login: '',
   password: '',
-  yclientsPartnerToken: ''
+  yclientsPartnerToken: '',
+  showYclientsOpeningScreen: true
 };
 
 const CRM_BOOKING_NAME_OPTIONS = ['yclients', 'dikidi Business', 'Собственная', 'Отсутствует', 'Нет данных'];
@@ -4930,6 +4931,7 @@ function updateCrmDataState(item = {}) {
   crmDataState.login = String(item.login || '').trim();
   crmDataState.password = String(item.password || '').trim();
   crmDataState.yclientsPartnerToken = String(item.yclientsPartnerToken || '').trim();
+  crmDataState.showYclientsOpeningScreen = item.showYclientsOpeningScreen !== false;
 }
 
 function crmDataOptionHtml(value, selectedValue) {
@@ -4976,6 +4978,13 @@ function crmDataFormHtml() {
           <label for="crmYclientsPartnerToken">Partner Yclients Токен</label>
           <input id="crmYclientsPartnerToken" name="yclientsPartnerToken" type="text" autocomplete="off" spellcheck="false" placeholder="Partner Yclients Токен" value="${escapeHtml(crmDataState.yclientsPartnerToken)}" />
         </div>
+
+        <div class="schedule-field schedule-field-full crm-data-field crm-data-checkbox-field">
+          <label class="crm-data-checkbox-label" for="crmShowYclientsOpeningScreen">
+            <input id="crmShowYclientsOpeningScreen" name="showYclientsOpeningScreen" type="checkbox" ${crmDataState.showYclientsOpeningScreen ? 'checked' : ''} />
+            <span>Показывать экран 'Открываем YCLIENTS'</span>
+          </label>
+        </div>
       </div>
 
       <div class="schedule-actions crm-data-actions">
@@ -4996,7 +5005,8 @@ function updateCrmDataStateFromForm(form) {
     authType: formData.get('authType'),
     login: formData.get('login'),
     password: formData.get('password'),
-    yclientsPartnerToken: formData.get('yclientsPartnerToken')
+    yclientsPartnerToken: formData.get('yclientsPartnerToken'),
+    showYclientsOpeningScreen: formData.get('showYclientsOpeningScreen') === 'on'
   });
 }
 
@@ -5007,7 +5017,8 @@ function buildCrmBookingRequestPayload() {
     authType: crmDataState.authType,
     login: crmDataState.login,
     password: crmDataState.password,
-    yclientsPartnerToken: crmDataState.yclientsPartnerToken
+    yclientsPartnerToken: crmDataState.yclientsPartnerToken,
+    showYclientsOpeningScreen: crmDataState.showYclientsOpeningScreen
   };
 }
 
@@ -5107,12 +5118,12 @@ function moveCrmBookingPopupToModalPlace(bookingWindow) {
   try { bookingWindow.focus?.(); } catch (_error) {}
 }
 
-function openCrmBookingPopup(name = '_blank') {
+function openCrmBookingPopup(name = '_blank', options = {}) {
   let bookingWindow = null;
   try {
     bookingWindow = window.open('', name, crmBookingPopupFeatures());
     moveCrmBookingPopupToModalPlace(bookingWindow);
-    writeOpeningPlaceholder(bookingWindow);
+    if (options.showPlaceholder !== false) writeOpeningPlaceholder(bookingWindow);
   } catch (_error) {
     bookingWindow = null;
   }
@@ -5149,11 +5160,11 @@ function writeYclientsAuthHelperPlaceholder(targetWindow) {
   } catch (_error) {}
 }
 
-function openYclientsAuthHelperWindow(name = 'wowlifeYclientsBookingAuthHelper') {
+function openYclientsAuthHelperWindow(name = 'wowlifeYclientsBookingAuthHelper', options = {}) {
   let helperWindow = null;
   try {
     helperWindow = window.open('', name, crmBookingAuthHelperFeatures());
-    writeYclientsAuthHelperPlaceholder(helperWindow);
+    if (options.showPlaceholder !== false) writeYclientsAuthHelperPlaceholder(helperWindow);
     try { helperWindow.blur?.(); } catch (_blurError) {}
     try { window.focus?.(); } catch (_focusError) {}
   } catch (_error) {
@@ -5274,15 +5285,16 @@ async function openCrmBookingExternal() {
   updateCrmDataStateFromForm(form);
   const payload = buildCrmBookingRequestPayload();
   const needsYclientsHelper = crmDataIsYclientsBasicPayload(payload);
+  const showYclientsOpeningScreen = crmDataState.showYclientsOpeningScreen !== false;
   const yclientsHelperWindowName = 'wowlifeYclientsBookingAuthHelper';
 
   let bookingWindow = null;
   let yclientsHelperWindow = null;
   try {
     bookingWindow = window.open('', '_blank');
-    writeOpeningPlaceholder(bookingWindow);
+    if (showYclientsOpeningScreen) writeOpeningPlaceholder(bookingWindow);
     if (needsYclientsHelper) {
-      yclientsHelperWindow = openYclientsAuthHelperWindow(yclientsHelperWindowName);
+      yclientsHelperWindow = openYclientsAuthHelperWindow(yclientsHelperWindowName, { showPlaceholder: showYclientsOpeningScreen });
     }
   } catch (_error) {
     bookingWindow = null;
@@ -5546,7 +5558,7 @@ function renderCrmBookingIframeModal(result = {}, payload = {}, iframeLoginWindo
       return iframeLoginWindow;
     }
 
-    iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth');
+    iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth', { showPlaceholder: crmDataState.showYclientsOpeningScreen !== false });
     return iframeLoginWindow && !iframeLoginWindow.closed ? iframeLoginWindow : null;
   }
 
@@ -5654,7 +5666,7 @@ async function openCrmBookingIframe() {
   let iframeLoginWindow = null;
 
   if (isYclientsIframe) {
-    iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth');
+    iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth', { showPlaceholder: crmDataState.showYclientsOpeningScreen !== false });
     if (!iframeLoginWindow) {
       setCrmDataNotice('error', 'Браузер заблокировал окно YCLIENTS. Разрешите всплывающие окна и нажмите «iFrame» ещё раз.');
       return;
@@ -5705,7 +5717,7 @@ async function openCrmBookingIframe() {
     }
 
     if (!iframeLoginWindow || iframeLoginWindow.closed) {
-      iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth');
+      iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth', { showPlaceholder: crmDataState.showYclientsOpeningScreen !== false });
     } else {
       moveCrmBookingPopupToModalPlace(iframeLoginWindow);
     }
@@ -5720,10 +5732,15 @@ async function openCrmBookingIframe() {
     }
 
     try {
+      // The iFrame mode now mirrors the reliable "Open Booking" flow:
+      // open the YCLIENTS login bridge in the service window, wait until the
+      // bridge reports that auth/login/1 was submitted as a top-level request,
+      // then redirect that same window to the final timetable URL.
+      scheduleYclientsBookingRedirect(iframeLoginWindow, result);
       iframeLoginWindow.location.replace(loginBridgeUrl);
       moveCrmBookingPopupToModalPlace(iframeLoginWindow);
       iframeLoginWindow.focus?.();
-      setCrmDataNotice('success', 'Окно YCLIENTS открыто вместо iFrame. Оно не будет закрываться автоматически; после авторизации в нём можно проверить ответ и cookies.');
+      setCrmDataNotice('success', 'Окно YCLIENTS открыто вместо iFrame. После auth/login/1 оно автоматически перейдёт на расписание, как кнопка «Открыть Booking».');
     } catch (error) {
       setCrmDataNotice('error', error?.message || 'Не удалось открыть окно YCLIENTS.');
     }
@@ -5770,7 +5787,8 @@ async function handleCrmDataSubmit(event) {
         authType: crmDataState.authType,
         login: crmDataState.login,
         password: crmDataState.password,
-        yclientsPartnerToken: crmDataState.yclientsPartnerToken
+        yclientsPartnerToken: crmDataState.yclientsPartnerToken,
+        showYclientsOpeningScreen: crmDataState.showYclientsOpeningScreen
       })
     });
 

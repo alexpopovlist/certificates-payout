@@ -12,6 +12,17 @@ const yclientsLoginTickets = new Map();
 function normalizeText(value) {
   return String(value ?? '').trim();
 }
+
+function normalizeBoolean(value, fallback = false) {
+  if (typeof value === 'boolean') return value;
+  if (value === undefined || value === null || value === '') return Boolean(fallback);
+
+  const text = normalizeText(value).toLowerCase();
+  if (['true', '1', 'yes', 'on', 'да'].includes(text)) return true;
+  if (['false', '0', 'no', 'off', 'нет'].includes(text)) return false;
+
+  return Boolean(fallback);
+}
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -201,7 +212,8 @@ function normalizeBookingCrmData(value = {}) {
     authType: normalizeOption(value.authType ?? value.auth_type, AUTH_TYPE_OPTIONS, 'Нет данных'),
     login: normalizeText(value.login),
     password: normalizeText(value.password),
-    yclientsPartnerToken: normalizeText(value.yclientsPartnerToken ?? value.yclients_partner_token)
+    yclientsPartnerToken: normalizeText(value.yclientsPartnerToken ?? value.yclients_partner_token),
+    showYclientsOpeningScreen: normalizeBoolean(value.showYclientsOpeningScreen ?? value.show_yclients_opening_screen, true)
   };
 }
 
@@ -214,6 +226,7 @@ function mapRow(row = {}, profileId = '') {
     login: row.login || '',
     password: row.password || '',
     yclientsPartnerToken: row.yclients_partner_token || '',
+    showYclientsOpeningScreen: normalizeBoolean(row.show_yclients_opening_screen, true),
     updatedAt: row.updated_at || null
   };
 }
@@ -227,6 +240,7 @@ function defaultBookingCrmData(profileId) {
     login: '',
     password: '',
     yclientsPartnerToken: '',
+    showYclientsOpeningScreen: true,
     updatedAt: null
   };
 }
@@ -489,7 +503,7 @@ function cleanupYclientsLoginTickets() {
   }
 }
 
-function createYclientsLoginTicket({ bookingUrl, login, password, apiAuthResult = {} } = {}) {
+function createYclientsLoginTicket({ bookingUrl, login, password, apiAuthResult = {}, showYclientsOpeningScreen = true } = {}) {
   cleanupYclientsLoginTickets();
 
   const ticketId = crypto.randomBytes(24).toString('hex');
@@ -498,6 +512,7 @@ function createYclientsLoginTicket({ bookingUrl, login, password, apiAuthResult 
     login: normalizeText(login),
     password: normalizeText(password),
     loginUrl: getYclientsWebLoginUrl(),
+    showYclientsOpeningScreen: normalizeBoolean(showYclientsOpeningScreen, true),
     apiAuthResult,
     expiresAt: Date.now() + YCLIENTS_LOGIN_TICKET_TTL_MS
   });
@@ -568,6 +583,7 @@ function renderYclientsLoginBridgePage(ticket, options = {}) {
   const forceTopLevelLogin = Boolean(options.forceTopLevel);
   const helperWindowName = normalizeText(options.helperWindowName).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
   const useHelperWindow = Boolean(helperWindowName) && !forceTopLevelLogin;
+  const showOpeningScreen = normalizeBoolean(ticket.showYclientsOpeningScreen, true);
   const autoBrowserLoginDelayMs = email && password ? (forceTopLevelLogin ? 250 : 900) : 0;
 
   return `<!doctype html>
@@ -587,6 +603,8 @@ function renderYclientsLoginBridgePage(ticket, options = {}) {
       :root { color-scheme: light; }
       * { box-sizing: border-box; }
       body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: #101828; background: #f3f6fb; }
+      body.bridge-hidden { display: block; min-height: 100vh; background: #fff; }
+      body.bridge-hidden main { display: none; }
       main { width: min(680px, calc(100vw - 40px)); padding: 32px; border: 1px solid #dbe3ef; border-radius: 28px; background: #fff; box-shadow: 0 20px 60px rgba(15, 23, 42, .14); }
       h1 { margin: 0 0 10px; font-size: 28px; line-height: 1.2; }
       p { margin: 0 0 16px; color: #64748b; line-height: 1.5; font-size: 16px; }
@@ -612,7 +630,7 @@ function renderYclientsLoginBridgePage(ticket, options = {}) {
       .hidden { display: none !important; }
     </style>
   </head>
-  <body>
+  <body${showOpeningScreen ? '' : ' class="bridge-hidden"'}>
     <main>
       <h1>Открываем YCLIENTS</h1>
       <p>${forceTopLevelLogin ? 'Выполняем прямой вход через домен yclients.com, чтобы браузер получил cookies YCLIENTS, затем открываем расписание.' : useHelperWindow ? 'Сначала показываем серверную проверку, затем отправляем вход YCLIENTS в служебное окно. В этой вкладке остаётся индикатор загрузки до перехода на расписание.' : 'Сначала показываем серверную проверку, затем пробуем скрытую отправку формы. Для гарантированного получения cookies браузером после скрытой попытки автоматически выполняется прямой вход через домен yclients.com и только потом открывается расписание.'}</p>
@@ -1174,6 +1192,7 @@ async function createBookingOpenTarget({ session, data } = {}) {
       bookingUrl: targetUrl,
       login: normalized.login,
       password: normalized.password,
+      showYclientsOpeningScreen: normalized.showYclientsOpeningScreen,
       apiAuthResult: {
         ...authResult,
         webLoginResult,
@@ -1229,7 +1248,7 @@ async function createBookingOpenTarget({ session, data } = {}) {
 async function getBookingCrmData({ session } = {}) {
   const profileId = getSessionProfileId(session);
   const { rows } = await query(
-    `SELECT profile_id, booking_name, booking_url, auth_type, login, password, yclients_partner_token, updated_at
+    `SELECT profile_id, booking_name, booking_url, auth_type, login, password, yclients_partner_token, show_yclients_opening_screen, updated_at
        FROM profile_booking_crm_data
       WHERE profile_id = $1`,
     [profileId]
@@ -1250,9 +1269,10 @@ async function saveBookingCrmData({ session, data } = {}) {
         auth_type,
         login,
         password,
-        yclients_partner_token
+        yclients_partner_token,
+        show_yclients_opening_screen
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       ON CONFLICT (profile_id) DO UPDATE SET
         booking_name = EXCLUDED.booking_name,
         booking_url = EXCLUDED.booking_url,
@@ -1260,8 +1280,9 @@ async function saveBookingCrmData({ session, data } = {}) {
         login = EXCLUDED.login,
         password = EXCLUDED.password,
         yclients_partner_token = EXCLUDED.yclients_partner_token,
+        show_yclients_opening_screen = EXCLUDED.show_yclients_opening_screen,
         updated_at = now()
-      RETURNING profile_id, booking_name, booking_url, auth_type, login, password, yclients_partner_token, updated_at`,
+      RETURNING profile_id, booking_name, booking_url, auth_type, login, password, yclients_partner_token, show_yclients_opening_screen, updated_at`,
     [
       profileId,
       normalized.bookingName,
@@ -1269,7 +1290,8 @@ async function saveBookingCrmData({ session, data } = {}) {
       normalized.authType,
       normalized.login,
       normalized.password,
-      normalized.yclientsPartnerToken
+      normalized.yclientsPartnerToken,
+      normalized.showYclientsOpeningScreen
     ]
   );
 
