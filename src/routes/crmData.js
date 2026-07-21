@@ -1,4 +1,5 @@
 const express = require('express');
+const { setSessionCookie } = require('../services/authService');
 const {
   getBookingCrmData,
   saveBookingCrmData,
@@ -52,6 +53,12 @@ router.post('/open-booking', async (request, response, next) => {
       session: request.auth,
       data: request.body || {}
     });
+
+    if (result?.sessionUpdated) {
+      setSessionCookie(response, request.auth);
+      delete result.sessionUpdated;
+    }
+
     response.json(result);
   } catch (error) {
     next(error);

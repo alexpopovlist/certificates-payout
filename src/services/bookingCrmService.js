@@ -26,6 +26,147 @@ function escapeJsString(value) {
 }
 
 
+function splitSetCookieHeader(value = '') {
+  const text = String(value || '');
+  if (!text) return [];
+  return text.split(/,(?=\s*[^;,\s]+=)/g).map((part) => part.trim()).filter(Boolean);
+}
+
+function getSetCookieHeaders(response) {
+  if (!response?.headers) return [];
+
+  if (typeof response.headers.getSetCookie === 'function') {
+    const cookies = response.headers.getSetCookie();
+    if (Array.isArray(cookies) && cookies.length) return cookies;
+  }
+
+  const joined = response.headers.get('set-cookie');
+  return splitSetCookieHeader(joined);
+}
+
+function parseSetCookieHeader(header = '') {
+  const parts = String(header || '').split(';').map((part) => part.trim()).filter(Boolean);
+  const [pair, ...attributes] = parts;
+  if (!pair || !pair.includes('=')) return null;
+
+  const index = pair.indexOf('=');
+  const name = pair.slice(0, index).trim();
+  const value = pair.slice(index + 1).trim();
+  if (!name) return null;
+
+  const cookie = {
+    name,
+    value,
+    domain: '',
+    path: '/',
+    expires: null,
+    maxAge: null,
+    secure: false,
+    httpOnly: false,
+    sameSite: ''
+  };
+
+  for (const attribute of attributes) {
+    const [rawKey, ...rawValue] = attribute.split('=');
+    const key = normalizeText(rawKey).toLowerCase();
+    const attrValue = rawValue.join('=').trim();
+
+    if (key === 'domain') cookie.domain = attrValue.toLowerCase();
+    if (key === 'path') cookie.path = attrValue || '/';
+    if (key === 'expires') cookie.expires = attrValue;
+    if (key === 'max-age') cookie.maxAge = Number(attrValue);
+    if (key === 'secure') cookie.secure = true;
+    if (key === 'httponly') cookie.httpOnly = true;
+    if (key === 'samesite') cookie.sameSite = attrValue;
+  }
+
+  return cookie;
+}
+
+function isExpiredYclientsCookie(cookie) {
+  if (!cookie) return true;
+  if (Number.isFinite(cookie.maxAge) && Number(cookie.maxAge) <= 0) return true;
+  if (cookie.expires) {
+    const expiresAt = Date.parse(cookie.expires);
+    if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) return true;
+  }
+  return false;
+}
+
+function yclientsCookieKey(cookie = {}) {
+  return [cookie.name || '', cookie.domain || '', cookie.path || '/'].join('|');
+}
+
+function normalizeStoredYclientsCookies(cookies = []) {
+  return Array.isArray(cookies)
+    ? cookies
+        .map((cookie) => ({
+          name: normalizeText(cookie?.name),
+          value: String(cookie?.value ?? ''),
+          domain: normalizeText(cookie?.domain).toLowerCase(),
+          path: normalizeText(cookie?.path) || '/',
+          expires: cookie?.expires || null,
+          maxAge: Number.isFinite(Number(cookie?.maxAge)) ? Number(cookie.maxAge) : null,
+          secure: Boolean(cookie?.secure),
+          httpOnly: Boolean(cookie?.httpOnly),
+          sameSite: normalizeText(cookie?.sameSite)
+        }))
+        .filter((cookie) => cookie.name && !isExpiredYclientsCookie(cookie))
+    : [];
+}
+
+function getYclientsSessionCookies(session = {}) {
+  return normalizeStoredYclientsCookies(session?.yclients?.cookies);
+}
+
+function buildYclientsCookieHeader(session = {}) {
+  return getYclientsSessionCookies(session)
+    .map((cookie) => `${cookie.name}=${cookie.value}`)
+    .join('; ');
+}
+
+function storeYclientsCookiesInSession(session, setCookieHeaders = []) {
+  if (!session || !Array.isArray(setCookieHeaders) || setCookieHeaders.length === 0) {
+    return { updated: false, receivedCount: 0, storedCount: getYclientsSessionCookies(session).length };
+  }
+
+  const currentCookies = getYclientsSessionCookies(session);
+  const cookiesByKey = new Map(currentCookies.map((cookie) => [yclientsCookieKey(cookie), cookie]));
+  let changed = false;
+  let receivedCount = 0;
+
+  for (const header of setCookieHeaders) {
+    const cookie = parseSetCookieHeader(header);
+    if (!cookie?.name) continue;
+    receivedCount += 1;
+    const key = yclientsCookieKey(cookie);
+
+    if (isExpiredYclientsCookie(cookie)) {
+      if (cookiesByKey.delete(key)) changed = true;
+      continue;
+    }
+
+    cookiesByKey.set(key, cookie);
+    changed = true;
+  }
+
+  const cookies = Array.from(cookiesByKey.values()).filter((cookie) => !isExpiredYclientsCookie(cookie));
+  session.yclients = {
+    ...(session.yclients || {}),
+    cookies,
+    cookieHeader: cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; '),
+    updatedAt: new Date().toISOString()
+  };
+
+  return { updated: changed, receivedCount, storedCount: cookies.length };
+}
+
+function withYclientsCookieHeader(headers = {}, session = {}) {
+  const cookieHeader = buildYclientsCookieHeader(session);
+  return cookieHeader ? { ...headers, Cookie: cookieHeader } : headers;
+}
+
+
 function getSessionProfileId(session) {
   const candidates = [
     session?.upstream?.contactId,
@@ -238,11 +379,19 @@ function formatYclientsWebLoginStatus(result = null) {
   const rawText = normalizeText(result.rawText || result.responseText);
   const payloadText = rawText || JSON.stringify(result.payload ?? {}, null, 2);
 
+  const cookies = result.cookies || {};
+  const receivedCount = Number(cookies.receivedCount || 0);
+  const storedCount = Number(cookies.storedCount || 0);
+  const cookieMessage = receivedCount > 0
+    ? `Cookies YCLIENTS получены: ${receivedCount}. В текущей сессии сохранено: ${storedCount}.`
+    : 'Cookies YCLIENTS в ответе сервиса не получены.';
+
   return {
     label: ok ? 'Авторизация отправлена успешно' : 'Авторизация не подтверждена',
     tone: ok ? 'success' : 'error',
     httpStatus: status ? `HTTP ${status}` : 'HTTP статус не получен',
-    responseText: warning || payloadText || 'Пустой ответ сервиса.'
+    responseText: warning || payloadText || 'Пустой ответ сервиса.',
+    cookieMessage
   };
 }
 
@@ -302,6 +451,7 @@ function renderYclientsLoginBridgePage(ticket) {
           <span>${escapeHtml(webLoginStatus.label)}</span>
           <strong>Ответ сервиса</strong>
           <pre>${escapeHtml(webLoginStatus.responseText)}</pre>
+          <span class="muted">${escapeHtml(webLoginStatus.cookieMessage)}</span>
         </div>
       </div>
       <div class="actions">
@@ -362,7 +512,7 @@ function renderYclientsLoginBridgePage(ticket) {
 }
 
 
-async function postYclientsWebLoginJson({ login, password } = {}) {
+async function postYclientsWebLoginJson({ login, password, session } = {}) {
   const normalizedLogin = normalizeText(login);
   const normalizedPassword = normalizeText(password);
 
@@ -378,17 +528,19 @@ async function postYclientsWebLoginJson({ login, password } = {}) {
       method: 'POST',
       redirect: 'manual',
       signal: controller.signal,
-      headers: {
+      headers: withYclientsCookieHeader({
         'Content-Type': 'application/json',
         'Accept': 'application/json, text/plain, */*',
         'User-Agent': 'WOWlife Partner Cabinet/1.0'
-      },
+      }, session),
       body: JSON.stringify({
         email: normalizedLogin,
         password: normalizedPassword
       })
     });
 
+    const setCookieHeaders = getSetCookieHeaders(response);
+    const cookieResult = storeYclientsCookiesInSession(session, setCookieHeaders);
     const text = await response.text();
     return {
       ok: response.ok || (response.status >= 300 && response.status < 400),
@@ -396,7 +548,12 @@ async function postYclientsWebLoginJson({ login, password } = {}) {
       statusText: response.statusText || '',
       redirected: response.status >= 300 && response.status < 400,
       rawText: text,
-      payload: parseJsonSafe(text)
+      payload: parseJsonSafe(text),
+      cookies: {
+        receivedCount: cookieResult.receivedCount,
+        storedCount: cookieResult.storedCount,
+        updated: cookieResult.updated
+      }
     };
   } finally {
     clearTimeout(timeout);
@@ -425,7 +582,7 @@ function getYclientsUserTokenFromPayload(payload = {}) {
     .find(Boolean) || '';
 }
 
-async function fetchYclientsUserToken({ login, password, partnerToken: providedPartnerToken } = {}) {
+async function fetchYclientsUserToken({ login, password, partnerToken: providedPartnerToken, session } = {}) {
   const normalizedLogin = normalizeText(login);
   const normalizedPassword = normalizeText(password);
   const partnerToken = normalizeText(providedPartnerToken) || getYclientsPartnerToken();
@@ -446,16 +603,19 @@ async function fetchYclientsUserToken({ login, password, partnerToken: providedP
 
   const response = await fetch(getYclientsAuthUrl(), {
     method: 'POST',
-    headers: {
+    headers: withYclientsCookieHeader({
       'Content-Type': 'application/json',
       'Accept': 'application/vnd.yclients.v2+json, application/json, text/plain, */*',
       'Authorization': `Bearer ${partnerToken}`
-    },
+    }, session),
     body: JSON.stringify({
       login: normalizedLogin,
       password: normalizedPassword
     })
   });
+
+  const setCookieHeaders = getSetCookieHeaders(response);
+  const cookieResult = storeYclientsCookiesInSession(session, setCookieHeaders);
 
   const text = await response.text();
   const payload = parseJsonSafe(text);
@@ -474,7 +634,12 @@ async function fetchYclientsUserToken({ login, password, partnerToken: providedP
   return {
     userToken,
     partnerToken,
-    payload
+    payload,
+    cookies: {
+      receivedCount: cookieResult.receivedCount,
+      storedCount: cookieResult.storedCount,
+      updated: cookieResult.updated
+    }
   };
 }
 
@@ -482,14 +647,17 @@ function getYclientsEnvUserToken() {
   return normalizeText(process.env.YCLIENTS_USER_TOKEN || process.env.YCLIENTS_SYSTEM_USER_TOKEN);
 }
 
-async function verifyYclientsUserToken({ partnerToken, userToken } = {}) {
+async function verifyYclientsUserToken({ partnerToken, userToken, session } = {}) {
   const response = await fetch(getYclientsCompaniesUrl(), {
     method: 'GET',
-    headers: {
+    headers: withYclientsCookieHeader({
       'Accept': 'application/vnd.yclients.v2+json, application/json, text/plain, */*',
       'Authorization': yclientsAuthorizationHeader({ partnerToken, userToken })
-    }
+    }, session)
   });
+
+  const setCookieHeaders = getSetCookieHeaders(response);
+  const cookieResult = storeYclientsCookiesInSession(session, setCookieHeaders);
 
   if (!response.ok) {
     const payload = parseJsonSafe(await response.text());
@@ -501,7 +669,13 @@ async function verifyYclientsUserToken({ partnerToken, userToken } = {}) {
     throw buildServiceError(message, response.status, payload);
   }
 
-  return true;
+  return {
+    cookies: {
+      receivedCount: cookieResult.receivedCount,
+      storedCount: cookieResult.storedCount,
+      updated: cookieResult.updated
+    }
+  };
 }
 
 function yclientsOpenWarning(error) {
@@ -509,7 +683,7 @@ function yclientsOpenWarning(error) {
   return message || 'ошибка проверки YCLIENTS API';
 }
 
-async function authorizeYclientsForExternalOpen(data = {}) {
+async function authorizeYclientsForExternalOpen(data = {}, session = null) {
   const partnerToken = getYclientsPartnerToken();
   const envUserToken = getYclientsEnvUserToken();
   const login = normalizeText(data.login);
@@ -520,23 +694,25 @@ async function authorizeYclientsForExternalOpen(data = {}) {
   }
 
   if (login && password) {
-    await fetchYclientsUserToken({ login, password, partnerToken });
+    const apiLoginResult = await fetchYclientsUserToken({ login, password, partnerToken, session });
     return {
       apiAuthorized: true,
       authMode: 'yclients-api-crm-login-password',
       partnerTokenSource: 'env',
       userTokenSource: 'crm-data-login-password',
+      cookies: apiLoginResult.cookies,
       message: 'YCLIENTS API-авторизация выполнена по логину и паролю из экрана «Данные CRM». Открываем Booking в новой вкладке.'
     };
   }
 
   if (envUserToken) {
-    await verifyYclientsUserToken({ partnerToken, userToken: envUserToken });
+    const apiVerifyResult = await verifyYclientsUserToken({ partnerToken, userToken: envUserToken, session });
     return {
       apiAuthorized: true,
       authMode: 'yclients-api-env-user-token',
       partnerTokenSource: 'env',
       userTokenSource: 'env',
+      cookies: apiVerifyResult.cookies,
       message: 'YCLIENTS API-авторизация выполнена по YCLIENTS_PARTNER_TOKEN и YCLIENTS_USER_TOKEN. Открываем Booking в новой вкладке.'
     };
   }
@@ -570,7 +746,7 @@ async function createBookingOpenTarget({ session, data } = {}) {
     };
 
     try {
-      authResult = await authorizeYclientsForExternalOpen(normalized);
+      authResult = await authorizeYclientsForExternalOpen(normalized, session);
     } catch (error) {
       authResult = {
         apiAuthorized: false,
@@ -584,7 +760,8 @@ async function createBookingOpenTarget({ session, data } = {}) {
     try {
       webLoginResult = await postYclientsWebLoginJson({
         login: normalized.login,
-        password: normalized.password
+        password: normalized.password,
+        session
       });
     } catch (error) {
       webLoginResult = {
@@ -617,6 +794,7 @@ async function createBookingOpenTarget({ session, data } = {}) {
         contentType: 'application/json'
       },
       webLoginResult,
+      sessionUpdated: Boolean(webLoginResult?.cookies?.updated || authResult?.cookies?.updated),
       ...authResult,
       message: 'Открываем YCLIENTS в новой вкладке: сначала отправляется POST /auth/login/1, затем открывается Booking-ссылка.'
     };
