@@ -114,6 +114,24 @@ function parseBookingUrl(value) {
   return url;
 }
 
+
+function isYclientsBooking(data = {}) {
+  const bookingName = normalizeText(data.bookingName ?? data.booking_name).toLowerCase();
+  if (bookingName === 'yclients') return true;
+
+  try {
+    const url = parseBookingUrl(data.bookingUrl ?? data.booking_url);
+    return isAllowedYclientsHost(url);
+  } catch (_error) {
+    return false;
+  }
+}
+
+function isAllowedYclientsHost(url) {
+  const hostname = normalizeText(url?.hostname).toLowerCase();
+  return hostname === 'yclients.com' || hostname.endsWith('.yclients.com');
+}
+
 function buildBasicAuthUrl(data) {
   const url = parseBookingUrl(data.bookingUrl);
 
@@ -245,6 +263,11 @@ async function verifyYclientsUserToken({ partnerToken, userToken } = {}) {
   return true;
 }
 
+function yclientsOpenWarning(error) {
+  const message = normalizeText(error?.publicMessage || error?.message);
+  return message || 'ошибка проверки YCLIENTS API';
+}
+
 async function authorizeYclientsForExternalOpen(data = {}) {
   const partnerToken = getYclientsPartnerToken();
   const envUserToken = getYclientsEnvUserToken();
@@ -252,25 +275,45 @@ async function authorizeYclientsForExternalOpen(data = {}) {
   const password = normalizeText(data.password);
 
   if (partnerToken && login && password) {
-    await fetchYclientsUserToken({ login, password, partnerToken });
-    return {
-      apiAuthorized: true,
-      authMode: 'yclients-api-crm-login-password',
-      partnerTokenSource: 'env',
-      userTokenSource: 'crm-data-login-password',
-      message: 'YCLIENTS API-авторизация выполнена по логину и паролю из экрана «Данные CRM». Web-кабинет открыт в новой вкладке.'
-    };
+    try {
+      await fetchYclientsUserToken({ login, password, partnerToken });
+      return {
+        apiAuthorized: true,
+        authMode: 'yclients-api-crm-login-password',
+        partnerTokenSource: 'env',
+        userTokenSource: 'crm-data-login-password',
+        message: 'YCLIENTS API-проверка выполнена по логину и паролю из экрана «Данные CRM». Web-кабинет открыт в новой вкладке.'
+      };
+    } catch (error) {
+      return {
+        apiAuthorized: false,
+        authMode: 'yclients-api-crm-login-password-failed',
+        partnerTokenSource: 'env',
+        userTokenSource: 'crm-data-login-password',
+        message: `YCLIENTS открыт в новой вкладке. API-проверка по данным экрана «Данные CRM» не выполнена: ${yclientsOpenWarning(error)}.`
+      };
+    }
   }
 
   if (partnerToken && envUserToken) {
-    await verifyYclientsUserToken({ partnerToken, userToken: envUserToken });
-    return {
-      apiAuthorized: true,
-      authMode: 'yclients-api-env-user-token',
-      partnerTokenSource: 'env',
-      userTokenSource: 'env',
-      message: 'YCLIENTS API-авторизация по YCLIENTS_PARTNER_TOKEN и YCLIENTS_USER_TOKEN выполнена. Web-кабинет открыт в новой вкладке.'
-    };
+    try {
+      await verifyYclientsUserToken({ partnerToken, userToken: envUserToken });
+      return {
+        apiAuthorized: true,
+        authMode: 'yclients-api-env-user-token',
+        partnerTokenSource: 'env',
+        userTokenSource: 'env',
+        message: 'YCLIENTS API-проверка по YCLIENTS_PARTNER_TOKEN и YCLIENTS_USER_TOKEN выполнена. Web-кабинет открыт в новой вкладке.'
+      };
+    } catch (error) {
+      return {
+        apiAuthorized: false,
+        authMode: 'yclients-api-env-user-token-failed',
+        partnerTokenSource: 'env',
+        userTokenSource: 'env',
+        message: `YCLIENTS открыт в новой вкладке. API-проверка по env-токенам не выполнена: ${yclientsOpenWarning(error)}.`
+      };
+    }
   }
 
   if (login && password) {
@@ -278,7 +321,7 @@ async function authorizeYclientsForExternalOpen(data = {}) {
       apiAuthorized: false,
       authMode: 'yclients-login-password-only',
       userTokenSource: 'crm-data-login-password',
-      message: 'YCLIENTS открыт в новой вкладке. Для автоматической API-проверки добавьте YCLIENTS_PARTNER_TOKEN; логин и пароль берутся с экрана «Данные CRM».'
+      message: 'YCLIENTS открыт в новой вкладке. Для API-проверки добавьте YCLIENTS_PARTNER_TOKEN; логин и пароль берутся с экрана «Данные CRM».'
     };
   }
 
