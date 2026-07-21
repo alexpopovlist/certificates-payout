@@ -1,13 +1,30 @@
+const crypto = require('crypto');
 const { query } = require('../db');
 
 const BOOKING_NAME_OPTIONS = ['yclients', 'dikidi Business', 'Собственная', 'Отсутствует', 'Нет данных'];
 const AUTH_TYPE_OPTIONS = ['Базовый', 'Нет данных'];
 const DEFAULT_YCLIENTS_API_BASE_URL = 'https://api.yclients.com/api/v1';
 const DEFAULT_YCLIENTS_AUTH_PATH = '/auth';
+const DEFAULT_YCLIENTS_WEB_LOGIN_URL = 'https://www.yclients.com/auth/login/1';
+const YCLIENTS_LOGIN_TICKET_TTL_MS = 2 * 60 * 1000;
+const yclientsLoginTickets = new Map();
 
 function normalizeText(value) {
   return String(value ?? '').trim();
 }
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeJsString(value) {
+  return JSON.stringify(String(value ?? ''));
+}
+
 
 function getSessionProfileId(session) {
   const candidates = [
@@ -160,6 +177,178 @@ function getYclientsAuthUrl() {
 
 function getYclientsCompaniesUrl() {
   return process.env.YCLIENTS_COMPANIES_URL || `${getYclientsApiBaseUrl()}/companies`;
+}
+
+function getYclientsWebLoginUrl() {
+  return process.env.YCLIENTS_WEB_LOGIN_URL || DEFAULT_YCLIENTS_WEB_LOGIN_URL;
+}
+
+function cleanupYclientsLoginTickets() {
+  const now = Date.now();
+  for (const [ticketId, ticket] of yclientsLoginTickets.entries()) {
+    if (!ticket || ticket.expiresAt <= now) {
+      yclientsLoginTickets.delete(ticketId);
+    }
+  }
+}
+
+function createYclientsLoginTicket({ bookingUrl, login, password, apiAuthResult = {} } = {}) {
+  cleanupYclientsLoginTickets();
+
+  const ticketId = crypto.randomBytes(24).toString('hex');
+  yclientsLoginTickets.set(ticketId, {
+    bookingUrl: normalizeText(bookingUrl),
+    login: normalizeText(login),
+    password: normalizeText(password),
+    loginUrl: getYclientsWebLoginUrl(),
+    apiAuthResult,
+    expiresAt: Date.now() + YCLIENTS_LOGIN_TICKET_TTL_MS
+  });
+
+  return ticketId;
+}
+
+function takeYclientsLoginTicket(ticketId) {
+  cleanupYclientsLoginTickets();
+  const normalizedTicketId = normalizeText(ticketId);
+  const ticket = yclientsLoginTickets.get(normalizedTicketId);
+  yclientsLoginTickets.delete(normalizedTicketId);
+
+  if (!ticket) {
+    throw buildServiceError('Ссылка авторизации YCLIENTS устарела. Откройте Booking ещё раз.', 410);
+  }
+
+  return ticket;
+}
+
+function renderYclientsLoginBridgePage(ticket) {
+  const loginUrl = normalizeBookingUrl(ticket.loginUrl || getYclientsWebLoginUrl());
+  const bookingUrl = normalizeBookingUrl(ticket.bookingUrl);
+  const email = normalizeText(ticket.login);
+  const password = normalizeText(ticket.password);
+  const apiMessage = normalizeText(ticket.apiAuthResult?.message);
+
+  return `<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Открытие YCLIENTS</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: #101828; background: #f3f6fb; }
+      main { width: min(620px, calc(100vw - 40px)); padding: 32px; border: 1px solid #dbe3ef; border-radius: 28px; background: #fff; box-shadow: 0 20px 60px rgba(15, 23, 42, .14); }
+      h1 { margin: 0 0 10px; font-size: 28px; line-height: 1.2; }
+      p { margin: 0 0 16px; color: #64748b; line-height: 1.5; font-size: 16px; }
+      .status { display: grid; gap: 10px; margin: 22px 0; padding: 18px; border-radius: 18px; background: #f8fafc; border: 1px solid #e2e8f0; color: #334155; }
+      .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
+      button, a { min-height: 46px; padding: 12px 18px; border-radius: 14px; border: 1px solid #dbe3ef; font: inherit; font-weight: 700; cursor: pointer; text-decoration: none; }
+      .primary { border-color: #0f172a; background: #0f172a; color: #fff; }
+      .secondary { background: #fff; color: #0f172a; }
+      iframe { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; border: 0; }
+      .muted { font-size: 13px; color: #94a3b8; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Открываем YCLIENTS</h1>
+      <p>Выполняем вход через сохранённые логин и пароль, затем откроем Booking-ссылку.</p>
+      <div class="status" aria-live="polite">
+        <strong id="statusTitle">Отправляем запрос авторизации...</strong>
+        <span id="statusText">POST ${escapeHtml(loginUrl)} с email и password.</span>
+        ${apiMessage ? `<span class="muted">${escapeHtml(apiMessage)}</span>` : ''}
+      </div>
+      <div class="actions">
+        <button class="primary" id="openNowButton" type="button">Открыть Booking сейчас</button>
+        <a class="secondary" href="${escapeHtml(bookingUrl)}" rel="noreferrer">Открыть вручную</a>
+      </div>
+      <p class="muted" style="margin-top:18px">Если YCLIENTS всё равно показывает форму входа, значит web-сессия не была создана браузером. В этом случае выполните вход на странице YCLIENTS вручную.</p>
+    </main>
+
+    <iframe id="yclientsAuthFrame" name="yclientsAuthFrame" title="YCLIENTS authorization"></iframe>
+    <form id="yclientsLoginForm" method="post" action="${escapeHtml(loginUrl)}" target="yclientsAuthFrame" style="display:none">
+      <input type="hidden" name="email" value="${escapeHtml(email)}" />
+      <input type="hidden" name="password" value="${escapeHtml(password)}" />
+    </form>
+
+    <script>
+      (function () {
+        var bookingUrl = ${escapeJsString(bookingUrl)};
+        var statusTitle = document.getElementById('statusTitle');
+        var statusText = document.getElementById('statusText');
+        var openNowButton = document.getElementById('openNowButton');
+        var form = document.getElementById('yclientsLoginForm');
+        var frame = document.getElementById('yclientsAuthFrame');
+        var redirected = false;
+
+        function openBooking() {
+          if (redirected) return;
+          redirected = true;
+          statusTitle.textContent = 'Открываем Booking...';
+          statusText.textContent = 'Переходим к сохранённой ссылке YCLIENTS.';
+          window.location.replace(bookingUrl);
+        }
+
+        openNowButton.addEventListener('click', openBooking);
+        frame.addEventListener('load', function () {
+          statusTitle.textContent = 'Авторизация отправлена';
+          statusText.textContent = 'Открываем Booking-ссылку.';
+          setTimeout(openBooking, 350);
+        });
+
+        try {
+          form.submit();
+          setTimeout(openBooking, 1800);
+        } catch (error) {
+          statusTitle.textContent = 'Не удалось автоматически отправить авторизацию';
+          statusText.textContent = 'Нажмите «Открыть Booking сейчас» и войдите вручную.';
+        }
+      })();
+    </script>
+  </body>
+</html>`;
+}
+
+
+async function postYclientsWebLoginJson({ login, password } = {}) {
+  const normalizedLogin = normalizeText(login);
+  const normalizedPassword = normalizeText(password);
+
+  if (!normalizedLogin || !normalizedPassword) {
+    throw buildServiceError('Для web-авторизации YCLIENTS заполните логин и пароль.');
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const response = await fetch(getYclientsWebLoginUrl(), {
+      method: 'POST',
+      redirect: 'manual',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/plain, */*',
+        'User-Agent': 'WOWlife Partner Cabinet/1.0'
+      },
+      body: JSON.stringify({
+        email: normalizedLogin,
+        password: normalizedPassword
+      })
+    });
+
+    const text = await response.text();
+    return {
+      ok: response.ok || (response.status >= 300 && response.status < 400),
+      status: response.status,
+      redirected: response.status >= 300 && response.status < 400,
+      payload: parseJsonSafe(text)
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function getYclientsPartnerToken() {
@@ -318,12 +507,66 @@ async function createBookingOpenTarget({ session, data } = {}) {
       throw buildServiceError('Для авторизации YCLIENTS укажите ссылку на домене yclients.com.');
     }
 
-    const authResult = await authorizeYclientsForExternalOpen(normalized);
+    if (!normalized.login || !normalized.password) {
+      throw buildServiceError('Для авторизации YCLIENTS заполните логин и пароль на экране «Данные CRM».');
+    }
+
+    let authResult = {
+      apiAuthorized: false,
+      authMode: 'yclients-web-login-post',
+      message: 'Открываем YCLIENTS через web-авторизацию в новой вкладке.'
+    };
+
+    try {
+      authResult = await authorizeYclientsForExternalOpen(normalized);
+    } catch (error) {
+      authResult = {
+        apiAuthorized: false,
+        authMode: 'yclients-web-login-post',
+        apiWarning: yclientsOpenWarning(error),
+        message: 'API-проверка YCLIENTS не выполнена, но web-авторизация будет отправлена в новой вкладке.'
+      };
+    }
+
+    let webLoginResult = null;
+    try {
+      webLoginResult = await postYclientsWebLoginJson({
+        login: normalized.login,
+        password: normalized.password
+      });
+    } catch (error) {
+      webLoginResult = {
+        ok: false,
+        status: 0,
+        warning: yclientsOpenWarning(error)
+      };
+    }
+
+    const ticketId = createYclientsLoginTicket({
+      bookingUrl: targetUrl,
+      login: normalized.login,
+      password: normalized.password,
+      apiAuthResult: {
+        ...authResult,
+        webLoginResult
+      }
+    });
+
     return {
       result: true,
-      openUrl: targetUrl,
+      openUrl: `/api/crm-data/yclients-login/${ticketId}`,
       externalUrl: targetUrl,
-      ...authResult
+      loginUrl: getYclientsWebLoginUrl(),
+      authMode: 'yclients-web-login-post',
+      webLoginRequest: {
+        method: 'POST',
+        url: getYclientsWebLoginUrl(),
+        payloadFields: ['email', 'password'],
+        contentType: 'application/json'
+      },
+      webLoginResult,
+      ...authResult,
+      message: 'Открываем YCLIENTS в новой вкладке: сначала отправляется POST /auth/login/1, затем открывается Booking-ссылка.'
     };
   }
 
@@ -393,5 +636,7 @@ module.exports = {
   getBookingCrmData,
   saveBookingCrmData,
   normalizeBookingCrmData,
-  createBookingOpenTarget
+  createBookingOpenTarget,
+  takeYclientsLoginTicket,
+  renderYclientsLoginBridgePage
 };

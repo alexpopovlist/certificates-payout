@@ -5050,6 +5050,9 @@ function crmBookingSuccessMessage(result = {}) {
   if (result.authMode === 'yclients-api-crm-login-password') {
     return 'YCLIENTS API-авторизация выполнена по логину и паролю с экрана «Данные CRM». Booking открыт в новой вкладке.';
   }
+  if (result.authMode === 'yclients-web-login-post') {
+    return 'Открываем YCLIENTS в новой вкладке: выполняется web-авторизация и переход к Booking.';
+  }
   if (result.authMode === 'yclients-login-password-only') {
     return 'YCLIENTS открыт в новой вкладке.';
   }

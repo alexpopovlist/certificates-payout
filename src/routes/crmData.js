@@ -2,7 +2,9 @@ const express = require('express');
 const {
   getBookingCrmData,
   saveBookingCrmData,
-  createBookingOpenTarget
+  createBookingOpenTarget,
+  takeYclientsLoginTicket,
+  renderYclientsLoginBridgePage
 } = require('../services/bookingCrmService');
 
 const router = express.Router();
@@ -23,6 +25,22 @@ router.post('/', async (request, response, next) => {
       data: request.body || {}
     });
     response.json({ result: true, item });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+router.get('/yclients-login/:ticketId', (request, response, next) => {
+  try {
+    const ticket = takeYclientsLoginTicket(request.params.ticketId);
+    response
+      .status(200)
+      .set('Content-Type', 'text/html; charset=utf-8')
+      .set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+      .set('Pragma', 'no-cache')
+      .set('Expires', '0')
+      .send(renderYclientsLoginBridgePage(ticket));
   } catch (error) {
     next(error);
   }
