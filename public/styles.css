@@ -5494,14 +5494,16 @@ body.is-admin .admin-mobile-card-badge .status {
   }
 }
 
-/* CRM data tab: compact profile-like form, without adding a mobile bottom tab. */
+/* CRM data tab: full-width profile-like form, without adding a mobile bottom tab. */
 .crm-data-page {
   display: grid;
   gap: 24px;
-  max-width: 860px;
+  width: 100%;
+  max-width: none;
 }
 
 .crm-data-card {
+  width: 100%;
   overflow: hidden;
   padding: 22px;
 }
@@ -5539,6 +5541,12 @@ body.is-admin .admin-mobile-card-badge .status {
   justify-content: flex-end;
 }
 
+@media (min-width: 1024px) {
+  .crm-data-grid {
+    grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+  }
+}
+
 @media (max-width: 680px) {
   .crm-data-page {
     max-width: none;
@@ -5564,5 +5572,83 @@ body.is-admin .admin-mobile-card-badge .status {
 
   .crm-data-actions .button {
     width: 100%;
+  }
+}
+
+/* Booking CRM preview: opening external Booking services from the CRM data tab. */
+.crm-booking-preview {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 24px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.crm-booking-preview.hidden {
+  display: none;
+}
+
+.crm-booking-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px 20px 0;
+}
+
+.crm-booking-preview-header h3 {
+  margin: 0 0 6px;
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.crm-booking-preview-header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.crm-booking-frame-wrap {
+  width: 100%;
+  min-height: 68vh;
+  background: #f8fafc;
+}
+
+.crm-booking-frame-wrap iframe {
+  display: block;
+  width: 100%;
+  min-height: 68vh;
+  border: 0;
+  background: #ffffff;
+}
+
+@media (max-width: 680px) {
+  .crm-data-actions {
+    gap: 10px;
+  }
+
+  .crm-booking-preview {
+    border-radius: 22px;
+    margin-top: 20px;
+  }
+
+  .crm-booking-preview-header {
+    display: grid;
+    padding: 16px 16px 0;
+  }
+
+  .crm-booking-preview-header .button {
+    width: 100%;
+  }
+
+  .crm-booking-frame-wrap,
+  .crm-booking-frame-wrap iframe {
+    min-height: 70vh;
   }
 }

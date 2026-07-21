@@ -4972,9 +4972,23 @@ function crmDataFormHtml() {
       </div>
 
       <div class="schedule-actions crm-data-actions">
+        <button id="crmDataOpenBookingButton" class="button secondary" type="button">Открыть Booking</button>
         <button id="crmDataSaveButton" class="button schedule-submit" type="submit">Сохранить</button>
       </div>
     </form>
+
+    <section id="crmBookingPreview" class="crm-booking-preview hidden" aria-live="polite">
+      <header class="crm-booking-preview-header">
+        <div>
+          <h3>Booking</h3>
+          <p id="crmBookingPreviewMeta">Данные будут показаны после открытия сервиса.</p>
+        </div>
+        <a id="crmBookingExternalLink" class="button secondary hidden" href="#" target="_blank" rel="noopener noreferrer">Открыть в новой вкладке</a>
+      </header>
+      <div class="crm-booking-frame-wrap">
+        <iframe id="crmBookingFrame" title="Booking сервис" loading="lazy" referrerpolicy="no-referrer"></iframe>
+      </div>
+    </section>
   `;
 }
 
@@ -4988,6 +5002,92 @@ function updateCrmDataStateFromForm(form) {
     login: formData.get('login'),
     password: formData.get('password')
   });
+}
+
+function normalizeCrmBookingUrl(value) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+function buildCrmBookingIframeUrl() {
+  const normalizedUrl = normalizeCrmBookingUrl(crmDataState.bookingUrl);
+  if (!normalizedUrl) {
+    throw new Error('Укажите ссылку на Booking сервис.');
+  }
+
+  let url;
+  try {
+    url = new URL(normalizedUrl);
+  } catch (error) {
+    throw new Error('Укажите корректную ссылку на Booking сервис.');
+  }
+
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error('Ссылка на Booking сервис должна начинаться с http:// или https://.');
+  }
+
+  if (crmDataState.authType === 'Базовый') {
+    if (!crmDataState.login || !crmDataState.password) {
+      throw new Error('Для базовой авторизации заполните логин и пароль.');
+    }
+    url.username = crmDataState.login;
+    url.password = crmDataState.password;
+  }
+
+  return url.toString();
+}
+
+function setCrmDataNotice(type, message) {
+  const notice = document.querySelector('#crmDataNotice');
+  if (!notice) return;
+
+  if (!message) {
+    notice.className = 'hidden';
+    notice.textContent = '';
+    return;
+  }
+
+  notice.className = type === 'success' ? 'notice success' : 'notice error';
+  notice.textContent = message;
+}
+
+function openCrmBookingPreview() {
+  const form = document.querySelector('#crmDataForm');
+  updateCrmDataStateFromForm(form);
+
+  let bookingUrl;
+  try {
+    bookingUrl = buildCrmBookingIframeUrl();
+  } catch (error) {
+    setCrmDataNotice('error', error.message || 'Не удалось открыть Booking сервис.');
+    return;
+  }
+
+  const preview = document.querySelector('#crmBookingPreview');
+  const frame = document.querySelector('#crmBookingFrame');
+  const externalLink = document.querySelector('#crmBookingExternalLink');
+  const meta = document.querySelector('#crmBookingPreviewMeta');
+
+  if (!preview || !frame) return;
+
+  setCrmDataNotice('', '');
+  frame.src = bookingUrl;
+  preview.classList.remove('hidden');
+
+  if (externalLink) {
+    externalLink.href = bookingUrl;
+    externalLink.classList.remove('hidden');
+  }
+
+  if (meta) {
+    meta.textContent = crmDataState.authType === 'Базовый'
+      ? 'Сервис открыт в iframe с базовой авторизацией по сохранённым логину и паролю.'
+      : 'Сервис открыт в iframe без подстановки авторизации.';
+  }
+
+  preview.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function handleCrmDataSubmit(event) {
@@ -5039,6 +5139,7 @@ async function handleCrmDataSubmit(event) {
 
 function setupCrmDataForm() {
   document.querySelector('#crmDataForm')?.addEventListener('submit', handleCrmDataSubmit);
+  document.querySelector('#crmDataOpenBookingButton')?.addEventListener('click', openCrmBookingPreview);
 }
 
 async function renderCrmData() {
