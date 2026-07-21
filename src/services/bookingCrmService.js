@@ -274,74 +274,33 @@ async function authorizeYclientsForExternalOpen(data = {}) {
   const login = normalizeText(data.login);
   const password = normalizeText(data.password);
 
-  if (partnerToken && login && password) {
-    try {
-      await fetchYclientsUserToken({ login, password, partnerToken });
-      return {
-        apiAuthorized: true,
-        authMode: 'yclients-api-crm-login-password',
-        partnerTokenSource: 'env',
-        userTokenSource: 'crm-data-login-password',
-        webLoginRequired: true,
-        requiresManualWebLogin: true,
-        message: 'YCLIENTS API-проверка выполнена по логину и паролю из экрана «Данные CRM». Web-кабинет YCLIENTS требует ручной вход: API не создаёт браузерную сессию.'
-      };
-    } catch (error) {
-      return {
-        apiAuthorized: false,
-        authMode: 'yclients-api-crm-login-password-failed',
-        partnerTokenSource: 'env',
-        userTokenSource: 'crm-data-login-password',
-        webLoginRequired: true,
-        requiresManualWebLogin: true,
-        message: `YCLIENTS требует ручной вход. API-проверка по данным экрана «Данные CRM» не выполнена: ${yclientsOpenWarning(error)}.`
-      };
-    }
-  }
-
-  if (partnerToken && envUserToken) {
-    try {
-      await verifyYclientsUserToken({ partnerToken, userToken: envUserToken });
-      return {
-        apiAuthorized: true,
-        authMode: 'yclients-api-env-user-token',
-        partnerTokenSource: 'env',
-        userTokenSource: 'env',
-        webLoginRequired: true,
-        requiresManualWebLogin: true,
-        message: 'YCLIENTS API-проверка по YCLIENTS_PARTNER_TOKEN и YCLIENTS_USER_TOKEN выполнена. Web-кабинет YCLIENTS требует ручной вход: API не создаёт браузерную сессию.'
-      };
-    } catch (error) {
-      return {
-        apiAuthorized: false,
-        authMode: 'yclients-api-env-user-token-failed',
-        partnerTokenSource: 'env',
-        userTokenSource: 'env',
-        webLoginRequired: true,
-        requiresManualWebLogin: true,
-        message: `YCLIENTS требует ручной вход. API-проверка по env-токенам не выполнена: ${yclientsOpenWarning(error)}.`
-      };
-    }
+  if (!partnerToken) {
+    throw buildServiceError('Для авторизации YCLIENTS укажите YCLIENTS_PARTNER_TOKEN в env.', 400);
   }
 
   if (login && password) {
+    await fetchYclientsUserToken({ login, password, partnerToken });
     return {
-      apiAuthorized: false,
-      authMode: 'yclients-login-password-only',
+      apiAuthorized: true,
+      authMode: 'yclients-api-crm-login-password',
+      partnerTokenSource: 'env',
       userTokenSource: 'crm-data-login-password',
-      webLoginRequired: true,
-      requiresManualWebLogin: true,
-      message: 'YCLIENTS требует ручной вход. Для API-проверки добавьте YCLIENTS_PARTNER_TOKEN; логин и пароль берутся с экрана «Данные CRM».'
+      message: 'YCLIENTS API-авторизация выполнена по логину и паролю из экрана «Данные CRM». Открываем Booking в новой вкладке.'
     };
   }
 
-  return {
-    apiAuthorized: false,
-    authMode: 'yclients-no-auth-data',
-    webLoginRequired: true,
-    requiresManualWebLogin: true,
-    message: 'YCLIENTS требует ручной вход. Заполните логин и пароль на экране «Данные CRM» или задайте YCLIENTS_USER_TOKEN в env для API-проверки.'
-  };
+  if (envUserToken) {
+    await verifyYclientsUserToken({ partnerToken, userToken: envUserToken });
+    return {
+      apiAuthorized: true,
+      authMode: 'yclients-api-env-user-token',
+      partnerTokenSource: 'env',
+      userTokenSource: 'env',
+      message: 'YCLIENTS API-авторизация выполнена по YCLIENTS_PARTNER_TOKEN и YCLIENTS_USER_TOKEN. Открываем Booking в новой вкладке.'
+    };
+  }
+
+  throw buildServiceError('Для авторизации YCLIENTS заполните логин и пароль на экране «Данные CRM» или задайте YCLIENTS_USER_TOKEN в env.', 400);
 }
 
 function yclientsAuthorizationHeader({ partnerToken, userToken } = {}) {

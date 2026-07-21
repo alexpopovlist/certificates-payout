@@ -5044,115 +5044,16 @@ function writeOpeningPlaceholder(bookingWindow) {
 
 function crmBookingSuccessMessage(result = {}) {
   if (result.message) return result.message;
-  if (result.webLoginRequired || result.requiresManualWebLogin) {
-    return 'YCLIENTS открыт в новой вкладке с данными для ручного входа. API-проверка не создаёт web-сессию YCLIENTS.';
-  }
   if (result.authMode === 'yclients-api-env-user-token') {
-    return 'YCLIENTS API проверен по env-токенам. Web-кабинет требует ручной вход на стороне YCLIENTS.';
+    return 'YCLIENTS API-авторизация выполнена по env-токенам. Booking открыт в новой вкладке.';
   }
   if (result.authMode === 'yclients-api-crm-login-password') {
-    return 'YCLIENTS API проверен по логину и паролю с экрана «Данные CRM». Web-кабинет требует ручной вход на стороне YCLIENTS.';
+    return 'YCLIENTS API-авторизация выполнена по логину и паролю с экрана «Данные CRM». Booking открыт в новой вкладке.';
   }
   if (result.authMode === 'yclients-login-password-only') {
-    return 'YCLIENTS открыт в новой вкладке. Для web-кабинета выполните вход на стороне YCLIENTS.';
+    return 'YCLIENTS открыт в новой вкладке.';
   }
   return 'Booking открыт в новой вкладке.';
-}
-
-function isYclientsCrmData() {
-  return String(crmDataState.bookingName || '').trim().toLowerCase() === 'yclients';
-}
-
-function writeYclientsManualLoginPage(bookingWindow, { targetUrl, login, password, message } = {}) {
-  if (!bookingWindow?.document) return false;
-
-  const safeTargetUrl = escapeHtml(targetUrl || '');
-  const safeLogin = escapeHtml(login || '');
-  const safePassword = escapeHtml(password || '');
-  const safeMessage = escapeHtml(message || 'API-проверка выполнена, но web-кабинет YCLIENTS авторизуется только через форму входа на yclients.com.');
-
-  bookingWindow.document.open();
-  bookingWindow.document.write(`
-    <!doctype html>
-    <html lang="ru">
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Вход в YCLIENTS</title>
-        <style>
-          :root { color-scheme: light; }
-          * { box-sizing: border-box; }
-          body { margin: 0; min-height: 100vh; font-family: Inter, Arial, sans-serif; color: #101828; background: #f5f7fb; display: grid; place-items: center; padding: 24px; }
-          main { width: min(680px, 100%); padding: 30px; border: 1px solid #dbe3ef; border-radius: 28px; background: #fff; box-shadow: 0 24px 70px rgba(15, 23, 42, .14); }
-          h1 { margin: 0 0 10px; font-size: clamp(24px, 4vw, 34px); line-height: 1.1; }
-          p { margin: 0; color: #64748b; line-height: 1.55; font-size: 16px; }
-          .notice { margin-top: 18px; padding: 14px 16px; border-radius: 16px; background: #f8fafc; border: 1px solid #e2e8f0; color: #475569; }
-          .credentials { display: grid; gap: 14px; margin-top: 24px; }
-          .field { display: grid; gap: 8px; }
-          .label { color: #667085; font-size: 14px; font-weight: 700; }
-          .value-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
-          .value { min-height: 48px; display: flex; align-items: center; padding: 12px 14px; border: 1px solid #dbe3ef; border-radius: 14px; background: #fff; font-size: 16px; overflow-wrap: anywhere; }
-          button, a.button { min-height: 48px; border: 0; border-radius: 14px; padding: 0 18px; font: inherit; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
-          .copy { color: #101828; background: #eef2f7; }
-          .primary { color: #101828; background: #ffcc00; }
-          .secondary { color: #101828; background: #fff; border: 1px solid #dbe3ef; }
-          .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
-          .helper { margin-top: 12px; font-size: 14px; }
-          @media (max-width: 560px) {
-            body { padding: 14px; }
-            main { padding: 22px; border-radius: 22px; }
-            .value-row { grid-template-columns: 1fr; }
-            button, a.button { width: 100%; }
-          }
-        </style>
-      </head>
-      <body>
-        <main>
-          <h1>Вход в YCLIENTS</h1>
-          <p>Автоматический вход в web-кабинет YCLIENTS через API-токен невозможен: API-токен проверяет доступ к данным, но не создаёт браузерную web-сессию.</p>
-          <div class="notice">${safeMessage}</div>
-          <div class="credentials">
-            <div class="field">
-              <div class="label">Логин</div>
-              <div class="value-row">
-                <div class="value" id="loginValue">${safeLogin || 'Не заполнен'}</div>
-                <button class="copy" type="button" data-copy="${safeLogin}">Скопировать</button>
-              </div>
-            </div>
-            <div class="field">
-              <div class="label">Пароль</div>
-              <div class="value-row">
-                <div class="value" id="passwordValue">${safePassword || 'Не заполнен'}</div>
-                <button class="copy" type="button" data-copy="${safePassword}">Скопировать</button>
-              </div>
-            </div>
-          </div>
-          <div class="actions">
-            <a class="button primary" href="${safeTargetUrl}">Открыть YCLIENTS</a>
-            <button class="secondary" type="button" onclick="window.close()">Закрыть</button>
-          </div>
-          <p class="helper">Откройте YCLIENTS, вставьте логин и пароль в форму входа. Если браузер уже авторизован в YCLIENTS, сервис откроется сразу.</p>
-        </main>
-        <script>
-          document.querySelectorAll('[data-copy]').forEach(function(button) {
-            button.addEventListener('click', function() {
-              var text = button.getAttribute('data-copy') || '';
-              if (!text) return;
-              navigator.clipboard.writeText(text).then(function() {
-                var original = button.textContent;
-                button.textContent = 'Скопировано';
-                setTimeout(function() { button.textContent = original; }, 1400);
-              }).catch(function() {
-                window.prompt('Скопируйте значение', text);
-              });
-            });
-          });
-        </script>
-      </body>
-    </html>
-  `);
-  bookingWindow.document.close();
-  return true;
 }
 
 async function openCrmBookingExternal() {
@@ -5201,18 +5102,8 @@ async function openCrmBookingExternal() {
   }
 
   if (bookingWindow && !bookingWindow.closed) {
-    const shouldShowYclientsManualLogin = isYclientsCrmData() && (result.webLoginRequired || result.requiresManualWebLogin || result.authMode?.startsWith('yclients-'));
-    if (shouldShowYclientsManualLogin) {
-      writeYclientsManualLoginPage(bookingWindow, {
-        targetUrl,
-        login: crmDataState.login,
-        password: crmDataState.password,
-        message: crmBookingSuccessMessage(result)
-      });
-    } else {
-      bookingWindow.location.replace(targetUrl);
-      try { bookingWindow.opener = null; } catch (_error) {}
-    }
+    bookingWindow.location.replace(targetUrl);
+    try { bookingWindow.opener = null; } catch (_error) {}
     setCrmDataNotice('success', crmBookingSuccessMessage(result));
   } else {
     setCrmDataNotice('error', 'Браузер заблокировал новую вкладку. Разрешите всплывающие окна и нажмите «Открыть Booking» ещё раз.');
