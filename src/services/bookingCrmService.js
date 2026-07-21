@@ -570,6 +570,12 @@ function renderYclientsLoginBridgePage(ticket) {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex,nofollow" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=wowlife-20260721" />
+    <link rel="shortcut icon" href="/favicon.ico?v=wowlife-20260721" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png?v=wowlife-20260721" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=wowlife-20260721" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicon-48.png?v=wowlife-20260721" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/pwa-icon-192.png?v=wowlife-20260721" />
     <title>Открытие YCLIENTS</title>
     <style>
       :root { color-scheme: light; }
