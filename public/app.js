@@ -5227,8 +5227,12 @@ function appendQueryParam(url, name, value) {
   return `${rawUrl}${separator}${encodeURIComponent(name)}=${encodeURIComponent(String(value))}`;
 }
 
-function yclientsDirectLoginDocumentHtml({ loginUrl, bookingUrl, email, password, targetOrigin, mode = 'direct', showScreen = false } = {}) {
+function yclientsDirectLoginDocumentHtml({ loginUrl, bookingUrl, email, password, targetOrigin, mode = 'direct', showScreen = false, submitDelayMs = null } = {}) {
   const safeMode = String(mode || 'direct').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48) || 'direct';
+  const defaultSubmitDelayMs = showScreen ? 450 : 60;
+  const normalizedSubmitDelayMs = Number.isFinite(Number(submitDelayMs))
+    ? Math.max(0, Number(submitDelayMs))
+    : defaultSubmitDelayMs;
   const bodyClass = showScreen ? '' : ' class="silent"';
   const visibleContent = showScreen
     ? '<main><div class="row"><span class="spin"></span><strong>Готовим авторизацию YCLIENTS</strong></div><p>Отправляем вход на yclients.com/auth/login/1, затем откроем расписание.</p></main>'
@@ -5281,7 +5285,7 @@ function yclientsDirectLoginDocumentHtml({ loginUrl, bookingUrl, email, password
           } catch (_error) {
             try { window.location.replace(bookingUrl); } catch (_replaceError) { window.location.href = bookingUrl; }
           }
-        }, ${showScreen ? 250 : 0});
+        }, ${normalizedSubmitDelayMs});
       })();
     </script>
   </body>
@@ -5306,7 +5310,8 @@ function writeYclientsDirectLoginDocument(targetWindow, result = {}, payload = {
       password,
       targetOrigin: window.location.origin,
       mode: options.mode || 'direct',
-      showScreen: options.showScreen === true
+      showScreen: options.showScreen === true,
+      submitDelayMs: options.submitDelayMs
     }));
     targetWindow.document.close();
     return true;
@@ -5508,7 +5513,8 @@ async function openCrmBookingExternal() {
 
       const directLoginStarted = writeYclientsDirectLoginDocument(bookingWindow, result, payload, {
         mode: 'open-booking-fast-silent',
-        showScreen: false
+        showScreen: false,
+        submitDelayMs: 0
       });
 
       if (!directLoginStarted) {
@@ -5900,14 +5906,18 @@ async function openCrmBookingIframe() {
       // /api/crm-data/yclients-login route: write the top-level login form
       // directly into the service window and let it post to YCLIENTS.
       const showYclientsOpeningScreen = crmDataState.showYclientsOpeningScreen !== false;
-      scheduleYclientsBookingRedirect(iframeLoginWindow, result, { messageSourceWindow: iframeLoginWindow });
+      scheduleYclientsBookingRedirect(iframeLoginWindow, result, {
+        messageSourceWindow: iframeLoginWindow,
+        afterFormSubmitDelayMs: Number(result.browserAuthRedirectAfterSubmitMs || 5000)
+      });
 
       if (showYclientsOpeningScreen) {
         iframeLoginWindow.location.replace(loginBridgeUrl);
       } else {
         const directLoginStarted = writeYclientsDirectLoginDocument(iframeLoginWindow, result, payload, {
           mode: 'iframe-popup-direct',
-          showScreen: true
+          showScreen: true,
+          submitDelayMs: 450
         });
         if (!directLoginStarted) {
           iframeLoginWindow.location.replace(loginBridgeUrl);
