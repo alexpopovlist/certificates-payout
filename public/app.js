@@ -4972,6 +4972,7 @@ function crmDataFormHtml() {
       </div>
 
       <div class="schedule-actions crm-data-actions">
+        <button id="crmDataOpenIframeButton" class="button secondary" type="button">iFrame</button>
         <button id="crmDataOpenBookingButton" class="button secondary" type="button">Открыть Booking</button>
         <button id="crmDataSaveButton" class="button schedule-submit" type="submit">Сохранить</button>
       </div>
@@ -5195,6 +5196,257 @@ async function openCrmBookingExternal() {
   }
 }
 
+
+function closeCrmBookingIframeModal() {
+  const modal = document.querySelector('#crmBookingIframeModal');
+  if (modal) modal.remove();
+  document.body.classList.remove('modal-open');
+}
+
+function setCrmIframeStatus(tone, badge, message, detail = '') {
+  const box = document.querySelector('#crmBookingIframeStatus');
+  const badgeNode = document.querySelector('#crmBookingIframeStatusBadge');
+  const messageNode = document.querySelector('#crmBookingIframeStatusText');
+  const detailNode = document.querySelector('#crmBookingIframeStatusDetail');
+  if (!box || !badgeNode || !messageNode || !detailNode) return;
+
+  box.className = `crm-booking-iframe-status ${tone || 'info'}`;
+  badgeNode.textContent = badge || 'статус';
+  messageNode.textContent = message || '';
+  detailNode.textContent = detail || '';
+  detailNode.classList.toggle('hidden', !detail);
+}
+
+function openCrmBookingResultInNewTab(result = {}) {
+  const targetUrl = result.openUrl || result.externalUrl;
+  if (!targetUrl) return;
+
+  let bookingWindow = null;
+  try {
+    bookingWindow = window.open('', '_blank');
+    writeOpeningPlaceholder(bookingWindow);
+  } catch (_error) {
+    bookingWindow = null;
+  }
+
+  if (!bookingWindow || bookingWindow.closed) {
+    setCrmIframeStatus('error', 'popup blocked', 'Браузер заблокировал новую вкладку.', 'Разрешите всплывающие окна или используйте прямую ссылку ниже.');
+    return;
+  }
+
+  if (isYclientsLoginBridgeResult(result)) {
+    scheduleYclientsBookingRedirect(bookingWindow, result);
+    bookingWindow.location.replace(targetUrl);
+  } else {
+    bookingWindow.location.replace(targetUrl);
+    try { bookingWindow.opener = null; } catch (_error) {}
+  }
+}
+
+function renderCrmBookingIframeModal(result = {}, payload = {}) {
+  closeCrmBookingIframeModal();
+
+  const targetUrl = result.externalUrl || result.openUrl || payload.bookingUrl || '';
+  const loginUrl = result.loginUrl || 'https://www.yclients.com/auth/login/1';
+  const isYclients = result.authMode === 'yclients-web-login-post' || isYclientsLoginBridgeResult(result);
+  const login = String(payload.login || '').trim();
+  const password = String(payload.password || '').trim();
+  const iframeTitle = isYclients ? 'YCLIENTS в iFrame' : 'Booking в iFrame';
+  const intro = isYclients
+    ? 'Сначала пробуем передать cookies YCLIENTS через скрытую iframe-авторизацию, затем открываем расписание в iFrame.'
+    : 'Открываем Booking сервис внутри iFrame.';
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="crmBookingIframeModal" class="schedule-modal crm-booking-iframe-modal" role="dialog" aria-modal="true" aria-labelledby="crmBookingIframeTitle">
+      <button class="schedule-modal-backdrop" type="button" aria-label="Закрыть iFrame"></button>
+      <div class="schedule-panel crm-booking-iframe-panel">
+        <header class="schedule-header crm-booking-iframe-header">
+          <div>
+            <h2 id="crmBookingIframeTitle">${escapeHtml(iframeTitle)}</h2>
+            <p>${escapeHtml(intro)}</p>
+          </div>
+          <button id="crmBookingIframeClose" class="button icon-button schedule-close" type="button" aria-label="Закрыть">×</button>
+        </header>
+
+        <div class="crm-booking-iframe-body">
+          <div id="crmBookingIframeStatus" class="crm-booking-iframe-status info" aria-live="polite">
+            <div class="crm-booking-iframe-status-row">
+              <strong>Статус iFrame</strong>
+              <span id="crmBookingIframeStatusBadge" class="crm-booking-iframe-badge">подготовка</span>
+            </div>
+            <span id="crmBookingIframeStatusText">Готовим авторизацию и окно Booking.</span>
+            <pre id="crmBookingIframeStatusDetail" class="hidden"></pre>
+          </div>
+
+          <div class="crm-booking-iframe-target-row">
+            <span>Итоговая ссылка</span>
+            <code>${escapeHtml(targetUrl || 'ссылка не получена')}</code>
+          </div>
+
+          <div class="crm-booking-iframe-frame-wrap">
+            <iframe id="crmBookingIframeFrame" class="crm-booking-iframe-frame" title="${escapeHtml(iframeTitle)}" src="about:blank" allow="clipboard-read; clipboard-write"></iframe>
+          </div>
+
+          <form id="crmYclientsIframeLoginForm" method="post" action="${escapeHtml(loginUrl)}" target="crmYclientsIframeAuthFrame" class="hidden" aria-hidden="true">
+            <input type="hidden" name="email" value="${escapeHtml(login)}" />
+            <input type="hidden" name="password" value="${escapeHtml(password)}" />
+          </form>
+          <iframe id="crmYclientsIframeAuthFrame" name="crmYclientsIframeAuthFrame" title="Скрытая авторизация YCLIENTS" class="crm-booking-hidden-frame" aria-hidden="true"></iframe>
+
+          <div class="crm-booking-iframe-actions">
+            <button id="crmBookingIframeRetry" class="button secondary" type="button">Повторить вход в iFrame</button>
+            <button id="crmBookingIframeExternal" class="button secondary" type="button">Открыть в новой вкладке</button>
+            ${targetUrl ? `<a class="button secondary" href="${escapeHtml(targetUrl)}" target="_blank" rel="noreferrer">Открыть ссылку</a>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+
+  document.body.classList.add('modal-open');
+
+  const modal = document.querySelector('#crmBookingIframeModal');
+  const closeButtons = [
+    document.querySelector('#crmBookingIframeClose'),
+    modal?.querySelector('.schedule-modal-backdrop')
+  ];
+  closeButtons.forEach((button) => button?.addEventListener('click', closeCrmBookingIframeModal));
+  document.querySelector('#crmBookingIframeExternal')?.addEventListener('click', () => openCrmBookingResultInNewTab(result));
+
+  const bookingFrame = document.querySelector('#crmBookingIframeFrame');
+  const authFrame = document.querySelector('#crmYclientsIframeAuthFrame');
+  const authForm = document.querySelector('#crmYclientsIframeLoginForm');
+  let loadTimer = null;
+  let bookingFrameHasTarget = false;
+
+  function openTargetInIframe(source) {
+    if (!bookingFrame || !targetUrl) {
+      setCrmIframeStatus('error', 'нет ссылки', 'Не удалось получить ссылку для iFrame.', 'Проверьте поле «Ссылка на Booking сервис».');
+      return;
+    }
+
+    setCrmIframeStatus(
+      'info',
+      'загрузка',
+      'Открываем Booking внутри iFrame.',
+      source ? `Источник перехода: ${source}.` : ''
+    );
+    bookingFrameHasTarget = true;
+    bookingFrame.src = targetUrl;
+  }
+
+  function submitIframeAuth() {
+    if (!isYclients) {
+      openTargetInIframe('прямая ссылка');
+      return;
+    }
+
+    if (!login || !password) {
+      setCrmIframeStatus('error', 'нет данных', 'Для iFrame-авторизации YCLIENTS заполните логин и пароль.', 'Данные берутся из полей на экране «Данные CRM».');
+      return;
+    }
+
+    if (!authForm || !authFrame) {
+      setCrmIframeStatus('error', 'ошибка формы', 'Не удалось подготовить скрытую форму авторизации.', 'Попробуйте открыть Booking в новой вкладке.');
+      return;
+    }
+
+    if (loadTimer) window.clearTimeout(loadTimer);
+
+    setCrmIframeStatus(
+      'info',
+      'auth iframe',
+      'Отправляем логин и пароль в скрытый iframe YCLIENTS.',
+      'Если браузер разрешит third-party cookies, расписание откроется внутри iFrame без видимого перехода на auth/login/1.'
+    );
+
+    const openAfterAuth = () => {
+      if (loadTimer) {
+        window.clearTimeout(loadTimer);
+        loadTimer = null;
+      }
+      window.setTimeout(() => openTargetInIframe('скрытая iframe-авторизация'), 700);
+    };
+
+    authFrame.addEventListener('load', openAfterAuth, { once: true });
+
+    try {
+      authForm.submit();
+    } catch (error) {
+      setCrmIframeStatus('warning', 'auth error', 'Скрытую iframe-авторизацию запустить не удалось.', error && error.message ? error.message : String(error));
+      openTargetInIframe('fallback после ошибки авторизации');
+      return;
+    }
+
+    loadTimer = window.setTimeout(() => {
+      setCrmIframeStatus(
+        'warning',
+        'fallback',
+        'Ответ авторизации в скрытом iframe не подтвердился за отведённое время. Всё равно открываем расписание в iFrame.',
+        'Если внутри появится выход из системы или экран входа, используйте кнопку «Открыть в новой вкладке».'
+      );
+      openTargetInIframe('timeout fallback');
+    }, 3200);
+  }
+
+  bookingFrame?.addEventListener('load', () => {
+    if (!bookingFrameHasTarget) return;
+    setCrmIframeStatus(
+      'success',
+      'iframe loaded',
+      'iFrame загрузился.',
+      'Из-за cross-origin политики браузер не даёт проверить содержимое YCLIENTS. Если внутри отображается ошибка авторизации, нажмите «Открыть в новой вкладке».'
+    );
+  });
+
+  document.querySelector('#crmBookingIframeRetry')?.addEventListener('click', submitIframeAuth);
+  window.setTimeout(submitIframeAuth, 300);
+}
+
+async function openCrmBookingIframe() {
+  const form = document.querySelector('#crmDataForm');
+  const iframeButton = document.querySelector('#crmDataOpenIframeButton');
+  updateCrmDataStateFromForm(form);
+  const payload = buildCrmBookingRequestPayload();
+
+  if (iframeButton) {
+    iframeButton.disabled = true;
+    iframeButton.textContent = 'Открываем iFrame...';
+  }
+
+  setCrmDataNotice('success', 'Готовим iFrame для Booking сервиса.');
+
+  let result;
+  try {
+    result = await api('/api/crm-data/open-booking', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    setCrmDataNotice('error', error.message || 'Не удалось подготовить iFrame для Booking сервиса.');
+    if (iframeButton) {
+      iframeButton.disabled = false;
+      iframeButton.textContent = 'iFrame';
+    }
+    return;
+  }
+
+  if (result.item) {
+    updateCrmDataState(result.item);
+    updateCrmBookingUrlField(result.item.bookingUrl);
+  } else if (result.savedBookingUrl || result.externalUrl) {
+    updateCrmBookingUrlField(result.savedBookingUrl || result.externalUrl);
+  }
+
+  renderCrmBookingIframeModal(result, payload);
+  setCrmDataNotice('success', 'Открываем Booking в iFrame. Если браузер заблокирует cookies или встраивание, используйте кнопку «Открыть в новой вкладке».');
+
+  if (iframeButton) {
+    iframeButton.disabled = false;
+    iframeButton.textContent = 'iFrame';
+  }
+}
+
 async function handleCrmDataSubmit(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -5245,6 +5497,7 @@ async function handleCrmDataSubmit(event) {
 function setupCrmDataForm() {
   document.querySelector('#crmDataForm')?.addEventListener('submit', handleCrmDataSubmit);
   document.querySelector('#crmDataOpenBookingButton')?.addEventListener('click', openCrmBookingExternal);
+  document.querySelector('#crmDataOpenIframeButton')?.addEventListener('click', openCrmBookingIframe);
 }
 
 async function renderCrmData() {

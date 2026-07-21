@@ -5574,3 +5574,162 @@ body.is-admin .admin-mobile-card-badge .status {
     width: 100%;
   }
 }
+
+/* CRM Booking iframe: modal experiment for YCLIENTS embedded auth flow. */
+.crm-booking-iframe-modal {
+  z-index: 170;
+}
+
+.crm-booking-iframe-panel {
+  width: min(1180px, calc(100vw - 40px));
+  max-height: min(940px, calc(100vh - 40px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.crm-booking-iframe-header p {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.crm-booking-iframe-body {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(420px, 1fr) auto;
+  gap: 16px;
+  padding: 20px 24px 24px;
+  overflow: auto;
+}
+
+.crm-booking-iframe-status {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 18px;
+  background: #eff6ff;
+  color: #334155;
+}
+
+.crm-booking-iframe-status.success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.crm-booking-iframe-status.warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.crm-booking-iframe-status.error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.crm-booking-iframe-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.crm-booking-iframe-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.crm-booking-iframe-status pre,
+.crm-booking-iframe-target-row code {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #0f172a;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.crm-booking-iframe-target-row {
+  display: grid;
+  gap: 8px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.crm-booking-iframe-frame-wrap {
+  min-height: 420px;
+  overflow: hidden;
+  border: 1px solid #dbe3ef;
+  border-radius: 20px;
+  background: #ffffff;
+}
+
+.crm-booking-iframe-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 560px;
+  border: 0;
+  background: #ffffff;
+}
+
+.crm-booking-hidden-frame {
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  border: 0;
+  pointer-events: none;
+}
+
+.crm-booking-iframe-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+@media (max-width: 680px) {
+  .crm-booking-iframe-panel {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+  }
+
+  .crm-booking-iframe-body {
+    grid-template-rows: auto auto minmax(360px, 1fr) auto;
+    padding: 16px;
+  }
+
+  .crm-booking-iframe-frame-wrap {
+    min-height: 360px;
+  }
+
+  .crm-booking-iframe-frame {
+    min-height: 420px;
+  }
+
+  .crm-booking-iframe-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .crm-booking-iframe-actions .button {
+    width: 100%;
+  }
+}
