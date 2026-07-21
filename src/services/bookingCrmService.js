@@ -324,6 +324,159 @@ function getYclientsWebLoginUrl() {
   return process.env.YCLIENTS_WEB_LOGIN_URL || DEFAULT_YCLIENTS_WEB_LOGIN_URL;
 }
 
+
+function normalizeYclientsCompanyId(value) {
+  const text = normalizeText(value);
+  const match = text.match(/^\d{2,}$/);
+  return match ? match[0] : '';
+}
+
+function getYclientsTimetableBaseUrl() {
+  return String(process.env.YCLIENTS_TIMETABLE_BASE_URL || 'https://yclients.com').replace(/\/+$/, '');
+}
+
+function buildYclientsTimetableUrl(companyId) {
+  const normalizedCompanyId = normalizeYclientsCompanyId(companyId);
+  return normalizedCompanyId ? `${getYclientsTimetableBaseUrl()}/timetable/${normalizedCompanyId}` : '';
+}
+
+function extractYclientsCompanyIdFromText(value) {
+  const text = String(value ?? '');
+  if (!text) return '';
+
+  const patterns = [
+    /["']yc_company_id["']\s*[:=]\s*["']?(\d{2,})/i,
+    /["']company_id["']\s*[:=]\s*["']?(\d{2,})/i,
+    /["']companyId["']\s*[:=]\s*["']?(\d{2,})/i,
+    /yc_company_id=(\d{2,})/i,
+    /\/timetable\/(\d{2,})(?:\/|\?|#|$)/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return normalizeYclientsCompanyId(match[1]);
+  }
+
+  return '';
+}
+
+function extractYclientsCompanyIdFromCookies(cookies = []) {
+  const normalizedCookies = Array.isArray(cookies) ? cookies : [];
+  const companyCookie = normalizedCookies.find((cookie) => normalizeText(cookie?.name).toLowerCase() === 'yc_company_id');
+  return normalizeYclientsCompanyId(companyCookie?.value);
+}
+
+function collectYclientsCompanyIdCandidates(value, path = [], candidates = [], depth = 0, seen = new Set()) {
+  if (value == null || depth > 8) return candidates;
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    const lastKey = normalizeText(path[path.length - 1]).toLowerCase();
+    const joinedPath = path.map((key) => normalizeText(key).toLowerCase()).join('.');
+    const directId = normalizeYclientsCompanyId(value);
+    const idFromText = extractYclientsCompanyIdFromText(value);
+
+    if (directId && ['yc_company_id', 'company_id', 'companyid'].includes(lastKey)) {
+      candidates.push({ id: directId, score: 100, source: joinedPath || 'payload' });
+    } else if (directId && joinedPath.includes('company') && lastKey === 'id') {
+      candidates.push({ id: directId, score: 80, source: joinedPath || 'payload' });
+    } else if (idFromText) {
+      candidates.push({ id: idFromText, score: 70, source: joinedPath || 'payload' });
+    }
+
+    return candidates;
+  }
+
+  if (typeof value !== 'object') return candidates;
+  if (seen.has(value)) return candidates;
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => collectYclientsCompanyIdCandidates(item, path.concat(String(index)), candidates, depth + 1, seen));
+    return candidates;
+  }
+
+  for (const [key, item] of Object.entries(value)) {
+    collectYclientsCompanyIdCandidates(item, path.concat(key), candidates, depth + 1, seen);
+  }
+
+  return candidates;
+}
+
+function extractYclientsCompanyIdFromPayload(payload = {}) {
+  const candidates = collectYclientsCompanyIdCandidates(payload)
+    .filter((candidate) => candidate.id)
+    .sort((left, right) => right.score - left.score);
+
+  return candidates[0]?.id || '';
+}
+
+function extractYclientsCompanyIdFromBookingUrl(value) {
+  let url;
+  try {
+    url = parseBookingUrl(value);
+  } catch (_error) {
+    return '';
+  }
+
+  const directFromUrl = extractYclientsCompanyIdFromText(url.toString());
+  if (directFromUrl) return directFromUrl;
+
+  for (const key of ['yc_company_id', 'company_id', 'companyId']) {
+    const queryId = normalizeYclientsCompanyId(url.searchParams.get(key));
+    if (queryId) return queryId;
+  }
+
+  const pathParts = url.pathname.split('/').filter(Boolean);
+  const signinIndex = pathParts.findIndex((part) => part.toLowerCase() === 'signin');
+  if (signinIndex >= 0 && pathParts[signinIndex + 1]) {
+    const encoded = pathParts[signinIndex + 1].replace(/-/g, '+').replace(/_/g, '/');
+    try {
+      const decoded = Buffer.from(encoded, 'base64').toString('utf8');
+      const decodedUrl = decodeURIComponent(decoded);
+      const idFromDecoded = extractYclientsCompanyIdFromText(decodedUrl);
+      if (idFromDecoded) return idFromDecoded;
+    } catch (_error) {
+      return '';
+    }
+  }
+
+  return '';
+}
+
+function extractYclientsCompanyId({ payload, rawText, cookies, bookingUrl } = {}) {
+  return extractYclientsCompanyIdFromCookies(cookies)
+    || extractYclientsCompanyIdFromPayload(payload)
+    || extractYclientsCompanyIdFromText(rawText)
+    || extractYclientsCompanyIdFromBookingUrl(bookingUrl);
+}
+
+function resolveYclientsTimetableTarget({ originalUrl, authResult, webLoginResult } = {}) {
+  const sources = [
+    { source: 'web-login-cookies', id: webLoginResult?.companyIdFromCookies },
+    { source: 'web-login-response', id: webLoginResult?.companyId },
+    { source: 'api-auth-response', id: authResult?.companyId },
+    { source: 'booking-url', id: extractYclientsCompanyIdFromBookingUrl(originalUrl) }
+  ];
+
+  for (const item of sources) {
+    const companyId = normalizeYclientsCompanyId(item.id);
+    const url = buildYclientsTimetableUrl(companyId);
+    if (url) {
+      return {
+        url,
+        companyId,
+        source: item.source
+      };
+    }
+  }
+
+  return {
+    url: normalizeBookingUrl(originalUrl),
+    companyId: '',
+    source: 'booking-url-original'
+  };
+}
+
 function cleanupYclientsLoginTickets() {
   const now = Date.now();
   for (const [ticketId, ticket] of yclientsLoginTickets.entries()) {
@@ -382,9 +535,14 @@ function formatYclientsWebLoginStatus(result = null) {
   const cookies = result.cookies || {};
   const receivedCount = Number(cookies.receivedCount || 0);
   const storedCount = Number(cookies.storedCount || 0);
+  const cookieNames = Array.isArray(cookies.names) && cookies.names.length
+    ? ` Имена cookies: ${cookies.names.join(', ')}.`
+    : '';
+  const companyId = normalizeYclientsCompanyId(result.companyId || result.companyIdFromCookies);
+  const companyMessage = companyId ? ` Компания YCLIENTS: ${companyId}.` : '';
   const cookieMessage = receivedCount > 0
-    ? `Cookies YCLIENTS получены: ${receivedCount}. В текущей сессии сохранено: ${storedCount}.`
-    : 'Cookies YCLIENTS в ответе сервиса не получены.';
+    ? `Cookies YCLIENTS получены: ${receivedCount}. В текущей сессии сохранено: ${storedCount}.${companyMessage}${cookieNames}`
+    : `Cookies YCLIENTS в ответе сервиса не получены.${companyMessage}`;
 
   return {
     label: ok ? 'Авторизация отправлена успешно' : 'Авторизация не подтверждена',
@@ -402,6 +560,8 @@ function renderYclientsLoginBridgePage(ticket) {
   const password = normalizeText(ticket.password);
   const apiMessage = normalizeText(ticket.apiAuthResult?.message);
   const webLoginStatus = formatYclientsWebLoginStatus(ticket.apiAuthResult?.webLoginResult);
+  const yclientsCompanyId = normalizeYclientsCompanyId(ticket.apiAuthResult?.yclientsCompanyId);
+  const yclientsCompanyIdSource = normalizeText(ticket.apiAuthResult?.yclientsCompanyIdSource);
   const autoBrowserLoginDelayMs = email && password ? 6500 : 0;
 
   return `<!doctype html>
@@ -453,6 +613,14 @@ function renderYclientsLoginBridgePage(ticket) {
           <strong>Ответ сервиса</strong>
           <pre>${escapeHtml(webLoginStatus.responseText)}</pre>
           <span class="muted">${escapeHtml(webLoginStatus.cookieMessage)}</span>
+        </div>
+        <div class="service-status info">
+          <div class="service-row">
+            <strong>Итоговый переход</strong>
+            <span class="badge">${yclientsCompanyId ? `company ${escapeHtml(yclientsCompanyId)}` : 'исходная ссылка'}</span>
+          </div>
+          <pre>${escapeHtml(bookingUrl)}</pre>
+          ${yclientsCompanyIdSource ? `<span class="muted">ID компании взят из источника: ${escapeHtml(yclientsCompanyIdSource)}.</span>` : ''}
         </div>
         <div class="browser-status info" id="browserStatusBox">
           <div class="service-row">
@@ -614,19 +782,31 @@ async function postYclientsWebLoginJson({ login, password, session } = {}) {
     });
 
     const setCookieHeaders = getSetCookieHeaders(response);
+    const receivedCookies = setCookieHeaders.map(parseSetCookieHeader).filter(Boolean);
     const cookieResult = storeYclientsCookiesInSession(session, setCookieHeaders);
     const text = await response.text();
+    const payload = parseJsonSafe(text);
+    const companyIdFromCookies = extractYclientsCompanyIdFromCookies(receivedCookies);
+    const companyId = extractYclientsCompanyId({
+      payload,
+      rawText: text,
+      cookies: receivedCookies
+    });
+
     return {
       ok: response.ok || (response.status >= 300 && response.status < 400),
       status: response.status,
       statusText: response.statusText || '',
       redirected: response.status >= 300 && response.status < 400,
       rawText: text,
-      payload: parseJsonSafe(text),
+      payload,
+      companyId,
+      companyIdFromCookies,
       cookies: {
         receivedCount: cookieResult.receivedCount,
         storedCount: cookieResult.storedCount,
-        updated: cookieResult.updated
+        updated: cookieResult.updated,
+        names: receivedCookies.map((cookie) => cookie.name).filter(Boolean)
       }
     };
   } finally {
@@ -689,11 +869,13 @@ async function fetchYclientsUserToken({ login, password, partnerToken: providedP
   });
 
   const setCookieHeaders = getSetCookieHeaders(response);
+  const receivedCookies = setCookieHeaders.map(parseSetCookieHeader).filter(Boolean);
   const cookieResult = storeYclientsCookiesInSession(session, setCookieHeaders);
 
   const text = await response.text();
   const payload = parseJsonSafe(text);
   const userToken = getYclientsUserTokenFromPayload(payload);
+  const companyId = extractYclientsCompanyId({ payload, rawText: text, cookies: receivedCookies });
   const successFlag = payload?.success ?? payload?.result;
 
   if (!response.ok || successFlag === false || !userToken) {
@@ -709,6 +891,7 @@ async function fetchYclientsUserToken({ login, password, partnerToken: providedP
     userToken,
     partnerToken,
     payload,
+    companyId,
     cookies: {
       receivedCount: cookieResult.receivedCount,
       storedCount: cookieResult.storedCount,
@@ -731,10 +914,12 @@ async function verifyYclientsUserToken({ partnerToken, userToken, session } = {}
   });
 
   const setCookieHeaders = getSetCookieHeaders(response);
+  const receivedCookies = setCookieHeaders.map(parseSetCookieHeader).filter(Boolean);
   const cookieResult = storeYclientsCookiesInSession(session, setCookieHeaders);
+  const text = await response.text();
+  const payload = parseJsonSafe(text);
 
   if (!response.ok) {
-    const payload = parseJsonSafe(await response.text());
     const message = payload?.meta?.message
       || payload?.message
       || payload?.error
@@ -744,6 +929,8 @@ async function verifyYclientsUserToken({ partnerToken, userToken, session } = {}
   }
 
   return {
+    payload,
+    companyId: extractYclientsCompanyId({ payload, rawText: text, cookies: receivedCookies }),
     cookies: {
       receivedCount: cookieResult.receivedCount,
       storedCount: cookieResult.storedCount,
@@ -774,6 +961,7 @@ async function authorizeYclientsForExternalOpen(data = {}, session = null) {
       authMode: 'yclients-api-crm-login-password',
       partnerTokenSource: 'env',
       userTokenSource: 'crm-data-login-password',
+      companyId: apiLoginResult.companyId,
       cookies: apiLoginResult.cookies,
       message: 'YCLIENTS API-авторизация выполнена по логину и паролю из экрана «Данные CRM». Открываем Booking в новой вкладке.'
     };
@@ -786,6 +974,7 @@ async function authorizeYclientsForExternalOpen(data = {}, session = null) {
       authMode: 'yclients-api-env-user-token',
       partnerTokenSource: 'env',
       userTokenSource: 'env',
+      companyId: apiVerifyResult.companyId,
       cookies: apiVerifyResult.cookies,
       message: 'YCLIENTS API-авторизация выполнена по YCLIENTS_PARTNER_TOKEN и YCLIENTS_USER_TOKEN. Открываем Booking в новой вкладке.'
     };
@@ -802,7 +991,7 @@ async function createBookingOpenTarget({ session, data } = {}) {
   getSessionProfileId(session);
   const normalized = normalizeBookingCrmData(data || {});
   const parsedTargetUrl = parseBookingUrl(normalized.bookingUrl);
-  const targetUrl = parsedTargetUrl.toString();
+  const originalTargetUrl = parsedTargetUrl.toString();
 
   if (isYclientsBooking(normalized) && normalized.authType === 'Базовый') {
     if (!isAllowedYclientsHost(parsedTargetUrl)) {
@@ -845,13 +1034,40 @@ async function createBookingOpenTarget({ session, data } = {}) {
       };
     }
 
+    const timetableTarget = resolveYclientsTimetableTarget({
+      originalUrl: originalTargetUrl,
+      authResult,
+      webLoginResult
+    });
+    const targetUrl = timetableTarget.url || originalTargetUrl;
+    const bookingUrlUpdated = targetUrl !== originalTargetUrl || targetUrl !== normalized.bookingUrl;
+    let savedItem = null;
+    let bookingUrlSaveWarning = '';
+
+    if (bookingUrlUpdated) {
+      try {
+        savedItem = await saveBookingCrmData({
+          session,
+          data: {
+            ...normalized,
+            bookingUrl: targetUrl
+          }
+        });
+      } catch (error) {
+        bookingUrlSaveWarning = yclientsOpenWarning(error);
+      }
+    }
+
     const ticketId = createYclientsLoginTicket({
       bookingUrl: targetUrl,
       login: normalized.login,
       password: normalized.password,
       apiAuthResult: {
         ...authResult,
-        webLoginResult
+        webLoginResult,
+        resolvedBookingUrl: targetUrl,
+        yclientsCompanyId: timetableTarget.companyId,
+        yclientsCompanyIdSource: timetableTarget.source
       }
     });
 
@@ -859,8 +1075,15 @@ async function createBookingOpenTarget({ session, data } = {}) {
       result: true,
       openUrl: `/api/crm-data/yclients-login/${ticketId}`,
       externalUrl: targetUrl,
+      originalExternalUrl: originalTargetUrl,
+      savedBookingUrl: savedItem?.bookingUrl || (bookingUrlUpdated && !bookingUrlSaveWarning ? targetUrl : ''),
+      bookingUrlUpdated: Boolean(savedItem),
+      bookingUrlSaveWarning,
+      item: savedItem || null,
       loginUrl: getYclientsWebLoginUrl(),
       authMode: 'yclients-web-login-post',
+      yclientsCompanyId: timetableTarget.companyId,
+      yclientsCompanyIdSource: timetableTarget.source,
       webLoginRequest: {
         method: 'POST',
         url: getYclientsWebLoginUrl(),
@@ -870,7 +1093,9 @@ async function createBookingOpenTarget({ session, data } = {}) {
       webLoginResult,
       sessionUpdated: Boolean(webLoginResult?.cookies?.updated || authResult?.cookies?.updated),
       ...authResult,
-      message: 'Открываем YCLIENTS в новой вкладке: сначала показывается серверный ответ авторизации, затем вкладка выполняет браузерный POST на yclients.com для установки cookies.'
+      message: timetableTarget.companyId
+        ? `Открываем YCLIENTS в новой вкладке: переход будет на ${targetUrl}. Ссылка на Booking сервис${savedItem ? ' обновлена' : bookingUrlSaveWarning ? ' не обновлена' : ' уже актуальна'}.`
+        : 'Открываем YCLIENTS в новой вкладке: сначала показывается серверный ответ авторизации, затем вкладка выполняет браузерный POST на yclients.com для установки cookies.'
     };
   }
 

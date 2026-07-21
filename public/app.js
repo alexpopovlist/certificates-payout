@@ -5015,6 +5015,15 @@ function setCrmDataNotice(type, message) {
   notice.textContent = message;
 }
 
+function updateCrmBookingUrlField(value) {
+  const bookingUrl = String(value || '').trim();
+  if (!bookingUrl) return;
+
+  crmDataState.bookingUrl = bookingUrl;
+  const input = document.querySelector('#crmBookingUrl');
+  if (input) input.value = bookingUrl;
+}
+
 function writeOpeningPlaceholder(bookingWindow) {
   if (!bookingWindow?.document) return;
   bookingWindow.document.open();
@@ -5091,6 +5100,13 @@ async function openCrmBookingExternal() {
       openButton.textContent = 'Открыть Booking';
     }
     return;
+  }
+
+  if (result.item) {
+    updateCrmDataState(result.item);
+    updateCrmBookingUrlField(result.item.bookingUrl);
+  } else if (result.savedBookingUrl || result.externalUrl) {
+    updateCrmBookingUrlField(result.savedBookingUrl || result.externalUrl);
   }
 
   const targetUrl = result.openUrl || result.externalUrl;
