@@ -5575,38 +5575,31 @@ body.is-admin .admin-mobile-card-badge .status {
   }
 }
 
-/* Booking CRM preview: opening external Booking services from the CRM data tab. */
-.crm-booking-preview {
+/* Booking CRM dialog: opening external Booking services from the CRM data tab. */
+.crm-booking-dialog {
+  z-index: 180;
+}
+
+.crm-booking-dialog-panel {
   display: grid;
-  gap: 16px;
-  margin-top: 24px;
-  border: 1px solid #e2e8f0;
-  border-radius: 24px;
-  background: #ffffff;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(1280px, calc(100vw - 48px));
+  height: min(860px, calc(100vh - 48px));
+  max-height: calc(100vh - 48px);
   overflow: hidden;
+  border-radius: 24px;
 }
 
-.crm-booking-preview.hidden {
-  display: none;
-}
-
-.crm-booking-preview-header {
-  display: flex;
-  justify-content: space-between;
+.crm-booking-dialog-header {
   align-items: flex-start;
-  gap: 16px;
-  padding: 18px 20px 0;
+  padding: 18px 20px;
 }
 
-.crm-booking-preview-header h3 {
-  margin: 0 0 6px;
-  color: #0f172a;
-  font-size: 20px;
-  font-weight: 800;
-  line-height: 1.2;
+.crm-booking-dialog-header h2 {
+  margin-bottom: 6px;
 }
 
-.crm-booking-preview-header p {
+.crm-booking-dialog-header p {
   margin: 0;
   color: #64748b;
   font-size: 14px;
@@ -5614,16 +5607,23 @@ body.is-admin .admin-mobile-card-badge .status {
   line-height: 1.45;
 }
 
+.crm-booking-dialog-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .crm-booking-frame-wrap {
   width: 100%;
-  min-height: 68vh;
+  min-height: 0;
   background: #f8fafc;
 }
 
 .crm-booking-frame-wrap iframe {
   display: block;
   width: 100%;
-  min-height: 68vh;
+  height: 100%;
+  min-height: 0;
   border: 0;
   background: #ffffff;
 }
@@ -5633,22 +5633,29 @@ body.is-admin .admin-mobile-card-badge .status {
     gap: 10px;
   }
 
-  .crm-booking-preview {
-    border-radius: 22px;
-    margin-top: 20px;
+  .crm-booking-dialog {
+    align-items: stretch;
+    padding: 10px;
   }
 
-  .crm-booking-preview-header {
-    display: grid;
-    padding: 16px 16px 0;
-  }
-
-  .crm-booking-preview-header .button {
+  .crm-booking-dialog-panel {
     width: 100%;
+    height: calc(100vh - 20px);
+    max-height: calc(100vh - 20px);
+    border-radius: 22px;
   }
 
-  .crm-booking-frame-wrap,
-  .crm-booking-frame-wrap iframe {
-    min-height: 70vh;
+  .crm-booking-dialog-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 16px;
+  }
+
+  .crm-booking-dialog-header-actions {
+    align-items: flex-start;
+  }
+
+  .crm-booking-dialog-header-actions .button {
+    display: none;
   }
 }

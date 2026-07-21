@@ -4977,18 +4977,24 @@ function crmDataFormHtml() {
       </div>
     </form>
 
-    <section id="crmBookingPreview" class="crm-booking-preview hidden" aria-live="polite">
-      <header class="crm-booking-preview-header">
-        <div>
-          <h3>Booking</h3>
-          <p id="crmBookingPreviewMeta">Данные будут показаны после открытия сервиса.</p>
+    <div id="crmBookingDialog" class="schedule-modal crm-booking-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="crmBookingDialogTitle">
+      <button class="schedule-modal-backdrop" type="button" data-close-crm-booking aria-label="Закрыть Booking"></button>
+      <div class="schedule-panel crm-booking-dialog-panel">
+        <header class="schedule-header crm-booking-dialog-header">
+          <div>
+            <h2 id="crmBookingDialogTitle">Booking</h2>
+            <p id="crmBookingDialogMeta">Данные будут показаны после открытия сервиса.</p>
+          </div>
+          <div class="crm-booking-dialog-header-actions">
+            <a id="crmBookingExternalLink" class="button secondary hidden" href="#" target="_blank" rel="noopener noreferrer">Открыть в новой вкладке</a>
+            <button class="icon-button schedule-close" type="button" data-close-crm-booking aria-label="Закрыть">×</button>
+          </div>
+        </header>
+        <div class="crm-booking-frame-wrap">
+          <iframe id="crmBookingFrame" title="Booking сервис" loading="lazy" referrerpolicy="no-referrer"></iframe>
         </div>
-        <a id="crmBookingExternalLink" class="button secondary hidden" href="#" target="_blank" rel="noopener noreferrer">Открыть в новой вкладке</a>
-      </header>
-      <div class="crm-booking-frame-wrap">
-        <iframe id="crmBookingFrame" title="Booking сервис" loading="lazy" referrerpolicy="no-referrer"></iframe>
       </div>
-    </section>
+    </div>
   `;
 }
 
@@ -5004,39 +5010,14 @@ function updateCrmDataStateFromForm(form) {
   });
 }
 
-function normalizeCrmBookingUrl(value) {
-  const trimmed = String(value || '').trim();
-  if (!trimmed) return '';
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
-}
-
-function buildCrmBookingIframeUrl() {
-  const normalizedUrl = normalizeCrmBookingUrl(crmDataState.bookingUrl);
-  if (!normalizedUrl) {
-    throw new Error('Укажите ссылку на Booking сервис.');
-  }
-
-  let url;
-  try {
-    url = new URL(normalizedUrl);
-  } catch (error) {
-    throw new Error('Укажите корректную ссылку на Booking сервис.');
-  }
-
-  if (!['http:', 'https:'].includes(url.protocol)) {
-    throw new Error('Ссылка на Booking сервис должна начинаться с http:// или https://.');
-  }
-
-  if (crmDataState.authType === 'Базовый') {
-    if (!crmDataState.login || !crmDataState.password) {
-      throw new Error('Для базовой авторизации заполните логин и пароль.');
-    }
-    url.username = crmDataState.login;
-    url.password = crmDataState.password;
-  }
-
-  return url.toString();
+function buildCrmBookingRequestPayload() {
+  return {
+    bookingName: crmDataState.bookingName,
+    bookingUrl: crmDataState.bookingUrl,
+    authType: crmDataState.authType,
+    login: crmDataState.login,
+    password: crmDataState.password
+  };
 }
 
 function setCrmDataNotice(type, message) {
@@ -5053,41 +5034,74 @@ function setCrmDataNotice(type, message) {
   notice.textContent = message;
 }
 
-function openCrmBookingPreview() {
+function closeCrmBookingDialog() {
+  const dialog = document.querySelector('#crmBookingDialog');
+  const frame = document.querySelector('#crmBookingFrame');
+  if (frame) frame.src = 'about:blank';
+  dialog?.classList.add('hidden');
+}
+
+async function openCrmBookingDialog() {
   const form = document.querySelector('#crmDataForm');
+  const openButton = document.querySelector('#crmDataOpenBookingButton');
   updateCrmDataStateFromForm(form);
 
-  let bookingUrl;
+  if (openButton) {
+    openButton.disabled = true;
+    openButton.textContent = 'Открываем...';
+  }
+
+  let frameResult;
   try {
-    bookingUrl = buildCrmBookingIframeUrl();
+    frameResult = await api('/api/crm-data/open-booking', {
+      method: 'POST',
+      body: JSON.stringify(buildCrmBookingRequestPayload())
+    });
   } catch (error) {
     setCrmDataNotice('error', error.message || 'Не удалось открыть Booking сервис.');
+    if (openButton) {
+      openButton.disabled = false;
+      openButton.textContent = 'Открыть Booking';
+    }
     return;
   }
 
-  const preview = document.querySelector('#crmBookingPreview');
+  const dialog = document.querySelector('#crmBookingDialog');
   const frame = document.querySelector('#crmBookingFrame');
   const externalLink = document.querySelector('#crmBookingExternalLink');
-  const meta = document.querySelector('#crmBookingPreviewMeta');
+  const meta = document.querySelector('#crmBookingDialogMeta');
 
-  if (!preview || !frame) return;
+  if (!dialog || !frame) {
+    if (openButton) {
+      openButton.disabled = false;
+      openButton.textContent = 'Открыть Booking';
+    }
+    return;
+  }
 
   setCrmDataNotice('', '');
-  frame.src = bookingUrl;
-  preview.classList.remove('hidden');
+  frame.src = frameResult.iframeUrl;
+  dialog.classList.remove('hidden');
 
   if (externalLink) {
-    externalLink.href = bookingUrl;
+    externalLink.href = frameResult.externalUrl || frameResult.iframeUrl;
     externalLink.classList.remove('hidden');
   }
 
   if (meta) {
-    meta.textContent = crmDataState.authType === 'Базовый'
-      ? 'Сервис открыт в iframe с базовой авторизацией по сохранённым логину и паролю.'
-      : 'Сервис открыт в iframe без подстановки авторизации.';
+    if (frameResult.authMode === 'yclients-api') {
+      meta.textContent = 'YCLIENTS открыт в iframe после авторизации через API по сохранённым логину и паролю.';
+    } else if (frameResult.authMode === 'basic-url') {
+      meta.textContent = 'Сервис открыт в iframe с базовой авторизацией по сохранённым логину и паролю.';
+    } else {
+      meta.textContent = 'Сервис открыт в iframe без подстановки авторизации.';
+    }
   }
 
-  preview.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (openButton) {
+    openButton.disabled = false;
+    openButton.textContent = 'Открыть Booking';
+  }
 }
 
 async function handleCrmDataSubmit(event) {
@@ -5139,7 +5153,10 @@ async function handleCrmDataSubmit(event) {
 
 function setupCrmDataForm() {
   document.querySelector('#crmDataForm')?.addEventListener('submit', handleCrmDataSubmit);
-  document.querySelector('#crmDataOpenBookingButton')?.addEventListener('click', openCrmBookingPreview);
+  document.querySelector('#crmDataOpenBookingButton')?.addEventListener('click', openCrmBookingDialog);
+  document.querySelectorAll('[data-close-crm-booking]').forEach((button) => {
+    button.addEventListener('click', closeCrmBookingDialog);
+  });
 }
 
 async function renderCrmData() {
