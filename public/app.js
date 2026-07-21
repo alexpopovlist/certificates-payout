@@ -5060,7 +5060,7 @@ function crmBookingSuccessMessage(result = {}) {
     return 'YCLIENTS API-авторизация выполнена по логину и паролю с экрана «Данные CRM». Booking открыт в новой вкладке.';
   }
   if (result.authMode === 'yclients-web-login-post') {
-    return 'Открываем YCLIENTS в новой вкладке: сначала выполняется вход на yclients.com, затем эта же вкладка перейдёт на расписание.';
+    return 'Открываем YCLIENTS в новой вкладке: сначала пробуем скрытый вход, затем откроется расписание. Если cookies не установятся, используйте прямой вход через YCLIENTS.';
   }
   if (result.authMode === 'yclients-login-password-only') {
     return 'YCLIENTS открыт в новой вкладке.';
@@ -5079,15 +5079,14 @@ function scheduleYclientsBookingRedirect(bookingWindow, result = {}) {
   if (!bookingWindow || bookingWindow.closed || !result.externalUrl) return null;
 
   let redirected = false;
-  let fallbackTimer = null;
-  const fallbackDelayMs = Number(result.browserAuthFallbackRedirectMs || 14000);
+  let cleanupTimer = null;
   const afterFormSubmitDelayMs = Number(result.browserAuthRedirectAfterSubmitMs || 3500);
 
   function cleanup() {
     window.removeEventListener('message', handleBridgeMessage);
-    if (fallbackTimer) {
-      clearTimeout(fallbackTimer);
-      fallbackTimer = null;
+    if (cleanupTimer) {
+      clearTimeout(cleanupTimer);
+      cleanupTimer = null;
     }
   }
 
@@ -5120,7 +5119,7 @@ function scheduleYclientsBookingRedirect(bookingWindow, result = {}) {
   }
 
   window.addEventListener('message', handleBridgeMessage);
-  fallbackTimer = window.setTimeout(redirectOpenedWindow, fallbackDelayMs);
+  cleanupTimer = window.setTimeout(cleanup, 120000);
 
   return cleanup;
 }

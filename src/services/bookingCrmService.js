@@ -562,7 +562,7 @@ function renderYclientsLoginBridgePage(ticket) {
   const webLoginStatus = formatYclientsWebLoginStatus(ticket.apiAuthResult?.webLoginResult);
   const yclientsCompanyId = normalizeYclientsCompanyId(ticket.apiAuthResult?.yclientsCompanyId);
   const yclientsCompanyIdSource = normalizeText(ticket.apiAuthResult?.yclientsCompanyIdSource);
-  const autoBrowserLoginDelayMs = email && password ? 6500 : 0;
+  const autoBrowserLoginDelayMs = email && password ? 1200 : 0;
 
   return `<!doctype html>
 <html lang="ru">
@@ -605,7 +605,7 @@ function renderYclientsLoginBridgePage(ticket) {
   <body>
     <main>
       <h1>Открываем YCLIENTS</h1>
-      <p>Сначала показываем серверный ответ авторизации, затем эта же вкладка отправит вход напрямую на домен yclients.com, чтобы браузер мог получить cookies YCLIENTS.</p>
+      <p>Сначала пробуем скрыто авторизовать браузер на домене yclients.com. Если браузер примет cookies — сразу откроем расписание. Если скрытый вход не сработает, останется кнопка прямого входа через YCLIENTS.</p>
       <div class="status" aria-live="polite">
         <strong id="statusTitle">Запрос авторизации выполнен сервером</strong>
         <span id="statusText">POST ${escapeHtml(loginUrl)} с email и password уже выполнен на backend. Следующий шаг — браузерная авторизация на домене YCLIENTS.</span>
@@ -633,17 +633,23 @@ function renderYclientsLoginBridgePage(ticket) {
             <strong>Передача cookies в браузер</strong>
             <span class="badge" id="browserStatusBadge">ожидание</span>
           </div>
-          <span id="browserStatusText">Через несколько секунд вкладка отправит login-запрос напрямую на yclients.com. Если YCLIENTS вернёт Set-Cookie, браузер сохранит их для домена yclients.com.</span>
-          <pre id="browserResponseText">Браузерный ответ появится здесь, если YCLIENTS разрешит прочитать его через CORS. Если CORS заблокирует чтение ответа, будет выполнена прямая отправка формы на yclients.com.</pre>
+          <span id="browserStatusText">Через несколько секунд будет выполнена скрытая отправка формы в iframe на yclients.com. Если браузер разрешит third-party cookies, YCLIENTS сохранит cookies без видимого перехода на auth/login/1.</span>
+          <pre id="browserResponseText">Скрытый iframe не позволяет прочитать текст ответа YCLIENTS из-за cross-origin политики браузера. Серверный ответ показан выше.</pre>
         </div>
       </div>
       <div class="actions">
-        <button class="primary" id="browserLoginButton" type="button">Передать cookies в браузер YCLIENTS сейчас</button>
+        <button class="primary" id="browserLoginButton" type="button">Войти через YCLIENTS напрямую</button>
         <button class="secondary" id="openNowButton" type="button">Открыть Booking без ожидания</button>
         <a class="secondary" href="${escapeHtml(bookingUrl)}" rel="noreferrer">Открыть вручную</a>
       </div>
-      <p class="muted" style="margin-top:18px">Установить cookie домена yclients.com из ответа нашего домена нельзя: браузер принимает такие cookies только из ответа самого yclients.com. Поэтому вкладка выполняет прямой браузерный запрос к YCLIENTS.</p>
+      <p class="muted" style="margin-top:18px">Скрытый вход может быть заблокирован настройками third-party cookies. В этом случае нажмите «Войти через YCLIENTS напрямую»: вкладка ненадолго перейдёт на auth/login/1, получит cookies YCLIENTS и автоматически откроет расписание.</p>
     </main>
+
+    <form id="yclientsHiddenLoginForm" method="post" action="${escapeHtml(loginUrl)}" target="yclientsHiddenLoginFrame" style="display:none">
+      <input type="hidden" name="email" value="${escapeHtml(email)}" />
+      <input type="hidden" name="password" value="${escapeHtml(password)}" />
+    </form>
+    <iframe id="yclientsHiddenLoginFrame" name="yclientsHiddenLoginFrame" title="Скрытая авторизация YCLIENTS" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;border:0;pointer-events:none" aria-hidden="true"></iframe>
 
     <form id="yclientsTopLevelLoginForm" method="post" action="${escapeHtml(loginUrl)}" target="_self" style="display:none">
       <input type="hidden" name="email" value="${escapeHtml(email)}" />
@@ -664,8 +670,13 @@ function renderYclientsLoginBridgePage(ticket) {
         var browserResponseText = document.getElementById('browserResponseText');
         var browserLoginButton = document.getElementById('browserLoginButton');
         var openNowButton = document.getElementById('openNowButton');
+        var hiddenForm = document.getElementById('yclientsHiddenLoginForm');
+        var hiddenFrame = document.getElementById('yclientsHiddenLoginFrame');
         var form = document.getElementById('yclientsTopLevelLoginForm');
         var finished = false;
+        var hiddenAttemptStarted = false;
+        var hiddenAttemptCompleted = false;
+        var hiddenTimeoutId = null;
 
         function setBrowserStatus(tone, badge, text, responseText) {
           browserStatusBox.className = 'browser-status ' + tone;
@@ -680,7 +691,7 @@ function renderYclientsLoginBridgePage(ticket) {
           if (finished) return;
           finished = true;
           statusTitle.textContent = 'Открываем Booking...';
-          statusText.textContent = 'Переходим к сохранённой ссылке YCLIENTS.';
+          statusText.textContent = 'Переходим к расписанию YCLIENTS.';
           window.location.replace(bookingUrl);
         }
 
@@ -699,70 +710,82 @@ function renderYclientsLoginBridgePage(ticket) {
         function submitTopLevelLogin() {
           if (finished) return;
           finished = true;
-          statusTitle.textContent = 'Передаём cookies в браузер YCLIENTS...';
-          statusText.textContent = 'Вкладка сейчас перейдёт на yclients.com/auth/login/1 и отправит логин/пароль напрямую. После получения cookies исходная вкладка приложения автоматически переведёт это окно на Booking.';
-          setBrowserStatus('info', 'переход на yclients.com', 'Отправляем форму напрямую на домен YCLIENTS. После ответа YCLIENTS это же окно будет автоматически переведено на итоговую ссылку Booking.', browserResponseText.textContent);
+          statusTitle.textContent = 'Выполняем прямой вход через YCLIENTS...';
+          statusText.textContent = 'Вкладка сейчас перейдёт на yclients.com/auth/login/1. После ответа YCLIENTS исходная вкладка приложения автоматически переведёт это окно на расписание.';
+          setBrowserStatus('info', 'прямой вход', 'Отправляем форму напрямую на домен YCLIENTS. Это резервный вариант, если скрытая авторизация не установила cookies.', browserResponseText.textContent);
           notifyOpenerLoginSubmitted();
           form.submit();
         }
 
-        async function tryBrowserJsonLogin() {
+        function finishHiddenAttempt() {
+          if (finished || !hiddenAttemptStarted || hiddenAttemptCompleted) return;
+          hiddenAttemptCompleted = true;
+          if (hiddenTimeoutId) {
+            clearTimeout(hiddenTimeoutId);
+            hiddenTimeoutId = null;
+          }
+          setBrowserStatus(
+            'success',
+            'iframe load',
+            'Скрытый login-запрос завершился. Если браузер принял cookies YCLIENTS, расписание откроется уже авторизованным. Сейчас переходим к Booking.',
+            'Ответ YCLIENTS загружен в скрытом iframe. Из-за cross-origin политики текст ответа в iframe прочитать нельзя.'
+          );
+          window.setTimeout(openBooking, 1400);
+        }
+
+        function submitHiddenLogin() {
+          if (finished || hiddenAttemptStarted) return;
           if (!email || !password) {
-            setBrowserStatus('error', 'нет данных', 'Логин или пароль не заполнены. Передать cookies в браузер нельзя.', '');
+            setBrowserStatus('error', 'нет данных', 'Логин или пароль не заполнены. Заполните их на экране «Данные CRM».', '');
             return;
           }
 
-          browserLoginButton.disabled = true;
-          setBrowserStatus('info', 'fetch', 'Пробуем выполнить браузерный POST с JSON и credentials: include.', 'Ожидаем ответ YCLIENTS...');
+          hiddenAttemptStarted = true;
+          browserLoginButton.disabled = false;
+          setBrowserStatus(
+            'info',
+            'скрытый iframe',
+            'Пробуем скрыто отправить форму на yclients.com/auth/login/1. Пользователь не увидит страницу auth/login/1, если браузер разрешит cookies в iframe.',
+            'Ожидаем загрузку ответа YCLIENTS в скрытом iframe...'
+          );
 
+          hiddenFrame.addEventListener('load', finishHiddenAttempt, { once: true });
           try {
-            var response = await fetch(loginUrl, {
-              method: 'POST',
-              credentials: 'include',
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json, text/plain, */*'
-              },
-              body: JSON.stringify({ email: email, password: password })
-            });
-            var text = await response.text();
-            setBrowserStatus(
-              response.ok ? 'success' : 'warning',
-              'HTTP ' + response.status,
-              response.ok
-                ? 'Браузерный запрос выполнен. Если YCLIENTS вернул Set-Cookie, браузер сохранил cookies для yclients.com. Открываем Booking.'
-                : 'YCLIENTS вернул неуспешный HTTP-статус. Ответ показан ниже.',
-              text || 'Пустой ответ сервиса.'
-            );
-            if (response.ok) {
-              window.setTimeout(openBooking, 2200);
-              return;
-            }
-            finished = false;
-            browserLoginButton.disabled = false;
+            hiddenForm.submit();
           } catch (error) {
+            hiddenAttemptCompleted = true;
             setBrowserStatus(
               'warning',
-              'CORS',
-              'Браузер не дал прочитать ответ YCLIENTS через fetch. Сейчас выполнится прямая отправка формы на yclients.com, чтобы ответ пришёл от самого домена YCLIENTS и смог установить cookies.',
+              'iframe error',
+              'Скрытая отправка формы не запустилась. Используйте прямой вход через YCLIENTS.',
               error && error.message ? error.message : String(error)
             );
-            browserLoginButton.disabled = false;
-            window.setTimeout(submitTopLevelLogin, 1600);
+            return;
           }
+
+          hiddenTimeoutId = window.setTimeout(function () {
+            if (finished || hiddenAttemptCompleted) return;
+            hiddenAttemptCompleted = true;
+            setBrowserStatus(
+              'warning',
+              'fallback',
+              'Скрытый iframe не подтвердил завершение авторизации. Нажмите «Войти через YCLIENTS напрямую», чтобы cookies точно установились в браузере.',
+              'Скрытый запрос мог быть заблокирован настройками third-party cookies или политикой браузера.'
+            );
+          }, 5000);
         }
 
         browserLoginButton.addEventListener('click', function () {
           if (finished) return;
-          tryBrowserJsonLogin();
+          submitTopLevelLogin();
         });
         openNowButton.addEventListener('click', openBooking);
 
         var autoDelay = ${autoBrowserLoginDelayMs};
         if (autoDelay > 0) {
-          statusText.textContent = 'Серверный ответ показан ниже. Через ' + Math.round(autoDelay / 1000) + ' сек. начнётся браузерная передача cookies в YCLIENTS.';
+          statusText.textContent = 'Серверный ответ показан ниже. Через ' + Math.round(autoDelay / 1000) + ' сек. попробуем скрытую авторизацию через iframe.';
           window.setTimeout(function () {
-            if (!finished) tryBrowserJsonLogin();
+            if (!finished) submitHiddenLogin();
           }, autoDelay);
         } else {
           setBrowserStatus('error', 'нет данных', 'Логин или пароль не заполнены. Заполните их на экране «Данные CRM».', '');
@@ -1024,7 +1047,7 @@ async function createBookingOpenTarget({ session, data } = {}) {
     let authResult = {
       apiAuthorized: false,
       authMode: 'yclients-web-login-post',
-      message: 'Открываем YCLIENTS через web-авторизацию в новой вкладке.'
+      message: 'Открываем YCLIENTS: сначала пробуем скрытую web-авторизацию, затем открываем расписание.'
     };
 
     try {
@@ -1034,7 +1057,7 @@ async function createBookingOpenTarget({ session, data } = {}) {
         apiAuthorized: false,
         authMode: 'yclients-web-login-post',
         apiWarning: yclientsOpenWarning(error),
-        message: 'API-проверка YCLIENTS не выполнена, но web-авторизация будет отправлена в новой вкладке.'
+        message: 'API-проверка YCLIENTS не выполнена, но скрытая web-авторизация будет отправлена в новой вкладке.'
       };
     }
 
@@ -1115,8 +1138,8 @@ async function createBookingOpenTarget({ session, data } = {}) {
       sessionUpdated: Boolean(webLoginResult?.cookies?.updated || authResult?.cookies?.updated),
       ...authResult,
       message: timetableTarget.companyId
-        ? `Открываем YCLIENTS в новой вкладке: переход будет на ${targetUrl}. Ссылка на Booking сервис${savedItem ? ' обновлена' : bookingUrlSaveWarning ? ' не обновлена' : ' уже актуальна'}.`
-        : 'Открываем YCLIENTS в новой вкладке: сначала показывается серверный ответ авторизации, затем вкладка выполняет браузерный POST на yclients.com для установки cookies.'
+        ? `Открываем YCLIENTS в новой вкладке: сначала пробуем скрытый вход, затем переход будет на ${targetUrl}. Ссылка на Booking сервис${savedItem ? ' обновлена' : bookingUrlSaveWarning ? ' не обновлена' : ' уже актуальна'}.`
+        : 'Открываем YCLIENTS в новой вкладке: сначала пробуем скрытую авторизацию через iframe, затем открываем расписание.'
     };
   }
 
