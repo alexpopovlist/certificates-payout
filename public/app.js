@@ -5091,6 +5091,8 @@ async function openCrmBookingDialog() {
   if (meta) {
     if (frameResult.authMode === 'yclients-api') {
       meta.textContent = 'YCLIENTS открыт в iframe после авторизации через API по сохранённым логину и паролю.';
+    } else if (frameResult.authMode === 'yclients-login-only') {
+      meta.textContent = 'YCLIENTS открыт без API-авторизации: доступны только login/password. Войдите вручную в iframe или откройте сервис в новой вкладке.';
     } else if (frameResult.authMode === 'basic-url') {
       meta.textContent = 'Сервис открыт в iframe с базовой авторизацией по сохранённым логину и паролю.';
     } else {

@@ -16,6 +16,7 @@ const { clearSessionCookie } = require('./services/authService');
 const app = express();
 const port = Number(process.env.PORT || 3000);
 
+app.use('/api/crm-data/booking-frame', express.raw({ type: '*/*', limit: process.env.JSON_BODY_LIMIT || '15mb' }));
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '15mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 

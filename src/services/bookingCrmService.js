@@ -171,7 +171,13 @@ async function fetchYclientsUserToken({ login, password } = {}) {
   }
 
   if (!partnerToken) {
-    throw buildServiceError('Не настроена переменная окружения YCLIENTS_PARTNER_TOKEN для авторизации YCLIENTS.', 500);
+    return {
+      userToken: '',
+      partnerToken: '',
+      payload: {},
+      skipped: true,
+      message: 'YCLIENTS API token не настроен. Автоматическая авторизация по API пропущена.'
+    };
   }
 
   const response = await fetch(getYclientsAuthUrl(), {
@@ -212,6 +218,16 @@ function yclientsAuthorizationHeader({ partnerToken, userToken } = {}) {
   return `Bearer ${partnerToken}, User ${userToken}`;
 }
 
+function createYclientsLoginOnlyFrame({ targetUrl } = {}) {
+  return {
+    result: true,
+    iframeUrl: targetUrl,
+    externalUrl: targetUrl,
+    authMode: 'yclients-login-only',
+    message: 'YCLIENTS открыт без API-авторизации: доступны только login/password, поэтому автоматический вход через API не выполняется.'
+  };
+}
+
 function cleanupBookingFrameSessions() {
   const now = Date.now();
   for (const [id, frameSession] of bookingFrameSessions.entries()) {
@@ -245,30 +261,147 @@ function getBookingFrameSession(id) {
   return frameSession;
 }
 
-function injectHtmlBase(html, targetUrl) {
-  const baseHref = new URL('.', targetUrl).href;
-  const baseTag = `<base href="${baseHref}">`;
-  if (/<base\s/i.test(html)) return html;
-  if (/<head[^>]*>/i.test(html)) {
-    return html.replace(/<head([^>]*)>/i, `<head$1>${baseTag}`);
+function getProxyBasePath(frameSession) {
+  return `/api/crm-data/booking-frame/${encodeURIComponent(frameSession.id)}`;
+}
+
+function getTargetDirectoryPath(targetUrl) {
+  const url = new URL(targetUrl);
+  return new URL('.', url).pathname || '/';
+}
+
+function normalizeProxyPath(value = '') {
+  const text = normalizeText(value);
+  if (!text || text === '/') return '';
+  return text.startsWith('/') ? text : `/${text}`;
+}
+
+function buildProxyUrl(frameSession, targetUrl) {
+  const url = new URL(targetUrl);
+  return `${getProxyBasePath(frameSession)}${url.pathname}${url.search}${url.hash}`;
+}
+
+function buildFrameTargetUrl(frameSession, proxiedPath = '', queryString = '') {
+  const initialUrl = new URL(frameSession.targetUrl);
+  const path = normalizeProxyPath(proxiedPath);
+
+  if (!path) {
+    return initialUrl.toString();
   }
-  return `${baseTag}${html}`;
+
+  const targetUrl = new URL(frameSession.targetUrl);
+  targetUrl.pathname = path;
+  targetUrl.search = queryString ? (queryString.startsWith('?') ? queryString : `?${queryString}`) : '';
+  targetUrl.hash = '';
+  return targetUrl.toString();
+}
+
+function rewriteRootRelativeUrls(html, frameSession) {
+  const proxyBase = getProxyBasePath(frameSession);
+  return html
+    .replace(/\b(src|href|action)=(["'])\/(?!\/|api\/crm-data\/booking-frame\/)([^"']*)\2/gi, (_match, attr, quote, path) => {
+      return `${attr}=${quote}${proxyBase}/${path}${quote}`;
+    })
+    .replace(/url\((['"]?)\/(?!\/|api\/crm-data\/booking-frame\/)([^)'"]+)\1\)/gi, (_match, quote, path) => {
+      return `url(${quote}${proxyBase}/${path}${quote})`;
+    });
+}
+
+function buildYclientsProxyScript(frameSession) {
+  const proxyBase = getProxyBasePath(frameSession);
+  const targetOrigin = new URL(frameSession.targetUrl).origin;
+
+  return `<script>
+(function () {
+  var proxyBase = ${JSON.stringify(proxyBase)};
+  var targetOrigin = ${JSON.stringify(targetOrigin)};
+
+  function proxifyUrl(inputUrl) {
+    if (!inputUrl) return inputUrl;
+    try {
+      var url = new URL(String(inputUrl), document.baseURI || window.location.href);
+      if (url.pathname.indexOf(proxyBase + '/') === 0 || url.pathname === proxyBase) {
+        return url.href;
+      }
+      if (url.origin === targetOrigin || (url.origin === window.location.origin && url.pathname.charAt(0) === '/')) {
+        return window.location.origin + proxyBase + url.pathname + url.search + url.hash;
+      }
+    } catch (_error) {}
+    return inputUrl;
+  }
+
+  if (window.fetch) {
+    var originalFetch = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+      if (input && typeof Request !== 'undefined' && input instanceof Request) {
+        var proxiedRequest = new Request(proxifyUrl(input.url), input);
+        return originalFetch(proxiedRequest, init);
+      }
+      return originalFetch(proxifyUrl(input), init);
+    };
+  }
+
+  if (window.XMLHttpRequest) {
+    var originalOpen = window.XMLHttpRequest.prototype.open;
+    window.XMLHttpRequest.prototype.open = function (method, url) {
+      arguments[1] = proxifyUrl(url);
+      return originalOpen.apply(this, arguments);
+    };
+  }
+})();
+</script>`;
+}
+
+function injectHtmlBase(html, targetUrl, frameSession) {
+  const directoryPath = getTargetDirectoryPath(targetUrl);
+  const baseHref = `${getProxyBasePath(frameSession)}${directoryPath}`;
+  const baseTag = `<base href="${baseHref}">`;
+  const proxyScript = buildYclientsProxyScript(frameSession);
+  let preparedHtml = rewriteRootRelativeUrls(html, frameSession);
+
+  if (/<base\s/i.test(preparedHtml)) {
+    preparedHtml = preparedHtml.replace(/<base\s[^>]*>/i, baseTag);
+  } else if (/<head[^>]*>/i.test(preparedHtml)) {
+    preparedHtml = preparedHtml.replace(/<head([^>]*)>/i, `<head$1>${baseTag}`);
+  } else {
+    preparedHtml = `${baseTag}${preparedHtml}`;
+  }
+
+  if (/<head[^>]*>/i.test(preparedHtml)) {
+    return preparedHtml.replace(/<head([^>]*)>/i, `<head$1>${proxyScript}`);
+  }
+
+  return `${proxyScript}${preparedHtml}`;
 }
 
 function isYclientsBooking(data = {}) {
   return normalizeText(data.bookingName).toLowerCase() === 'yclients';
 }
+function isAllowedYclientsHost(url) {
+  const hostname = url.hostname.toLowerCase();
+  return hostname === 'yclients.com' || hostname.endsWith('.yclients.com');
+}
+
 
 async function createBookingOpenFrame({ session, data } = {}) {
   getSessionProfileId(session);
   const normalized = normalizeBookingCrmData(data || {});
-  const targetUrl = parseBookingUrl(normalized.bookingUrl).toString();
+  const parsedTargetUrl = parseBookingUrl(normalized.bookingUrl);
+  const targetUrl = parsedTargetUrl.toString();
 
   if (isYclientsBooking(normalized) && normalized.authType === 'Базовый') {
-    const { userToken, partnerToken } = await fetchYclientsUserToken({
+    if (!isAllowedYclientsHost(parsedTargetUrl)) {
+      throw buildServiceError('Для авторизации YCLIENTS укажите ссылку на домене yclients.com.');
+    }
+
+    const { userToken, partnerToken, skipped } = await fetchYclientsUserToken({
       login: normalized.login,
       password: normalized.password
     });
+
+    if (skipped || !userToken || !partnerToken) {
+      return createYclientsLoginOnlyFrame({ targetUrl });
+    }
 
     const frameId = createLocalFrameSession({
       targetUrl,
@@ -356,5 +489,6 @@ module.exports = {
   normalizeBookingCrmData,
   createBookingOpenFrame,
   getBookingFrameSession,
+  buildFrameTargetUrl,
   injectHtmlBase
 };
