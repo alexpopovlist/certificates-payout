@@ -200,7 +200,8 @@ function normalizeBookingCrmData(value = {}) {
     bookingUrl: normalizeText(value.bookingUrl ?? value.booking_url),
     authType: normalizeOption(value.authType ?? value.auth_type, AUTH_TYPE_OPTIONS, 'Нет данных'),
     login: normalizeText(value.login),
-    password: normalizeText(value.password)
+    password: normalizeText(value.password),
+    yclientsPartnerToken: normalizeText(value.yclientsPartnerToken ?? value.yclients_partner_token)
   };
 }
 
@@ -212,6 +213,7 @@ function mapRow(row = {}, profileId = '') {
     authType: row.auth_type || 'Нет данных',
     login: row.login || '',
     password: row.password || '',
+    yclientsPartnerToken: row.yclients_partner_token || '',
     updatedAt: row.updated_at || null
   };
 }
@@ -224,6 +226,7 @@ function defaultBookingCrmData(profileId) {
     authType: 'Нет данных',
     login: '',
     password: '',
+    yclientsPartnerToken: '',
     updatedAt: null
   };
 }
@@ -923,8 +926,8 @@ async function postYclientsWebLoginJson({ login, password, session } = {}) {
   }
 }
 
-function getYclientsPartnerToken() {
-  return normalizeText(process.env.YCLIENTS_PARTNER_TOKEN || process.env.YCLIENTS_APP_TOKEN || process.env.YCLIENTS_API_TOKEN);
+function getYclientsPartnerToken(data = {}) {
+  return normalizeText(data.yclientsPartnerToken ?? data.yclients_partner_token);
 }
 
 function getYclientsUserTokenFromPayload(payload = {}) {
@@ -948,7 +951,7 @@ function getYclientsUserTokenFromPayload(payload = {}) {
 async function fetchYclientsUserToken({ login, password, partnerToken: providedPartnerToken, session } = {}) {
   const normalizedLogin = normalizeText(login);
   const normalizedPassword = normalizeText(password);
-  const partnerToken = normalizeText(providedPartnerToken) || getYclientsPartnerToken();
+  const partnerToken = normalizeText(providedPartnerToken);
 
   if (!normalizedLogin || !normalizedPassword) {
     throw buildServiceError('Для авторизации в YCLIENTS заполните логин и пароль.');
@@ -960,7 +963,7 @@ async function fetchYclientsUserToken({ login, password, partnerToken: providedP
       partnerToken: '',
       payload: {},
       skipped: true,
-      message: 'YCLIENTS partner token не настроен. API-проверка авторизации пропущена.'
+      message: 'Partner Yclients Токен не заполнен на экране «Данные CRM». API-проверка авторизации пропущена.'
     };
   }
 
@@ -1033,7 +1036,7 @@ async function verifyYclientsUserToken({ partnerToken, userToken, session } = {}
       || payload?.message
       || payload?.error
       || payload?.errors?.[0]?.message
-      || 'YCLIENTS не подтвердил доступ по YCLIENTS_PARTNER_TOKEN и YCLIENTS_USER_TOKEN.';
+      || 'YCLIENTS не подтвердил доступ по Partner Yclients Токен и YCLIENTS_USER_TOKEN.';
     throw buildServiceError(message, response.status, payload);
   }
 
@@ -1054,13 +1057,13 @@ function yclientsOpenWarning(error) {
 }
 
 async function authorizeYclientsForExternalOpen(data = {}, session = null) {
-  const partnerToken = getYclientsPartnerToken();
+  const partnerToken = getYclientsPartnerToken(data);
   const envUserToken = getYclientsEnvUserToken();
   const login = normalizeText(data.login);
   const password = normalizeText(data.password);
 
   if (!partnerToken) {
-    throw buildServiceError('Для авторизации YCLIENTS укажите YCLIENTS_PARTNER_TOKEN в env.', 400);
+    throw buildServiceError('Для авторизации YCLIENTS заполните поле «Partner Yclients Токен» на экране «Данные CRM».', 400);
   }
 
   if (login && password) {
@@ -1068,7 +1071,7 @@ async function authorizeYclientsForExternalOpen(data = {}, session = null) {
     return {
       apiAuthorized: true,
       authMode: 'yclients-api-crm-login-password',
-      partnerTokenSource: 'env',
+      partnerTokenSource: 'crm-data',
       userTokenSource: 'crm-data-login-password',
       companyId: apiLoginResult.companyId,
       cookies: apiLoginResult.cookies,
@@ -1081,15 +1084,15 @@ async function authorizeYclientsForExternalOpen(data = {}, session = null) {
     return {
       apiAuthorized: true,
       authMode: 'yclients-api-env-user-token',
-      partnerTokenSource: 'env',
+      partnerTokenSource: 'crm-data',
       userTokenSource: 'env',
       companyId: apiVerifyResult.companyId,
       cookies: apiVerifyResult.cookies,
-      message: 'YCLIENTS API-авторизация выполнена по YCLIENTS_PARTNER_TOKEN и YCLIENTS_USER_TOKEN. Открываем Booking в новой вкладке.'
+      message: 'YCLIENTS API-авторизация выполнена по Partner Yclients Токен из экрана «Данные CRM» и YCLIENTS_USER_TOKEN. Открываем Booking в новой вкладке.'
     };
   }
 
-  throw buildServiceError('Для авторизации YCLIENTS заполните логин и пароль на экране «Данные CRM» или задайте YCLIENTS_USER_TOKEN в env.', 400);
+  throw buildServiceError('Для авторизации YCLIENTS заполните логин, пароль и поле «Partner Yclients Токен» на экране «Данные CRM» или задайте YCLIENTS_USER_TOKEN в env.', 400);
 }
 
 function yclientsAuthorizationHeader({ partnerToken, userToken } = {}) {
@@ -1226,7 +1229,7 @@ async function createBookingOpenTarget({ session, data } = {}) {
 async function getBookingCrmData({ session } = {}) {
   const profileId = getSessionProfileId(session);
   const { rows } = await query(
-    `SELECT profile_id, booking_name, booking_url, auth_type, login, password, updated_at
+    `SELECT profile_id, booking_name, booking_url, auth_type, login, password, yclients_partner_token, updated_at
        FROM profile_booking_crm_data
       WHERE profile_id = $1`,
     [profileId]
@@ -1246,24 +1249,27 @@ async function saveBookingCrmData({ session, data } = {}) {
         booking_url,
         auth_type,
         login,
-        password
+        password,
+        yclients_partner_token
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       ON CONFLICT (profile_id) DO UPDATE SET
         booking_name = EXCLUDED.booking_name,
         booking_url = EXCLUDED.booking_url,
         auth_type = EXCLUDED.auth_type,
         login = EXCLUDED.login,
         password = EXCLUDED.password,
+        yclients_partner_token = EXCLUDED.yclients_partner_token,
         updated_at = now()
-      RETURNING profile_id, booking_name, booking_url, auth_type, login, password, updated_at`,
+      RETURNING profile_id, booking_name, booking_url, auth_type, login, password, yclients_partner_token, updated_at`,
     [
       profileId,
       normalized.bookingName,
       normalized.bookingUrl,
       normalized.authType,
       normalized.login,
-      normalized.password
+      normalized.password,
+      normalized.yclientsPartnerToken
     ]
   );
 

@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS profile_booking_crm_data (
   auth_type TEXT NOT NULL DEFAULT 'Нет данных' CHECK (auth_type IN ('Базовый', 'Нет данных')),
   login TEXT NOT NULL DEFAULT '',
   password TEXT NOT NULL DEFAULT '',
+  yclients_partner_token TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

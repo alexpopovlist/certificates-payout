@@ -55,7 +55,8 @@ const crmDataState = {
   bookingUrl: '',
   authType: 'Нет данных',
   login: '',
-  password: ''
+  password: '',
+  yclientsPartnerToken: ''
 };
 
 const CRM_BOOKING_NAME_OPTIONS = ['yclients', 'dikidi Business', 'Собственная', 'Отсутствует', 'Нет данных'];
@@ -4928,6 +4929,7 @@ function updateCrmDataState(item = {}) {
   crmDataState.authType = CRM_AUTH_TYPE_OPTIONS.includes(item.authType) ? item.authType : 'Нет данных';
   crmDataState.login = String(item.login || '').trim();
   crmDataState.password = String(item.password || '').trim();
+  crmDataState.yclientsPartnerToken = String(item.yclientsPartnerToken || '').trim();
 }
 
 function crmDataOptionHtml(value, selectedValue) {
@@ -4969,6 +4971,11 @@ function crmDataFormHtml() {
           <label for="crmPassword">Пароль</label>
           <input id="crmPassword" name="password" type="text" autocomplete="off" placeholder="Пароль" value="${escapeHtml(crmDataState.password)}" />
         </div>
+
+        <div class="schedule-field schedule-field-full crm-data-field">
+          <label for="crmYclientsPartnerToken">Partner Yclients Токен</label>
+          <input id="crmYclientsPartnerToken" name="yclientsPartnerToken" type="text" autocomplete="off" spellcheck="false" placeholder="Partner Yclients Токен" value="${escapeHtml(crmDataState.yclientsPartnerToken)}" />
+        </div>
       </div>
 
       <div class="schedule-actions crm-data-actions">
@@ -4988,7 +4995,8 @@ function updateCrmDataStateFromForm(form) {
     bookingUrl: formData.get('bookingUrl'),
     authType: formData.get('authType'),
     login: formData.get('login'),
-    password: formData.get('password')
+    password: formData.get('password'),
+    yclientsPartnerToken: formData.get('yclientsPartnerToken')
   });
 }
 
@@ -4998,7 +5006,8 @@ function buildCrmBookingRequestPayload() {
     bookingUrl: crmDataState.bookingUrl,
     authType: crmDataState.authType,
     login: crmDataState.login,
-    password: crmDataState.password
+    password: crmDataState.password,
+    yclientsPartnerToken: crmDataState.yclientsPartnerToken
   };
 }
 
@@ -5760,7 +5769,8 @@ async function handleCrmDataSubmit(event) {
         bookingUrl: crmDataState.bookingUrl,
         authType: crmDataState.authType,
         login: crmDataState.login,
-        password: crmDataState.password
+        password: crmDataState.password,
+        yclientsPartnerToken: crmDataState.yclientsPartnerToken
       })
     });
 
