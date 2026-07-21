@@ -50,6 +50,16 @@ const profileNotificationChannelsState = {
   isEditing: false
 };
 
+const crmDataState = {
+  bookingName: 'Нет данных',
+  bookingUrl: '',
+  authType: 'Нет данных',
+  login: '',
+  password: ''
+};
+
+const CRM_BOOKING_NAME_OPTIONS = ['yclients', 'dikidi Business', 'Собственная', 'Отсутствует', 'Нет данных'];
+const CRM_AUTH_TYPE_OPTIONS = ['Базовый', 'Нет данных'];
 
 const SIGN_IN_PATH = '/authentication/sign-in';
 const ADMIN_SIGN_IN_PATH = '/admin/login';
@@ -61,7 +71,7 @@ const ADMIN_PUSH_LOGS_PATH = '/admin/push/logs';
 const DEFAULT_APP_PATH = '/redeem';
 const PROFILE_EMPTY_REAUTH_MESSAGE = 'Сервис WOWlife profile.getProfile вернул пустой профиль. Проверьте, что текущая сессия содержит актуальные contactId/token, и войдите заново.';
 const PROFILE_REAUTH_NOTICE = 'Авторизация устарела. Войдите заново, чтобы обновить данные профиля.';
-const APP_ROUTES = new Set(['redeem', 'services', 'certificates', 'new-requests', 'reconciliations', 'payments', 'profile']);
+const APP_ROUTES = new Set(['redeem', 'services', 'certificates', 'new-requests', 'reconciliations', 'payments', 'profile', 'crm-data']);
 
 const MOBILE_DIALOG_QUERY = '(max-width: 680px)';
 const MOBILE_SERVICES_DIALOG_QUERY = '(max-width: 920px)';
@@ -4911,6 +4921,155 @@ function renderProfilePasswordScreen() {
   setupProfilePasswordForm({ closeModal: false });
 }
 
+
+function updateCrmDataState(item = {}) {
+  crmDataState.bookingName = CRM_BOOKING_NAME_OPTIONS.includes(item.bookingName) ? item.bookingName : 'Нет данных';
+  crmDataState.bookingUrl = String(item.bookingUrl || '').trim();
+  crmDataState.authType = CRM_AUTH_TYPE_OPTIONS.includes(item.authType) ? item.authType : 'Нет данных';
+  crmDataState.login = String(item.login || '').trim();
+  crmDataState.password = String(item.password || '').trim();
+}
+
+function crmDataOptionHtml(value, selectedValue) {
+  const selected = value === selectedValue ? ' selected' : '';
+  return `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(value)}</option>`;
+}
+
+function crmDataFormHtml() {
+  return `
+    <form id="crmDataForm" class="schedule-form crm-data-form" novalidate>
+      <div id="crmDataNotice" class="hidden"></div>
+
+      <div class="schedule-grid-2 crm-data-grid">
+        <div class="schedule-field crm-data-field">
+          <label for="crmBookingName">Название Booking</label>
+          <select id="crmBookingName" name="bookingName">
+            ${CRM_BOOKING_NAME_OPTIONS.map((value) => crmDataOptionHtml(value, crmDataState.bookingName)).join('')}
+          </select>
+        </div>
+
+        <div class="schedule-field crm-data-field">
+          <label for="crmAuthType">Тип авторизации</label>
+          <select id="crmAuthType" name="authType">
+            ${CRM_AUTH_TYPE_OPTIONS.map((value) => crmDataOptionHtml(value, crmDataState.authType)).join('')}
+          </select>
+        </div>
+
+        <div class="schedule-field schedule-field-full crm-data-field">
+          <label for="crmBookingUrl">Ссылка на Booking сервис</label>
+          <input id="crmBookingUrl" name="bookingUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://" value="${escapeHtml(crmDataState.bookingUrl)}" />
+        </div>
+
+        <div class="schedule-field crm-data-field">
+          <label for="crmLogin">Логин</label>
+          <input id="crmLogin" name="login" autocomplete="username" placeholder="Логин" value="${escapeHtml(crmDataState.login)}" />
+        </div>
+
+        <div class="schedule-field crm-data-field">
+          <label for="crmPassword">Пароль</label>
+          <input id="crmPassword" name="password" type="text" autocomplete="off" placeholder="Пароль" value="${escapeHtml(crmDataState.password)}" />
+        </div>
+      </div>
+
+      <div class="schedule-actions crm-data-actions">
+        <button id="crmDataSaveButton" class="button schedule-submit" type="submit">Сохранить</button>
+      </div>
+    </form>
+  `;
+}
+
+function updateCrmDataStateFromForm(form) {
+  if (!form) return;
+  const formData = new FormData(form);
+  updateCrmDataState({
+    bookingName: formData.get('bookingName'),
+    bookingUrl: formData.get('bookingUrl'),
+    authType: formData.get('authType'),
+    login: formData.get('login'),
+    password: formData.get('password')
+  });
+}
+
+async function handleCrmDataSubmit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const notice = form.querySelector('#crmDataNotice');
+  const submit = form.querySelector('#crmDataSaveButton');
+  updateCrmDataStateFromForm(form);
+
+  if (notice) {
+    notice.className = 'hidden';
+    notice.textContent = '';
+  }
+
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = 'Сохраняем...';
+  }
+
+  try {
+    const result = await api('/api/crm-data', {
+      method: 'POST',
+      body: JSON.stringify({
+        bookingName: crmDataState.bookingName,
+        bookingUrl: crmDataState.bookingUrl,
+        authType: crmDataState.authType,
+        login: crmDataState.login,
+        password: crmDataState.password
+      })
+    });
+
+    updateCrmDataState(result.item || crmDataState);
+    if (notice) {
+      notice.className = 'notice success';
+      notice.textContent = 'Данные CRM сохранены.';
+    }
+  } catch (error) {
+    if (notice) {
+      notice.className = 'notice error';
+      notice.textContent = error.message || 'Не удалось сохранить данные CRM.';
+    }
+  } finally {
+    if (submit) {
+      submit.disabled = false;
+      submit.textContent = 'Сохранить';
+    }
+  }
+}
+
+function setupCrmDataForm() {
+  document.querySelector('#crmDataForm')?.addEventListener('submit', handleCrmDataSubmit);
+}
+
+async function renderCrmData() {
+  setHeader('Данные CRM');
+  setActiveNavigation('crm-data');
+  showLoading();
+
+  try {
+    const { item } = await api('/api/crm-data');
+    updateCrmDataState(item || {});
+
+    app.innerHTML = `
+      <div class="crm-data-page">
+        <section class="card crm-data-card">
+          <header class="profile-section-header crm-data-header">
+            <div>
+              <h2>Данные CRM</h2>
+              <p>Настройки Booking-системы, связанные с текущим профилем партнёра.</p>
+            </div>
+          </header>
+          ${crmDataFormHtml()}
+        </section>
+      </div>
+    `;
+
+    setupCrmDataForm();
+  } catch (error) {
+    showError(error);
+  }
+}
+
 async function renderProfile() {
   setHeader('Профиль');
   setActiveNavigation('profile');
@@ -5596,6 +5755,7 @@ function route() {
   if (root === 'profile' && id === 'password') return renderProfilePasswordScreen();
   if (root === 'profile' && id === 'agent-report') return renderProfileAgentReportScreen();
   if (root === 'profile') return renderProfile();
+  if (root === 'crm-data') return renderCrmData();
   if (root === 'payments' && id === 'create') return renderCreatePayment();
   if (root === 'payments' && id) return renderPaymentDetail(id);
   if (root === 'payments') return renderPayments();

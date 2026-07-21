@@ -5493,3 +5493,76 @@ body.is-admin .admin-mobile-card-badge .status {
     min-width: 104px;
   }
 }
+
+/* CRM data tab: compact profile-like form, without adding a mobile bottom tab. */
+.crm-data-page {
+  display: grid;
+  gap: 24px;
+  max-width: 860px;
+}
+
+.crm-data-card {
+  overflow: hidden;
+  padding: 22px;
+}
+
+.crm-data-header {
+  align-items: flex-start;
+  margin-bottom: 0;
+}
+
+.crm-data-header h2 {
+  margin: 0 0 8px;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.crm-data-header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.crm-data-form {
+  padding: 22px 0 0;
+}
+
+.crm-data-grid .schedule-field-full {
+  grid-column: 1 / -1;
+}
+
+.crm-data-actions {
+  justify-content: flex-end;
+}
+
+@media (max-width: 680px) {
+  .crm-data-page {
+    max-width: none;
+  }
+
+  .crm-data-card {
+    padding: 22px;
+    border-radius: 26px;
+  }
+
+  .crm-data-header h2 {
+    font-size: 22px;
+  }
+
+  .crm-data-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .crm-data-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .crm-data-actions .button {
+    width: 100%;
+  }
+}

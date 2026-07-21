@@ -8,6 +8,7 @@ const pushNotificationRoutes = require('./routes/pushNotifications');
 const authRoutes = require('./routes/auth');
 const profileRoutes = require('./routes/profile');
 const servicesRoutes = require('./routes/services');
+const crmDataRoutes = require('./routes/crmData');
 const adminRoutes = require('./routes/admin');
 const { requireAuth } = require('./middleware/auth');
 const { clearSessionCookie } = require('./services/authService');
@@ -28,6 +29,7 @@ app.use('/api/certificates', requireAuth, certificateRoutes);
 app.use('/api/payment-requests', requireAuth, paymentRequestRoutes);
 app.use('/api/profile', requireAuth, profileRoutes);
 app.use('/api/services', requireAuth, servicesRoutes);
+app.use('/api/crm-data', requireAuth, crmDataRoutes);
 app.use('/api/push', requireAuth, pushNotificationRoutes);
 
 app.use('/api', (_request, response) => {
