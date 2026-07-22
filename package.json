@@ -1,7 +1,7 @@
 {
-  "name": "certificates-payout-06-browser-extension",
+  "name": "certificates-payout-01-quick-close-popup",
   "version": "1.0.0",
-  "description": "Тестовый вариант для Chrome/Edge desktop: расширение выполняет cross-origin login fetch с host permissions и проверяет cookies через chrome.cookies.",
+  "description": "Тестовый вариант: top-level POST выполняется в служебном окне, которое закрывается примерно через 0,95 секунды на desktop и 1,4 секунды на мобильном устройстве.",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",

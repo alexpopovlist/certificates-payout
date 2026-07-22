@@ -6054,6 +6054,12 @@ async function openCrmBookingIframe() {
   let experimentPopup = null;
 
   
+  if (isYclientsIframe) {
+    experimentPopup = openYclientsAuthHelperWindow('wowlifeYclientsIframeExperiment', { showPlaceholder: false });
+    try { experimentPopup?.blur?.(); } catch (_error) {}
+    try { window.focus?.(); } catch (_error) {}
+  }
+
 
   if (iframeButton) {
     iframeButton.disabled = true;
@@ -6087,46 +6093,12 @@ async function openCrmBookingIframe() {
   if (isYclientsIframe) {
     renderYclientsExperimentIframeModal(result, payload, {
       popupWindow: experimentPopup,
-      strategyLabel: 'Тест 6: браузерное расширение',
-      strategyDescription: 'Приложение передаёт запрос установленному расширению. Расширение выполняет авторизацию и проверяет cookies YCLIENTS через chrome.cookies.',
-      retryLabel: 'Повторить через расширение',
+      strategyLabel: 'Тест 1: быстрое закрытие popup',
+      strategyDescription: 'Top-level POST получает first-party cookies, затем служебное окно быстро закрывается и расписание загружается в iFrame.',
+      retryLabel: 'Повторить быстрый вход',
       start: async (ctx) => {
-        ctx.closePopup();
-        const requestId = `yclients-extension-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        ctx.setStatus('info', 'extension', 'Отправляем запрос браузерному расширению.', 'Установите расширение из каталога browser-extension внутри архива и обновите страницу приложения.');
-        const result = await new Promise((resolve, reject) => {
-          const timeoutId = window.setTimeout(() => {
-            window.removeEventListener('message', handleMessage);
-            reject(new Error('Расширение не ответило за 8 секунд. Проверьте установку и разрешения.'));
-          }, 8000);
-          function handleMessage(event) {
-            if (event.source !== window) return;
-            if (event.data?.type !== 'wowlife-extension-yclients-login-response') return;
-            if (event.data?.requestId !== requestId) return;
-            window.clearTimeout(timeoutId);
-            window.removeEventListener('message', handleMessage);
-            resolve(event.data);
-          }
-          window.addEventListener('message', handleMessage);
-          ctx.addCleanup(() => {
-            window.clearTimeout(timeoutId);
-            window.removeEventListener('message', handleMessage);
-          });
-          window.postMessage({
-            type: 'wowlife-extension-yclients-login-request',
-            requestId,
-            loginUrl: ctx.result.loginUrl || 'https://www.yclients.com/auth/login/1',
-            email: ctx.payload.login || crmDataState.login || '',
-            password: ctx.payload.password || crmDataState.password || ''
-          }, window.location.origin);
-        });
-
-        if (!result.ok) {
-          throw new Error(result.error || 'Расширение не подтвердило cookies YCLIENTS.');
-        }
-        ctx.setStatus('success', 'extension cookies', `Расширение подтвердило cookies YCLIENTS: ${Number(result.cookieCount || 0)}.`, Array.isArray(result.cookieNames) ? result.cookieNames.join(', ') : '');
-        await new Promise((resolve) => window.setTimeout(resolve, 300));
-        ctx.loadTarget('авторизация выполнена браузерным расширением');
+        const delayMs = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 1400 : 950;
+        await ctx.popupLogin({ delayMs, mode: 'quick-close-popup' });
       }
     });
     setCrmDataNotice('success', 'Экспериментальный режим iFrame запущен. Результат отображается в модальном окне.');
