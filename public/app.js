@@ -5817,17 +5817,6 @@ function renderCrmBookingIframeModal(result = {}, payload = {}, iframeLoginWindo
 }
 
 
-function yclientsServerProxyUrl(value = '') {
-  try {
-    const parsed = new URL(String(value || ''), window.location.origin);
-    if (!parsed.hostname.toLowerCase().endsWith('yclients.com')) return '';
-    return `/api/crm-data/yclients-proxy${parsed.pathname}${parsed.search}`;
-  } catch (_error) {
-    return '';
-  }
-}
-
-
 function renderYclientsExperimentIframeModal(result = {}, payload = {}, options = {}) {
   closeCrmBookingIframeModal();
 
@@ -6098,21 +6087,68 @@ async function openCrmBookingIframe() {
   if (isYclientsIframe) {
     renderYclientsExperimentIframeModal(result, payload, {
       popupWindow: experimentPopup,
-      targetUrl: yclientsServerProxyUrl(result.externalUrl || payload.bookingUrl),
-      strategyLabel: 'Тест 5: серверный reverse proxy',
-      strategyDescription: 'Расписание загружается через same-origin proxy. Сервер подставляет cookies YCLIENTS, полученные во время серверной авторизации.',
-      retryLabel: 'Перезагрузить proxy',
+      strategyLabel: 'Тест 3: скрытая форма в iFrame',
+      strategyDescription: 'Форма POST отправляется в невидимый cross-origin iFrame. Вариант полностью скрывает auth/login/1, но зависит от разрешения third-party cookies.',
+      retryLabel: 'Повторить скрытую форму',
       start: async (ctx) => {
-        const status = Number(ctx.result.webLoginResult?.status || 0);
-        const cookieCount = Number(ctx.result.webLoginResult?.cookies?.storedCount || 0);
-        ctx.setStatus(
-          cookieCount > 0 ? 'success' : 'warning',
-          'server proxy',
-          cookieCount > 0 ? `Сервер сохранил cookies YCLIENTS: ${cookieCount}.` : 'Сервер не подтвердил наличие cookies YCLIENTS.',
-          status ? `Ответ серверной авторизации: HTTP ${status}. Загружаем reverse proxy.` : 'Загружаем reverse proxy для проверки.'
-        );
-        await new Promise((resolve) => window.setTimeout(resolve, 250));
-        ctx.loadTarget('same-origin reverse proxy с серверными cookies');
+        ctx.closePopup();
+        ctx.setStatus('info', 'hidden form', 'Отправляем POST-форму auth/login/1 в невидимый iFrame.', 'Ожидаем событие load или таймаут, затем открываем расписание в основном iFrame.');
+        const frameName = `wowlifeYclientsHiddenLogin_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const hiddenFrame = document.createElement('iframe');
+        hiddenFrame.name = frameName;
+        hiddenFrame.title = 'Скрытая авторизация YCLIENTS';
+        hiddenFrame.setAttribute('aria-hidden', 'true');
+        hiddenFrame.style.cssText = 'position:fixed;left:-10000px;top:-10000px;width:1px;height:1px;opacity:0;border:0;pointer-events:none';
+
+        const form = document.createElement('form');
+        form.method = 'post';
+        form.action = ctx.result.loginUrl || 'https://www.yclients.com/auth/login/1';
+        form.target = frameName;
+        form.style.display = 'none';
+        const email = document.createElement('input');
+        email.type = 'hidden';
+        email.name = 'email';
+        email.value = ctx.payload.login || crmDataState.login || '';
+        const password = document.createElement('input');
+        password.type = 'hidden';
+        password.name = 'password';
+        password.value = ctx.payload.password || crmDataState.password || '';
+        form.append(email, password);
+
+        document.body.append(hiddenFrame, form);
+        let submitted = false;
+        let finished = false;
+        let timeoutId = null;
+        const cleanup = () => {
+          if (timeoutId) window.clearTimeout(timeoutId);
+          hiddenFrame.remove();
+          form.remove();
+        };
+        ctx.addCleanup(cleanup);
+
+        await new Promise((resolve) => {
+          const finish = (source) => {
+            if (finished) return;
+            finished = true;
+            window.setTimeout(() => {
+              cleanup();
+              ctx.loadTarget(source);
+              resolve();
+            }, 650);
+          };
+          hiddenFrame.addEventListener('load', () => {
+            if (submitted) finish('скрытая POST-форма завершила загрузку ответа');
+          });
+          window.setTimeout(() => {
+            submitted = true;
+            try { form.submit(); }
+            catch (error) {
+              ctx.setStatus('error', 'form error', 'Не удалось отправить скрытую форму.', error?.message || String(error));
+              finish('ошибка скрытой формы');
+            }
+          }, 120);
+          timeoutId = window.setTimeout(() => finish('таймаут скрытой формы; открываем iFrame для проверки'), 3400);
+        });
       }
     });
     setCrmDataNotice('success', 'Экспериментальный режим iFrame запущен. Результат отображается в модальном окне.');
