@@ -1,7 +1,7 @@
 {
-  "name": "certificates-payout-03-hidden-form-iframe",
+  "name": "certificates-payout-01-quick-close-popup",
   "version": "1.0.0",
-  "description": "Тестовый вариант без popup: POST-форма отправляется в невидимый iFrame, после чего расписание загружается в видимый iFrame.",
+  "description": "Тестовый вариант: top-level POST выполняется в служебном окне, которое закрывается примерно через 0,95 секунды на desktop и 1,4 секунды на мобильном устройстве.",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
