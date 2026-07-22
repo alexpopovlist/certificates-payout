@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "WOWlife YCLIENTS Auth Test",
+  "version": "1.0.0",
+  "description": "Тестовая фоновая авторизация YCLIENTS для приложения WOWlife.",
+  "permissions": [
+    "cookies"
+  ],
+  "host_permissions": [
+    "https://yclients.com/*",
+    "https://*.yclients.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}
