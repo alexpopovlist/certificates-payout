@@ -2,7 +2,45 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta id="appViewport" name="viewport" content="width=device-width, initial-scale=1" />
+    <script>
+      (() => {
+        const standalone =
+          window.matchMedia?.('(display-mode: standalone)').matches ||
+          window.navigator.standalone === true;
+
+        if (!standalone) return;
+
+        const viewport = document.getElementById('appViewport');
+        viewport?.setAttribute(
+          'content',
+          'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'
+        );
+
+        const preventZoomGesture = (event) => event.preventDefault();
+        document.addEventListener('gesturestart', preventZoomGesture, { passive: false });
+        document.addEventListener('gesturechange', preventZoomGesture, { passive: false });
+        document.addEventListener('gestureend', preventZoomGesture, { passive: false });
+        document.addEventListener(
+          'touchmove',
+          (event) => {
+            if (event.touches?.length > 1) event.preventDefault();
+          },
+          { passive: false }
+        );
+
+        let lastTouchEnd = 0;
+        document.addEventListener(
+          'touchend',
+          (event) => {
+            const now = Date.now();
+            if (now - lastTouchEnd <= 300) event.preventDefault();
+            lastTouchEnd = now;
+          },
+          { passive: false }
+        );
+      })();
+    </script>
     <title>WowLife · Сертификаты и выплаты</title>
     <meta name="theme-color" content="#f8fbff" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico?v=wowlife-20260721" />
