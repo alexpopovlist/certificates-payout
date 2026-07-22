@@ -5821,29 +5821,25 @@ async function openCrmBookingIframe() {
   const iframeButton = document.querySelector('#crmDataOpenIframeButton');
   updateCrmDataStateFromForm(form);
   const payload = buildCrmBookingRequestPayload();
-  const isYclientsIframe = crmDataIsYclientsBasicPayload(payload);
+  const isYclientsIframe = String(payload.bookingName || '').trim().toLowerCase() === 'yclients'
+    && payload.authType === 'Базовый';
   let iframeLoginWindow = null;
 
-  // Open the helper synchronously from the click so popup blockers allow it.
-  // It is used only for the top-level YCLIENTS POST and is closed after the
-  // authenticated timetable starts loading inside the application iframe.
   if (isYclientsIframe) {
-    iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth', {
-      showPlaceholder: crmDataState.showYclientsOpeningScreen !== false
-    });
+    iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth', { showPlaceholder: crmDataState.showYclientsOpeningScreen !== false });
     if (!iframeLoginWindow) {
-      setCrmDataNotice('error', 'Браузер заблокировал служебное окно YCLIENTS. Разрешите всплывающие окна и нажмите «iFrame» ещё раз.');
+      setCrmDataNotice('error', 'Браузер заблокировал окно YCLIENTS. Разрешите всплывающие окна и нажмите «iFrame» ещё раз.');
       return;
     }
   }
 
   if (iframeButton) {
     iframeButton.disabled = true;
-    iframeButton.textContent = 'Открываем iFrame...';
+    iframeButton.textContent = isYclientsIframe ? 'Открываем YCLIENTS...' : 'Открываем iFrame...';
   }
 
   setCrmDataNotice('success', isYclientsIframe
-    ? 'Авторизуемся в YCLIENTS и готовим расписание внутри iFrame.'
+    ? 'Открываем отдельное окно YCLIENTS на месте iFrame. Окно останется открытым для проверки авторизации и cookies.'
     : 'Готовим iFrame для Booking сервиса.');
 
   let result;
@@ -5869,10 +5865,73 @@ async function openCrmBookingIframe() {
     updateCrmBookingUrlField(result.savedBookingUrl || result.externalUrl);
   }
 
+  if (isYclientsIframe) {
+    const loginBridgeUrl = yclientsLoginBridgeUrlForIframe(result.openUrl);
+    if (!loginBridgeUrl) {
+      setCrmDataNotice('error', 'Не удалось подготовить ссылку авторизации YCLIENTS. Используйте кнопку «Открыть Booking».');
+      if (iframeButton) {
+        iframeButton.disabled = false;
+        iframeButton.textContent = 'iFrame';
+      }
+      return;
+    }
+
+    if (!iframeLoginWindow || iframeLoginWindow.closed) {
+      iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth', { showPlaceholder: crmDataState.showYclientsOpeningScreen !== false });
+    } else {
+      moveCrmBookingPopupToModalPlace(iframeLoginWindow);
+    }
+
+    if (!iframeLoginWindow || iframeLoginWindow.closed) {
+      setCrmDataNotice('error', 'Браузер заблокировал окно YCLIENTS. Разрешите всплывающие окна и нажмите «iFrame» ещё раз.');
+      if (iframeButton) {
+        iframeButton.disabled = false;
+        iframeButton.textContent = 'iFrame';
+      }
+      return;
+    }
+
+    try {
+      // The iFrame mode mirrors the reliable "Open Booking" flow. When the
+      // opening screen is disabled, do not navigate through our
+      // /api/crm-data/yclients-login route: write the top-level login form
+      // directly into the service window and let it post to YCLIENTS.
+      const showYclientsOpeningScreen = crmDataState.showYclientsOpeningScreen !== false;
+      scheduleYclientsBookingRedirect(iframeLoginWindow, result, {
+        messageSourceWindow: iframeLoginWindow,
+        writeBusyAfterSubmit: false
+      });
+
+      if (showYclientsOpeningScreen) {
+        iframeLoginWindow.location.replace(loginBridgeUrl);
+      } else {
+        const directLoginStarted = writeYclientsDirectLoginDocument(iframeLoginWindow, result, payload, {
+          mode: 'iframe-popup-direct',
+          showScreen: false
+        });
+        if (!directLoginStarted) {
+          iframeLoginWindow.location.replace(loginBridgeUrl);
+        }
+      }
+
+      moveCrmBookingPopupToModalPlace(iframeLoginWindow);
+      iframeLoginWindow.focus?.();
+      setCrmDataNotice('success', showYclientsOpeningScreen
+        ? 'Окно YCLIENTS открыто вместо iFrame. После auth/login/1 оно автоматически перейдёт на расписание, как кнопка «Открыть Booking».'
+        : 'Окно YCLIENTS открыто без служебного экрана. После auth/login/1 оно автоматически перейдёт на расписание, как кнопка «Открыть Booking».');
+    } catch (error) {
+      setCrmDataNotice('error', error?.message || 'Не удалось открыть окно YCLIENTS.');
+    }
+
+    if (iframeButton) {
+      iframeButton.disabled = false;
+      iframeButton.textContent = 'iFrame';
+    }
+    return;
+  }
+
   renderCrmBookingIframeModal(result, payload, iframeLoginWindow);
-  setCrmDataNotice('success', isYclientsIframe
-    ? 'Выполняем top-level вход YCLIENTS, затем откроем расписание внутри iFrame.'
-    : 'Открываем Booking в iFrame.');
+  setCrmDataNotice('success', 'Открываем Booking в iFrame.');
 
   if (iframeButton) {
     iframeButton.disabled = false;
