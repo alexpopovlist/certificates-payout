@@ -5078,53 +5078,6 @@ function writeOpeningPlaceholder(bookingWindow) {
   bookingDocument.close();
 }
 
-function writeYclientsAuthBusyPlaceholder(bookingWindow, options = {}) {
-  let bookingDocument = null;
-  try {
-    bookingDocument = bookingWindow?.document || null;
-  } catch (_error) {
-    return;
-  }
-  if (!bookingDocument) return;
-
-  const title = options.title || 'Авторизуемся в YCLIENTS';
-  const message = options.message || 'Отправляем запрос входа на yclients.com/auth/login/1. После завершения автоматически откроем расписание YCLIENTS.';
-  const detail = options.detail || 'Не закрывайте это окно: переход произойдёт после обработки запроса авторизации.';
-
-  bookingDocument.open();
-  bookingDocument.write(`
-    <!doctype html>
-    <html lang="ru">
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Авторизация YCLIENTS</title>
-        <style>
-          body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: #101828; background: #f5f7fb; }
-          main { width: min(560px, calc(100vw - 40px)); padding: 28px; border: 1px solid #dbe3ef; border-radius: 24px; background: #fff; box-shadow: 0 18px 50px rgba(15, 23, 42, .12); }
-          .row { display: flex; align-items: center; gap: 14px; }
-          .spinner { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 50%; border: 3px solid rgba(49, 99, 255, .16); border-top-color: #3163ff; animation: spin .8s linear infinite; }
-          h1 { margin: 0; font-size: 24px; line-height: 1.2; }
-          p { margin: 14px 0 0; color: #64748b; line-height: 1.5; }
-          .detail { display: block; margin-top: 14px; padding: 12px 14px; border-radius: 14px; background: #f8fafc; color: #475467; font-size: 14px; line-height: 1.45; }
-          @keyframes spin { to { transform: rotate(360deg); } }
-        </style>
-      </head>
-      <body>
-        <main>
-          <div class="row">
-            <span class="spinner" aria-hidden="true"></span>
-            <h1>${escapeHtml(title)}</h1>
-          </div>
-          <p>${escapeHtml(message)}</p>
-          <span class="detail">${escapeHtml(detail)}</span>
-        </main>
-      </body>
-    </html>
-  `);
-  bookingDocument.close();
-}
-
 function getCrmBookingPopupGeometry() {
   const availableWidth = Math.max(360, Number(window.screen?.availWidth || window.innerWidth || 1180));
   const availableHeight = Math.max(520, Number(window.screen?.availHeight || window.innerHeight || 940));
@@ -5406,11 +5359,6 @@ function scheduleYclientsBookingRedirect(bookingWindow, result = {}, options = {
     if (event.origin !== window.location.origin) return;
     if (event.data?.type !== 'wowlife-yclients-login-submitted') return;
 
-    writeYclientsAuthBusyPlaceholder(bookingWindow, {
-      title: 'Вход в YCLIENTS отправлен',
-      message: 'Ждём завершения запроса auth/login/1 и сохранения cookies браузером. После этого откроем расписание YCLIENTS.',
-      detail: `Переход на расписание будет выполнен примерно через ${Math.round(afterFormSubmitDelayMs / 1000)} сек.`
-    });
     window.setTimeout(redirectOpenedWindow, afterFormSubmitDelayMs);
   }
 
@@ -5433,15 +5381,7 @@ async function openCrmBookingExternal() {
   let yclientsHelperWindow = null;
   try {
     bookingWindow = window.open('', '_blank');
-    if (showYclientsOpeningScreen) {
-      writeOpeningPlaceholder(bookingWindow);
-    } else if (needsYclientsHelper) {
-      writeYclientsAuthBusyPlaceholder(bookingWindow, {
-        title: 'Авторизуемся в YCLIENTS',
-        message: 'Открыли служебное окно для запроса auth/login/1. После завершения входа эта вкладка автоматически перейдёт на расписание YCLIENTS.',
-        detail: 'Пока запрос авторизации не отправлен, не переводим вкладку на about:blank или YCLIENTS.'
-      });
-    }
+    if (showYclientsOpeningScreen) writeOpeningPlaceholder(bookingWindow);
     if (needsYclientsHelper) {
       yclientsHelperWindow = openYclientsAuthHelperWindow(yclientsHelperWindowName, { showPlaceholder: showYclientsOpeningScreen });
     }
@@ -5505,7 +5445,7 @@ async function openCrmBookingExternal() {
 
         const directLoginStarted = writeYclientsDirectLoginDocument(loginSourceWindow, result, payload, {
           mode: helperReady ? 'helper-window-direct' : 'top-level-direct',
-          showScreen: true
+          showScreen: false
         });
 
         if (!directLoginStarted) {
@@ -5915,7 +5855,7 @@ async function openCrmBookingIframe() {
       } else {
         const directLoginStarted = writeYclientsDirectLoginDocument(iframeLoginWindow, result, payload, {
           mode: 'iframe-popup-direct',
-          showScreen: true
+          showScreen: false
         });
         if (!directLoginStarted) {
           iframeLoginWindow.location.replace(loginBridgeUrl);
