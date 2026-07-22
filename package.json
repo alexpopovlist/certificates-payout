@@ -1,7 +1,7 @@
 {
-  "name": "certificates-payout-app",
+  "name": "certificates-payout-05-server-reverse-proxy",
   "version": "1.0.0",
-  "description": "Node.js + PostgreSQL application for redeemed certificates and payout requests.",
+  "description": "Экспериментальный reverse proxy: сервер хранит cookies YCLIENTS в сессии и загружает страницы YCLIENTS через same-origin маршрут приложения.",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
