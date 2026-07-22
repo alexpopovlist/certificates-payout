@@ -5816,234 +5816,6 @@ function renderCrmBookingIframeModal(result = {}, payload = {}, iframeLoginWindo
   window.setTimeout(startIframeAuthFlow, 300);
 }
 
-
-function renderYclientsExperimentIframeModal(result = {}, payload = {}, options = {}) {
-  closeCrmBookingIframeModal();
-
-  const rawTargetUrl = result.externalUrl || payload.bookingUrl || '';
-  const targetUrl = String(options.targetUrl || normalizeYclientsIframeUrl(rawTargetUrl) || rawTargetUrl || '').trim();
-  const strategyLabel = options.strategyLabel || 'Экспериментальная авторизация';
-  const strategyDescription = options.strategyDescription || 'Тестируем альтернативный способ получения cookies YCLIENTS перед загрузкой расписания в iFrame.';
-  let popupWindow = options.popupWindow || null;
-  let runId = 0;
-  let cleanupCallbacks = [];
-
-  document.body.insertAdjacentHTML('beforeend', `
-    <div id="crmBookingIframeModal" class="schedule-modal crm-booking-iframe-modal" role="dialog" aria-modal="true" aria-labelledby="crmBookingIframeTitle">
-      <button class="schedule-modal-backdrop" type="button" aria-label="Закрыть iFrame"></button>
-      <div class="schedule-panel crm-booking-iframe-panel">
-        <header class="schedule-header crm-booking-iframe-header">
-          <div>
-            <h2 id="crmBookingIframeTitle">YCLIENTS в iFrame</h2>
-            <p>${escapeHtml(strategyLabel)}. ${escapeHtml(strategyDescription)}</p>
-          </div>
-          <button id="crmBookingIframeClose" class="button icon-button schedule-close" type="button" aria-label="Закрыть">×</button>
-        </header>
-        <div class="crm-booking-iframe-body">
-          <div id="crmBookingIframeStatus" class="crm-booking-iframe-status info" aria-live="polite">
-            <div class="crm-booking-iframe-status-row">
-              <strong>${escapeHtml(strategyLabel)}</strong>
-              <span id="crmBookingIframeStatusBadge" class="crm-booking-iframe-badge">подготовка</span>
-            </div>
-            <span id="crmBookingIframeStatusText">Готовим тест авторизации.</span>
-            <pre id="crmBookingIframeStatusDetail" class="hidden"></pre>
-          </div>
-          <div class="crm-booking-iframe-target-row">
-            <span>Ссылка для теста</span>
-            <code>${escapeHtml(targetUrl || 'ссылка не получена')}</code>
-          </div>
-          <div class="crm-booking-iframe-frame-wrap">
-            <iframe id="crmBookingIframeFrame" class="crm-booking-iframe-frame" title="YCLIENTS в iFrame" src="about:blank" allow="clipboard-read; clipboard-write"></iframe>
-          </div>
-          <div class="crm-booking-iframe-actions">
-            <button id="crmBookingIframeRetry" class="button secondary" type="button">${escapeHtml(options.retryLabel || 'Повторить тест')}</button>
-            <button id="crmBookingIframePopupFallback" class="button secondary" type="button">Popup fallback</button>
-            <button id="crmBookingIframeExternal" class="button primary" type="button">Открыть в новой вкладке</button>
-            ${rawTargetUrl ? `<a class="button secondary" href="${escapeHtml(rawTargetUrl)}" target="_blank" rel="noreferrer">Открыть ссылку</a>` : ''}
-          </div>
-        </div>
-      </div>
-    </div>
-  `);
-
-  document.body.classList.add('modal-open');
-  const modal = document.querySelector('#crmBookingIframeModal');
-  const bookingFrame = document.querySelector('#crmBookingIframeFrame');
-  let bookingFrameHasTarget = false;
-
-  function setStatus(tone, badge, message, detail = '') {
-    setCrmIframeStatus(tone, badge, message, detail);
-  }
-
-  function clearRunArtifacts() {
-    cleanupCallbacks.splice(0).forEach((cleanup) => {
-      try { cleanup(); } catch (_error) {}
-    });
-  }
-
-  function addCleanup(cleanup) {
-    if (typeof cleanup === 'function') cleanupCallbacks.push(cleanup);
-  }
-
-  function closePopup() {
-    if (!popupWindow || popupWindow.closed) return;
-    try { popupWindow.close(); } catch (_error) {}
-  }
-
-  function ensurePopup() {
-    if (popupWindow && !popupWindow.closed) return popupWindow;
-    popupWindow = openYclientsAuthHelperWindow('wowlifeYclientsIframeExperiment', { showPlaceholder: false });
-    return popupWindow && !popupWindow.closed ? popupWindow : null;
-  }
-
-  function loadTarget(source = '') {
-    if (!bookingFrame || !targetUrl) {
-      setStatus('error', 'нет ссылки', 'Не удалось получить ссылку для iFrame.', 'Проверьте ссылку Booking в данных CRM.');
-      return;
-    }
-    bookingFrameHasTarget = true;
-    setStatus(
-      'warning',
-      'iframe test',
-      'Загружаем расписание YCLIENTS в iFrame.',
-      source || 'После загрузки визуально проверьте, открылось ли расписание без формы входа.'
-    );
-    bookingFrame.src = targetUrl;
-  }
-
-  function popupLogin({ delayMs = 1000, mode = 'experiment-popup' } = {}) {
-    const currentRunId = runId;
-    const authWindow = ensurePopup();
-    if (!authWindow) {
-      setStatus('error', 'popup blocked', 'Браузер заблокировал служебное окно.', 'Разрешите всплывающие окна и нажмите Popup fallback ещё раз.');
-      return Promise.reject(new Error('Popup blocked'));
-    }
-
-    setStatus(
-      'info',
-      'top-level POST',
-      'Отправляем auth/login/1 в служебном окне и удерживаем фокус на приложении.',
-      `После отправки ждём ${delayMs} мс, закрываем окно и загружаем iFrame.`
-    );
-
-    return new Promise((resolve, reject) => {
-      let completed = false;
-      let closeTimer = null;
-      let fallbackTimer = null;
-
-      const cleanup = () => {
-        window.removeEventListener('message', handleMessage);
-        if (closeTimer) window.clearTimeout(closeTimer);
-        if (fallbackTimer) window.clearTimeout(fallbackTimer);
-      };
-
-      const finish = (source) => {
-        if (completed || currentRunId !== runId) return;
-        completed = true;
-        cleanup();
-        closeTimer = window.setTimeout(() => {
-          if (currentRunId !== runId) return;
-          closePopup();
-          loadTarget(source);
-          resolve(source);
-        }, Math.max(250, Number(delayMs || 1000)));
-      };
-
-      function handleMessage(event) {
-        if (event.source !== authWindow) return;
-        if (event.origin !== window.location.origin) return;
-        if (event.data?.type !== 'wowlife-yclients-login-submitted') return;
-        finish('top-level POST отправлен; служебное окно закрыто после короткой паузы');
-      }
-
-      window.addEventListener('message', handleMessage);
-      addCleanup(cleanup);
-
-      const started = writeYclientsDirectLoginDocument(authWindow, result, payload, {
-        mode,
-        showScreen: false
-      });
-
-      if (!started) {
-        cleanup();
-        reject(new Error('Не удалось записать форму авторизации в служебное окно.'));
-        return;
-      }
-
-      try { authWindow.blur?.(); } catch (_error) {}
-      try { window.focus?.(); } catch (_error) {}
-
-      fallbackTimer = window.setTimeout(() => {
-        finish('таймаут подтверждения POST; выполняем тест iFrame');
-      }, 3200);
-    });
-  }
-
-  function closeModal() {
-    runId += 1;
-    clearRunArtifacts();
-    closePopup();
-    closeCrmBookingIframeModal();
-  }
-
-  const context = {
-    result,
-    payload,
-    targetUrl,
-    rawTargetUrl,
-    frame: bookingFrame,
-    modal,
-    setStatus,
-    loadTarget,
-    popupLogin,
-    ensurePopup,
-    closePopup,
-    addCleanup,
-    isCurrent: (id) => id === runId
-  };
-
-  async function runStrategy() {
-    runId += 1;
-    const currentRunId = runId;
-    clearRunArtifacts();
-    if (bookingFrame) {
-      bookingFrameHasTarget = false;
-      bookingFrame.src = 'about:blank';
-    }
-    try {
-      await options.start?.({ ...context, runId: currentRunId });
-    } catch (error) {
-      if (currentRunId !== runId) return;
-      setStatus('error', 'ошибка', error?.message || 'Тест авторизации завершился ошибкой.', 'Можно повторить стратегию или выполнить Popup fallback.');
-    }
-  }
-
-  document.querySelector('#crmBookingIframeClose')?.addEventListener('click', closeModal);
-  modal?.querySelector('.schedule-modal-backdrop')?.addEventListener('click', closeModal);
-  document.querySelector('#crmBookingIframeRetry')?.addEventListener('click', runStrategy);
-  document.querySelector('#crmBookingIframePopupFallback')?.addEventListener('click', () => {
-    runId += 1;
-    clearRunArtifacts();
-    popupLogin({
-      delayMs: /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 1400 : 950,
-      mode: 'manual-popup-fallback'
-    }).catch(() => {});
-  });
-  document.querySelector('#crmBookingIframeExternal')?.addEventListener('click', () => openCrmBookingResultInNewTab(result));
-
-  bookingFrame?.addEventListener('load', () => {
-    if (!bookingFrameHasTarget) return;
-    setStatus(
-      'warning',
-      'iframe загружен',
-      'iFrame загрузился. Проверьте результат внутри окна.',
-      'Из-за cross-origin политики приложение не может автоматически определить, показано расписание или форма авторизации.'
-    );
-  });
-
-  window.setTimeout(runStrategy, 120);
-}
-
 async function openCrmBookingIframe() {
   const form = document.querySelector('#crmDataForm');
   const iframeButton = document.querySelector('#crmDataOpenIframeButton');
@@ -6051,21 +5823,30 @@ async function openCrmBookingIframe() {
   const payload = buildCrmBookingRequestPayload();
   const isYclientsIframe = String(payload.bookingName || '').trim().toLowerCase() === 'yclients'
     && payload.authType === 'Базовый';
-  let experimentPopup = null;
+  let iframeLoginWindow = null;
 
-  
   if (isYclientsIframe) {
-    experimentPopup = openYclientsAuthHelperWindow('wowlifeYclientsIframeExperiment', { showPlaceholder: false });
-    try { experimentPopup?.blur?.(); } catch (_error) {}
-    try { window.focus?.(); } catch (_error) {}
-  }
+    iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth', { showPlaceholder: false });
+    if (!iframeLoginWindow) {
+      setCrmDataNotice('error', 'Браузер заблокировал окно YCLIENTS. Разрешите всплывающие окна и нажмите «iFrame» ещё раз.');
+      return;
+    }
 
+    writeYclientsAuthBusyPlaceholder(iframeLoginWindow, {
+      title: 'Авторизуемся в YCLIENTS',
+      message: 'Отправляем запрос auth/login/1 в этой же вкладке. После завершения входа она автоматически перейдёт на расписание YCLIENTS.',
+      detail: 'Подготавливаем авторизацию для режима iFrame. Не закрывайте это окно до завершения перехода.'
+    });
+  }
 
   if (iframeButton) {
     iframeButton.disabled = true;
-    iframeButton.textContent = isYclientsIframe ? 'Готовим тест...' : 'Открываем iFrame...';
+    iframeButton.textContent = isYclientsIframe ? 'Открываем YCLIENTS...' : 'Открываем iFrame...';
   }
-  setCrmDataNotice('success', isYclientsIframe ? 'Готовим экспериментальный способ авторизации YCLIENTS.' : 'Готовим iFrame для Booking сервиса.');
+
+  setCrmDataNotice('success', isYclientsIframe
+    ? 'Открываем отдельное окно YCLIENTS на месте iFrame. Окно останется открытым для проверки авторизации и cookies.'
+    : 'Готовим iFrame для Booking сервиса.');
 
   let result;
   try {
@@ -6074,7 +5855,7 @@ async function openCrmBookingIframe() {
       body: JSON.stringify(payload)
     });
   } catch (error) {
-    try { experimentPopup?.close(); } catch (_closeError) {}
+    try { iframeLoginWindow?.close(); } catch (_closeError) {}
     setCrmDataNotice('error', error.message || 'Не удалось подготовить Booking сервис.');
     if (iframeButton) {
       iframeButton.disabled = false;
@@ -6091,21 +5872,79 @@ async function openCrmBookingIframe() {
   }
 
   if (isYclientsIframe) {
-    renderYclientsExperimentIframeModal(result, payload, {
-      popupWindow: experimentPopup,
-      strategyLabel: 'Тест 1: быстрое закрытие popup',
-      strategyDescription: 'Top-level POST получает first-party cookies, затем служебное окно быстро закрывается и расписание загружается в iFrame.',
-      retryLabel: 'Повторить быстрый вход',
-      start: async (ctx) => {
-        const delayMs = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 1400 : 950;
-        await ctx.popupLogin({ delayMs, mode: 'quick-close-popup' });
+    const loginBridgeUrl = yclientsLoginBridgeUrlForIframe(result.openUrl);
+    if (!loginBridgeUrl) {
+      setCrmDataNotice('error', 'Не удалось подготовить ссылку авторизации YCLIENTS. Используйте кнопку «Открыть Booking».');
+      if (iframeButton) {
+        iframeButton.disabled = false;
+        iframeButton.textContent = 'iFrame';
       }
-    });
-    setCrmDataNotice('success', 'Экспериментальный режим iFrame запущен. Результат отображается в модальном окне.');
-  } else {
-    renderCrmBookingIframeModal(result, payload, experimentPopup);
-    setCrmDataNotice('success', 'Открываем Booking в iFrame.');
+      return;
+    }
+
+    if (!iframeLoginWindow || iframeLoginWindow.closed) {
+      iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth', { showPlaceholder: false });
+      if (iframeLoginWindow) {
+        writeYclientsAuthBusyPlaceholder(iframeLoginWindow, {
+          title: 'Авторизуемся в YCLIENTS',
+          message: 'Отправляем запрос auth/login/1 в этой же вкладке. После завершения входа она автоматически перейдёт на расписание YCLIENTS.',
+          detail: 'Подготавливаем авторизацию для режима iFrame. Не закрывайте это окно до завершения перехода.'
+        });
+      }
+    } else {
+      moveCrmBookingPopupToModalPlace(iframeLoginWindow);
+    }
+
+    if (!iframeLoginWindow || iframeLoginWindow.closed) {
+      setCrmDataNotice('error', 'Браузер заблокировал окно YCLIENTS. Разрешите всплывающие окна и нажмите «iFrame» ещё раз.');
+      if (iframeButton) {
+        iframeButton.disabled = false;
+        iframeButton.textContent = 'iFrame';
+      }
+      return;
+    }
+
+    try {
+      // The iFrame mode mirrors the reliable "Open Booking" flow. When the
+      // opening screen is disabled, do not navigate through our
+      // /api/crm-data/yclients-login route: write the top-level login form
+      // directly into the service window and let it post to YCLIENTS.
+      const showYclientsOpeningScreen = crmDataState.showYclientsOpeningScreen !== false;
+      scheduleYclientsBookingRedirect(iframeLoginWindow, result, {
+        messageSourceWindow: iframeLoginWindow,
+        writeBusyAfterSubmit: false
+      });
+
+      if (showYclientsOpeningScreen) {
+        iframeLoginWindow.location.replace(loginBridgeUrl);
+      } else {
+        const directLoginStarted = writeYclientsDirectLoginDocument(iframeLoginWindow, result, payload, {
+          mode: 'iframe-popup-direct',
+          showScreen: true
+        });
+        if (!directLoginStarted) {
+          iframeLoginWindow.location.replace(loginBridgeUrl);
+        }
+      }
+
+      moveCrmBookingPopupToModalPlace(iframeLoginWindow);
+      iframeLoginWindow.focus?.();
+      setCrmDataNotice('success', showYclientsOpeningScreen
+        ? 'Окно YCLIENTS открыто вместо iFrame. После auth/login/1 оно автоматически перейдёт на расписание, как кнопка «Открыть Booking».'
+        : 'Окно YCLIENTS открыто без служебного экрана. После auth/login/1 оно автоматически перейдёт на расписание, как кнопка «Открыть Booking».');
+    } catch (error) {
+      setCrmDataNotice('error', error?.message || 'Не удалось открыть окно YCLIENTS.');
+    }
+
+    if (iframeButton) {
+      iframeButton.disabled = false;
+      iframeButton.textContent = 'iFrame';
+    }
+    return;
   }
+
+  renderCrmBookingIframeModal(result, payload, iframeLoginWindow);
+  setCrmDataNotice('success', 'Открываем Booking в iFrame.');
 
   if (iframeButton) {
     iframeButton.disabled = false;

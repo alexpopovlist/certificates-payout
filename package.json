@@ -1,7 +1,7 @@
 {
-  "name": "certificates-payout-01-quick-close-popup",
+  "name": "certificates-payout-app",
   "version": "1.0.0",
-  "description": "Тестовый вариант: top-level POST выполняется в служебном окне, которое закрывается примерно через 0,95 секунды на desktop и 1,4 секунды на мобильном устройстве.",
+  "description": "Node.js + PostgreSQL application for redeemed certificates and payout requests.",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
