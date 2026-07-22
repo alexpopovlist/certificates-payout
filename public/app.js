@@ -5826,11 +5826,17 @@ async function openCrmBookingIframe() {
   let iframeLoginWindow = null;
 
   if (isYclientsIframe) {
-    iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth', { showPlaceholder: crmDataState.showYclientsOpeningScreen !== false });
+    iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth', { showPlaceholder: false });
     if (!iframeLoginWindow) {
       setCrmDataNotice('error', 'Браузер заблокировал окно YCLIENTS. Разрешите всплывающие окна и нажмите «iFrame» ещё раз.');
       return;
     }
+
+    writeYclientsAuthBusyPlaceholder(iframeLoginWindow, {
+      title: 'Авторизуемся в YCLIENTS',
+      message: 'Отправляем запрос auth/login/1 в этой же вкладке. После завершения входа она автоматически перейдёт на расписание YCLIENTS.',
+      detail: 'Подготавливаем авторизацию для режима iFrame. Не закрывайте это окно до завершения перехода.'
+    });
   }
 
   if (iframeButton) {
@@ -5877,7 +5883,14 @@ async function openCrmBookingIframe() {
     }
 
     if (!iframeLoginWindow || iframeLoginWindow.closed) {
-      iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth', { showPlaceholder: crmDataState.showYclientsOpeningScreen !== false });
+      iframeLoginWindow = openCrmBookingPopup('wowlifeYclientsIframeAuth', { showPlaceholder: false });
+      if (iframeLoginWindow) {
+        writeYclientsAuthBusyPlaceholder(iframeLoginWindow, {
+          title: 'Авторизуемся в YCLIENTS',
+          message: 'Отправляем запрос auth/login/1 в этой же вкладке. После завершения входа она автоматически перейдёт на расписание YCLIENTS.',
+          detail: 'Подготавливаем авторизацию для режима iFrame. Не закрывайте это окно до завершения перехода.'
+        });
+      }
     } else {
       moveCrmBookingPopupToModalPlace(iframeLoginWindow);
     }
@@ -5907,7 +5920,7 @@ async function openCrmBookingIframe() {
       } else {
         const directLoginStarted = writeYclientsDirectLoginDocument(iframeLoginWindow, result, payload, {
           mode: 'iframe-popup-direct',
-          showScreen: false
+          showScreen: true
         });
         if (!directLoginStarted) {
           iframeLoginWindow.location.replace(loginBridgeUrl);
